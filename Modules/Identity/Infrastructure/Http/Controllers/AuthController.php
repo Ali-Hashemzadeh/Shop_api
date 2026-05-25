@@ -10,28 +10,36 @@ use Modules\Identity\Application\Actions\LogoutCurrentToken;
 use Modules\Identity\Application\Actions\RegisterUser;
 use Modules\Identity\Infrastructure\Http\Requests\LoginRequest;
 use Modules\Identity\Infrastructure\Http\Requests\RegisterRequest;
+use Modules\Identity\Infrastructure\Http\Resources\AuthUserResource;
 
 class AuthController extends Controller
 {
     public function register(RegisterRequest $request, RegisterUser $action): JsonResponse
     {
-        return response()->json(
-            $action->handle($request->validated()),
-            201
-        );
+        $result = $action->handle($request->validated());
+
+        return response()->json([
+            'message' => $result['message'],
+            'user' => new AuthUserResource($result['user']),
+            'token' => $result['token'],
+        ], 201);
     }
 
     public function login(LoginRequest $request, LoginUserWithPassword $action): JsonResponse
     {
-        return response()->json(
-            $action->handle($request->validated())
-        );
+        $result = $action->handle($request->validated());
+
+        return response()->json([
+            'message' => $result['message'],
+            'user' => new AuthUserResource($result['user']),
+            'token' => $result['token'],
+        ]);
     }
 
     public function me(Request $request): JsonResponse
     {
         return response()->json([
-            'user' => $request->user(),
+            'user' => new AuthUserResource($request->user()),
         ]);
     }
 
