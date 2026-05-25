@@ -2,7 +2,6 @@
 
 namespace Modules\Identity\Domain\Repositories;
 
-use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Modules\Identity\Domain\Models\User;
 
 interface UserRepositoryInterface
@@ -18,4 +17,6 @@ interface UserRepositoryInterface
     public function findForLogin(string $login, string $mode = 'both'): ?User;
 
     public function update(User $user, array $attributes): bool;
+
+    public function refresh(User $user): User;
 }

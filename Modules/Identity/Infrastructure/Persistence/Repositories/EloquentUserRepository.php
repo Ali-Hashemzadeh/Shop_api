@@ -51,4 +51,9 @@ class EloquentUserRepository implements UserRepositoryInterface
     {
         return $user->update($attributes);
     }
+
+    public function refresh(User $user): User
+    {
+        return $user->fresh();
+    }
 }
