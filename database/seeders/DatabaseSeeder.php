@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
+use Modules\Identity\Infrastructure\Persistence\Seeders\IdentityModuleSeeder;
 use Modules\Identity\Infrastructure\Persistence\Seeders\LocationSeeder;
 
 class DatabaseSeeder extends Seeder
@@ -16,7 +17,7 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $this->call(
-            LocationSeeder::class,
+            IdentityModuleSeeder::class,
         );
     }
 }
