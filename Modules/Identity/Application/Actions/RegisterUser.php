@@ -21,6 +21,7 @@ class RegisterUser
             'phone' => $data['phone'] ?? null,
             'password' => Hash::make($data['password']),
         ]);
+        $user->assignRole('customer');
 
         $token = $user->createToken($data['device_name'])->plainTextToken;
 
