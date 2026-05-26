@@ -2,9 +2,9 @@
 
 namespace Database\Seeders;
 
-use Modules\Identity\Domain\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
+use Modules\Identity\Infrastructure\Persistence\Seeders\LocationSeeder;
 
 class DatabaseSeeder extends Seeder
 {
@@ -15,12 +15,6 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // User::factory(10)->create();
-
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
-        ]);
         $this->call(
             LocationSeeder::class,
         );
