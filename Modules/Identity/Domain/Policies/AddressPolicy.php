@@ -19,6 +19,6 @@ class AddressPolicy
 
     public function delete(User $user, Address $address): bool
     {
-        return $user->id === $address->user_id;
+        return $user->id == $address->user_id;
     }
 }

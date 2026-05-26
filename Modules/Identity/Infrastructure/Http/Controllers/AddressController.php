@@ -3,6 +3,7 @@
 namespace Modules\Identity\Infrastructure\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Modules\Identity\Application\Actions\CreateAddress;
@@ -18,6 +19,7 @@ use Modules\Identity\Infrastructure\Http\Resources\AddressResource;
 
 class AddressController extends Controller
 {
+    use AuthorizesRequests;
     public function index(Request $request, ListAddresses $action): JsonResponse
     {
         $addresses = $action->handle($request->user());
@@ -56,8 +58,9 @@ class AddressController extends Controller
         ]);
     }
 
-    public function destroy(Address $address, DeleteAddress $action): JsonResponse
+    public function destroy($address, DeleteAddress $action): JsonResponse
     {
+        $address = Address::findOrFail($address);
         $this->authorize('delete', $address);
 
         $action->handle($address);
