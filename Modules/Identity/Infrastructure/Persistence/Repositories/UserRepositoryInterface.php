@@ -1,6 +1,6 @@
 <?php
 
-namespace Modules\Identity\Domain\Repositories;
+namespace Modules\Identity\Infrastructure\Persistence\Repositories;
 
 use Modules\Identity\Domain\Models\User;
 

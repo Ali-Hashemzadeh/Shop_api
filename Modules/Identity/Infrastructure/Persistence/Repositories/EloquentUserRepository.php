@@ -3,7 +3,6 @@
 namespace Modules\Identity\Infrastructure\Persistence\Repositories;
 
 use Modules\Identity\Domain\Models\User;
-use Modules\Identity\Domain\Repositories\UserRepositoryInterface;
 
 class EloquentUserRepository implements UserRepositoryInterface
 {

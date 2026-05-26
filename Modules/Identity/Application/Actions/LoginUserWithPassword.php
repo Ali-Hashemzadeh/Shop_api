@@ -4,29 +4,24 @@ namespace Modules\Identity\Application\Actions;
 
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
-use Modules\Identity\Domain\Models\User;
+use Modules\Identity\Infrastructure\Persistence\Repositories\UserRepositoryInterface;
+
 
 class LoginUserWithPassword
 {
+    public function __construct(
+        private readonly UserRepositoryInterface $users
+    ) {
+    }
+
     public function handle(array $data): array
     {
         $mode = config('identity.login_field', 'both');
-        $login = trim($data['login']);
 
-        $query = User::query();
-
-        if ($mode === 'email') {
-            $query->where('email', $login);
-        } elseif ($mode === 'phone') {
-            $query->where('phone', $login);
-        } else {
-            $query->where(function ($q) use ($login) {
-                $q->where('email', $login)
-                    ->orWhere('phone', $login);
-            });
-        }
-
-        $user = $query->first();
+        $user = $this->users->findForLogin(
+            login: $data['login'],
+            mode: $mode
+        );
 
         if (! $user || ! Hash::check($data['password'], $user->password)) {
             throw ValidationException::withMessages([

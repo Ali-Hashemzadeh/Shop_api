@@ -3,7 +3,8 @@
 namespace Modules\Identity\Application\Actions;
 
 use Illuminate\Support\Facades\Hash;
-use Modules\Identity\Domain\Repositories\UserRepositoryInterface;
+use Modules\Identity\Infrastructure\Persistence\Repositories\UserRepositoryInterface;
+
 
 class RegisterUser
 {

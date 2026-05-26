@@ -2,11 +2,11 @@
 
 namespace Modules\Identity\Application\Actions;
 
-use Illuminate\Contracts\Auth\Authenticatable;
+use Modules\Identity\Domain\Models\User;
 
 class LogoutCurrentToken
 {
-    public function handle(Authenticatable $user): void
+    public function handle(User $user): void
     {
         $user->currentAccessToken()?->delete();
     }
