@@ -3,14 +3,14 @@
 namespace Modules\Identity\Infrastructure\Http\Controllers;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
 use Modules\Identity\Domain\Models\Province;
+use Modules\Identity\Infrastructure\Http\Requests\ListProvinceRequest;
 use Modules\Identity\Infrastructure\Http\Resources\CityResource;
 use Modules\Identity\Infrastructure\Http\Resources\ProvinceResource;
 
 class LocationController extends Controller
 {
-    public function provinces(Request $request)
+    public function provinces(ListProvinceRequest $request)
     {
         $query = Province::query()->orderBy('name');
 

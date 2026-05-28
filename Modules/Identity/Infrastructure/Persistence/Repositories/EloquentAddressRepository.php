@@ -2,13 +2,14 @@
 
 namespace Modules\Identity\Infrastructure\Persistence\Repositories;
 
-use Illuminate\Database\Eloquent\Collection;
-use Modules\Identity\Domain\Models\Address;
 use Modules\Identity\Domain\Models\User;
+use Illuminate\Support\Collection;
+use Modules\Identity\Domain\Models\Address;
+
 
 class EloquentAddressRepository implements AddressRepositoryInterface
 {
-    public function getUserAddresses(User $user): Collection
+    public function listForUser(User $user): Collection
     {
         return Address::query()
             ->where('user_id', $user->id)

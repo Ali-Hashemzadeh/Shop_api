@@ -2,6 +2,7 @@
 
 namespace Modules\Identity\Infrastructure\Persistence\Repositories;
 
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Modules\Identity\Domain\Models\User;
 
 class EloquentUserRepository implements UserRepositoryInterface
@@ -54,5 +55,12 @@ class EloquentUserRepository implements UserRepositoryInterface
     public function refresh(User $user): User
     {
         return $user->fresh();
+    }
+
+    public function paginate(int $perPage = 15): LengthAwarePaginator
+    {
+        return User::query()
+            ->latest('id')
+            ->paginate($perPage);
     }
 }

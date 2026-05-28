@@ -2,13 +2,13 @@
 
 namespace Modules\Identity\Infrastructure\Persistence\Repositories;
 
-use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Collection;
 use Modules\Identity\Domain\Models\Address;
 use Modules\Identity\Domain\Models\User;
 
 interface AddressRepositoryInterface
 {
-    public function getUserAddresses(User $user): Collection;
+    public function listForUser(User $user): Collection;
 
     public function createForUser(User $user, array $attributes): Address;
 

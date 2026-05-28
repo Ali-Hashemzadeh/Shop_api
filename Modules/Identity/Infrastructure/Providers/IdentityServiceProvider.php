@@ -5,7 +5,9 @@ namespace Modules\Identity\Infrastructure\Providers;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 use Modules\Identity\Domain\Models\Address;
+use Modules\Identity\Domain\Models\User;
 use Modules\Identity\Domain\Policies\AddressPolicy;
+use Modules\Identity\Domain\Policies\ProfilePolicy;
 use Modules\Identity\Infrastructure\Persistence\Repositories\AddressRepositoryInterface;
 use Modules\Identity\Infrastructure\Persistence\Repositories\EloquentAddressRepository;
 use Modules\Identity\Infrastructure\Persistence\Repositories\EloquentUserRepository;
@@ -33,5 +35,6 @@ class IdentityServiceProvider extends ServiceProvider
         $this->loadRoutesFrom(__DIR__ . '/../Routes/api.php');
         $this->loadMigrationsFrom(__DIR__ . '/../Persistence/Migrations');
         Gate::policy(Address::class, AddressPolicy::class);
+        Gate::policy(User::class, ProfilePolicy::class);
     }
 }
