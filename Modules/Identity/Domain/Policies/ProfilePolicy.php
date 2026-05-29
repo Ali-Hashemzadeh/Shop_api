@@ -39,4 +39,9 @@ class ProfilePolicy
 
         return $user->can('profile.delete-any');
     }
+
+    public function viewAddresses(User $user): bool
+    {
+        return $user->can('address.view-own');
+    }
 }

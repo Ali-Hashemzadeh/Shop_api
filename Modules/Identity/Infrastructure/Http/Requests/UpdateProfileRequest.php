@@ -14,7 +14,7 @@ class UpdateProfileRequest extends FormRequest
 
     public function rules(): array
     {
-        $userId = $this->user()->id;
+        $userId = $this->user()?->id;
         $mode = config('identity.login_field', 'both');
 
         $rules = [
