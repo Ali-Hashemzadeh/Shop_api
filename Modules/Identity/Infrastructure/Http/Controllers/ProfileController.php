@@ -8,6 +8,7 @@ use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Modules\Identity\Application\Actions\ShowProfile;
 use Modules\Identity\Application\Actions\UpdateProfile;
+use Modules\Identity\Application\Actions\ShowMyAddresses;
 use Modules\Identity\Domain\Models\User;
 use Modules\Identity\Infrastructure\Http\Requests\ListProfileRequest;
 use Modules\Identity\Infrastructure\Http\Requests\ShowProfileRequest;
@@ -132,4 +133,19 @@ class ProfileController extends Controller
             'data' => AddressResource::collection($addresses->listForUser($user)),
         ]);
     }
+
+    /**
+     * @throws AuthorizationException
+     */
+    public function myAddresses(ShowProfileRequest $request, ShowMyAddresses $action): JsonResponse
+    {
+        $this->authorize('viewAddresses', $request->user());
+
+        return response()->json([
+            'data' => AddressResource::collection($action->handle($request->user()))
+        ]);
+    }
+
+
+
 }

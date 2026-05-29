@@ -21,4 +21,5 @@ interface AddressRepositoryInterface
     public function findById(int $id): ?Address;
 
     public function refreshWithRelations(Address $address): Address;
+
 }

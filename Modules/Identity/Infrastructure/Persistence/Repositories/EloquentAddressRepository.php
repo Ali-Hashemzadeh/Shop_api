@@ -50,6 +50,6 @@ class EloquentAddressRepository implements AddressRepositoryInterface
 
     public function refreshWithRelations(Address $address): Address
     {
-        return $address->fresh(['province', 'city']);
+        return $address->load(['province', 'city']);
     }
 }
