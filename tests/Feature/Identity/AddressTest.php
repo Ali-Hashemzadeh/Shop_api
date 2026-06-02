@@ -120,6 +120,26 @@ class AddressTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_admin_can_show_another_users_address(): void
+    {
+        $owner = User::factory()->create();
+        $admin = User::factory()->create();
+        $province = Province::factory()->create();
+        $city = City::factory()->create(['province_id' => $province->id]);
+
+        $address = Address::factory()->create([
+            'user_id' => $owner->id,
+            'province_id' => $province->id,
+            'city_id' => $city->id,
+        ]);
+
+        $this->actingAsAdmin($admin);
+
+        $this->getJson("/api/v1/addresses/{$address->id}")
+            ->assertOk()
+            ->assertJsonPath('data.id', $address->id);
+    }
+
     public function test_authenticated_user_can_update_own_address(): void
     {
         $user = User::factory()->create();
@@ -160,6 +180,55 @@ class AddressTest extends TestCase
         ]);
     }
 
+    public function test_customer_cannot_update_another_users_address(): void
+    {
+        $user = User::factory()->create();
+        $otherUser = User::factory()->create();
+        $province = Province::factory()->create();
+        $city = City::factory()->create(['province_id' => $province->id]);
+
+        $address = Address::factory()->create([
+            'user_id' => $otherUser->id,
+            'province_id' => $province->id,
+            'city_id' => $city->id,
+            'title' => 'Home',
+        ]);
+
+        $this->actingAsCustomer($user);
+
+        $this->patchJson("/api/v1/addresses/{$address->id}", [
+            'title' => 'Office',
+        ])->assertForbidden();
+
+        $this->assertDatabaseHas('addresses', [
+            'id' => $address->id,
+            'title' => 'Home',
+        ]);
+    }
+
+    public function test_admin_can_update_another_users_address(): void
+    {
+        $owner = User::factory()->create();
+        $admin = User::factory()->create();
+        $province = Province::factory()->create();
+        $city = City::factory()->create(['province_id' => $province->id]);
+
+        $address = Address::factory()->create([
+            'user_id' => $owner->id,
+            'province_id' => $province->id,
+            'city_id' => $city->id,
+            'title' => 'Home',
+        ]);
+
+        $this->actingAsAdmin($admin);
+
+        $this->patchJson("/api/v1/addresses/{$address->id}", [
+            'title' => 'Office',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.title', 'Office');
+    }
+
     public function test_authenticated_user_can_delete_own_address(): void
     {
         $user = User::factory()->create();
@@ -177,6 +246,52 @@ class AddressTest extends TestCase
         $this->deleteJson("/api/v1/addresses/{$address->id}")
             ->assertOk()
             ->assertJsonPath('message', 'Address deleted successfully.');
+
+        $this->assertDatabaseMissing('addresses', [
+            'id' => $address->id,
+        ]);
+    }
+
+    public function test_customer_cannot_delete_another_users_address(): void
+    {
+        $user = User::factory()->create();
+        $otherUser = User::factory()->create();
+        $province = Province::factory()->create();
+        $city = City::factory()->create(['province_id' => $province->id]);
+
+        $address = Address::factory()->create([
+            'user_id' => $otherUser->id,
+            'province_id' => $province->id,
+            'city_id' => $city->id,
+        ]);
+
+        $this->actingAsCustomer($user);
+
+        $this->deleteJson("/api/v1/addresses/{$address->id}")
+            ->assertForbidden();
+
+        $this->assertDatabaseHas('addresses', [
+            'id' => $address->id,
+        ]);
+    }
+
+    public function test_admin_can_delete_another_users_address(): void
+    {
+        $owner = User::factory()->create();
+        $admin = User::factory()->create();
+        $province = Province::factory()->create();
+        $city = City::factory()->create(['province_id' => $province->id]);
+
+        $address = Address::factory()->create([
+            'user_id' => $owner->id,
+            'province_id' => $province->id,
+            'city_id' => $city->id,
+        ]);
+
+        $this->actingAsAdmin($admin);
+
+        $this->deleteJson("/api/v1/addresses/{$address->id}")
+            ->assertOk();
 
         $this->assertDatabaseMissing('addresses', [
             'id' => $address->id,

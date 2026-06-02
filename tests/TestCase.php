@@ -23,4 +23,14 @@ abstract class TestCase extends BaseTestCase
 
         return $user;
     }
+
+    protected function actingAsAdmin(?User $user = null): User
+    {
+        $user ??= User::factory()->create();
+        $user->assignRole('admin');
+
+        Sanctum::actingAs($user);
+
+        return $user;
+    }
 }
