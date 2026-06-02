@@ -2,7 +2,6 @@
 
 namespace Tests\Feature\Identity;
 
-use Laravel\Sanctum\Sanctum;
 use Modules\Identity\Domain\Models\User;
 use Tests\TestCase;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -10,6 +9,13 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 class ProfileTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->seedIdentityRolesAndPermissions();
+    }
 
     public function test_authenticated_user_can_view_profile(): void
     {
@@ -19,7 +25,7 @@ class ProfileTest extends TestCase
             'phone' => '09120000001',
         ]);
 
-        Sanctum::actingAs($user);
+        $this->actingAsCustomer($user);
 
         $this->getJson('/api/v1/profile')
             ->assertOk()
@@ -37,7 +43,7 @@ class ProfileTest extends TestCase
             'phone' => '09120000001',
         ]);
 
-        Sanctum::actingAs($user);
+        $this->actingAsCustomer($user);
 
         $this->patchJson('/api/v1/profile', [
             'name' => 'New Name',
@@ -76,7 +82,7 @@ class ProfileTest extends TestCase
             'email' => 'second@example.com',
         ]);
 
-        Sanctum::actingAs($user);
+        $this->actingAsCustomer($user);
 
         $this->patchJson('/api/v1/profile', [
             'email' => 'second@example.com',

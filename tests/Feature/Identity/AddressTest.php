@@ -2,7 +2,6 @@
 
 namespace Tests\Feature\Identity;
 
-use Laravel\Sanctum\Sanctum;
 use Modules\Identity\Domain\Models\Address;
 use Modules\Identity\Domain\Models\City;
 use Modules\Identity\Domain\Models\Province;
@@ -13,6 +12,13 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 class AddressTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->seedIdentityRolesAndPermissions();
+    }
 
     public function test_authenticated_user_can_list_own_addresses(): void
     {
@@ -33,7 +39,7 @@ class AddressTest extends TestCase
             'city_id' => $city->id,
         ]);
 
-        Sanctum::actingAs($user);
+        $this->actingAsCustomer($user);
 
         $this->getJson('/api/v1/addresses')
             ->assertOk()
@@ -46,7 +52,7 @@ class AddressTest extends TestCase
         $province = Province::factory()->create();
         $city = City::factory()->create(['province_id' => $province->id]);
 
-        Sanctum::actingAs($user);
+        $this->actingAsCustomer($user);
 
         $payload = [
             'title' => 'Home',
@@ -88,7 +94,7 @@ class AddressTest extends TestCase
             'city_id' => $city->id,
         ]);
 
-        Sanctum::actingAs($user);
+        $this->actingAsCustomer($user);
 
         $this->getJson("/api/v1/addresses/{$address->id}")
             ->assertOk()
@@ -108,7 +114,7 @@ class AddressTest extends TestCase
             'city_id' => $city->id,
         ]);
 
-        Sanctum::actingAs($user);
+        $this->actingAsCustomer($user);
 
         $this->getJson("/api/v1/addresses/{$address->id}")
             ->assertForbidden();
@@ -130,7 +136,7 @@ class AddressTest extends TestCase
             'is_default_shipping' => false,
         ]);
 
-        Sanctum::actingAs($user);
+        $this->actingAsCustomer($user);
 
         $this->patchJson("/api/v1/addresses/{$address->id}", [
             'title' => 'Office',
@@ -166,7 +172,7 @@ class AddressTest extends TestCase
             'city_id' => $city->id,
         ]);
 
-        Sanctum::actingAs($user);
+        $this->actingAsCustomer($user);
 
         $this->deleteJson("/api/v1/addresses/{$address->id}")
             ->assertOk()
@@ -197,7 +203,7 @@ class AddressTest extends TestCase
             'is_default_shipping' => false,
         ]);
 
-        Sanctum::actingAs($user);
+        $this->actingAsCustomer($user);
 
         $this->postJson("/api/v1/addresses/{$second->id}/default-shipping")
             ->assertOk()
