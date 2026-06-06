@@ -4,6 +4,7 @@ namespace Modules\Identity\Infrastructure\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Modules\Identity\Domain\Models\User;
 
 class UpdateProfileRequest extends FormRequest
 {
@@ -14,7 +15,10 @@ class UpdateProfileRequest extends FormRequest
 
     public function rules(): array
     {
-        $userId = $this->user()?->id;
+        $routeUser = $this->route('user');
+        $targetUser = $routeUser instanceof User ? $routeUser : $this->user();
+        $userId = $targetUser?->id;
+
         $mode = config('identity.login_field', 'both');
 
         $rules = [
