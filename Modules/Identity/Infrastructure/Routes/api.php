@@ -2,7 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 
-Route::prefix('api/v1')->group(function () {
+Route::middleware('api')->prefix('api/v1')->group(function () {
     require __DIR__.'/authentication.php';
     require __DIR__.'/location.php';
 

@@ -11,6 +11,13 @@ class AuthControllerTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->seedIdentityRolesAndPermissions();
+    }
+
     public function test_user_can_register_with_email_when_email_mode_is_enabled(): void
     {
         config()->set('identity.login_field', 'email');

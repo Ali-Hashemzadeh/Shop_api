@@ -28,7 +28,7 @@ class AddressController extends Controller
      */
     public function index(ListAddressRequest $request, ListAddresses $action): JsonResponse
     {
-        $this->authorize('viewAny', Address::class);
+        $this->authorize('viewOwn', Address::class);
         $addresses = $action->handle($request->user());
 
         return response()->json([
@@ -68,8 +68,6 @@ class AddressController extends Controller
     public function update(UpdateAddressRequest $request, Address $address, UpdateAddress $action): JsonResponse
     {
         $this->authorize('update', $address);
-        print_r($request->all());;
-        die();
         return response()->json([
             'message' => 'Address updated successfully.',
             'data' => new AddressResource($action->handle($address, $request->validated())),

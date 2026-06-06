@@ -2,7 +2,6 @@
 
 namespace Tests\Feature\Identity;
 
-use Laravel\Sanctum\Sanctum;
 use Modules\Identity\Domain\Models\Address;
 use Modules\Identity\Domain\Models\City;
 use Modules\Identity\Domain\Models\Province;
@@ -13,6 +12,13 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 class AddressTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->seedIdentityRolesAndPermissions();
+    }
 
     public function test_authenticated_user_can_list_own_addresses(): void
     {
@@ -33,7 +39,7 @@ class AddressTest extends TestCase
             'city_id' => $city->id,
         ]);
 
-        Sanctum::actingAs($user);
+        $this->actingAsCustomer($user);
 
         $this->getJson('/api/v1/addresses')
             ->assertOk()
@@ -46,7 +52,7 @@ class AddressTest extends TestCase
         $province = Province::factory()->create();
         $city = City::factory()->create(['province_id' => $province->id]);
 
-        Sanctum::actingAs($user);
+        $this->actingAsCustomer($user);
 
         $payload = [
             'title' => 'Home',
@@ -88,7 +94,7 @@ class AddressTest extends TestCase
             'city_id' => $city->id,
         ]);
 
-        Sanctum::actingAs($user);
+        $this->actingAsCustomer($user);
 
         $this->getJson("/api/v1/addresses/{$address->id}")
             ->assertOk()
@@ -108,10 +114,30 @@ class AddressTest extends TestCase
             'city_id' => $city->id,
         ]);
 
-        Sanctum::actingAs($user);
+        $this->actingAsCustomer($user);
 
         $this->getJson("/api/v1/addresses/{$address->id}")
             ->assertForbidden();
+    }
+
+    public function test_admin_can_show_another_users_address(): void
+    {
+        $owner = User::factory()->create();
+        $admin = User::factory()->create();
+        $province = Province::factory()->create();
+        $city = City::factory()->create(['province_id' => $province->id]);
+
+        $address = Address::factory()->create([
+            'user_id' => $owner->id,
+            'province_id' => $province->id,
+            'city_id' => $city->id,
+        ]);
+
+        $this->actingAsAdmin($admin);
+
+        $this->getJson("/api/v1/addresses/{$address->id}")
+            ->assertOk()
+            ->assertJsonPath('data.id', $address->id);
     }
 
     public function test_authenticated_user_can_update_own_address(): void
@@ -130,7 +156,7 @@ class AddressTest extends TestCase
             'is_default_shipping' => false,
         ]);
 
-        Sanctum::actingAs($user);
+        $this->actingAsCustomer($user);
 
         $this->patchJson("/api/v1/addresses/{$address->id}", [
             'title' => 'Office',
@@ -154,6 +180,55 @@ class AddressTest extends TestCase
         ]);
     }
 
+    public function test_customer_cannot_update_another_users_address(): void
+    {
+        $user = User::factory()->create();
+        $otherUser = User::factory()->create();
+        $province = Province::factory()->create();
+        $city = City::factory()->create(['province_id' => $province->id]);
+
+        $address = Address::factory()->create([
+            'user_id' => $otherUser->id,
+            'province_id' => $province->id,
+            'city_id' => $city->id,
+            'title' => 'Home',
+        ]);
+
+        $this->actingAsCustomer($user);
+
+        $this->patchJson("/api/v1/addresses/{$address->id}", [
+            'title' => 'Office',
+        ])->assertForbidden();
+
+        $this->assertDatabaseHas('addresses', [
+            'id' => $address->id,
+            'title' => 'Home',
+        ]);
+    }
+
+    public function test_admin_can_update_another_users_address(): void
+    {
+        $owner = User::factory()->create();
+        $admin = User::factory()->create();
+        $province = Province::factory()->create();
+        $city = City::factory()->create(['province_id' => $province->id]);
+
+        $address = Address::factory()->create([
+            'user_id' => $owner->id,
+            'province_id' => $province->id,
+            'city_id' => $city->id,
+            'title' => 'Home',
+        ]);
+
+        $this->actingAsAdmin($admin);
+
+        $this->patchJson("/api/v1/addresses/{$address->id}", [
+            'title' => 'Office',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.title', 'Office');
+    }
+
     public function test_authenticated_user_can_delete_own_address(): void
     {
         $user = User::factory()->create();
@@ -166,11 +241,57 @@ class AddressTest extends TestCase
             'city_id' => $city->id,
         ]);
 
-        Sanctum::actingAs($user);
+        $this->actingAsCustomer($user);
 
         $this->deleteJson("/api/v1/addresses/{$address->id}")
             ->assertOk()
             ->assertJsonPath('message', 'Address deleted successfully.');
+
+        $this->assertDatabaseMissing('addresses', [
+            'id' => $address->id,
+        ]);
+    }
+
+    public function test_customer_cannot_delete_another_users_address(): void
+    {
+        $user = User::factory()->create();
+        $otherUser = User::factory()->create();
+        $province = Province::factory()->create();
+        $city = City::factory()->create(['province_id' => $province->id]);
+
+        $address = Address::factory()->create([
+            'user_id' => $otherUser->id,
+            'province_id' => $province->id,
+            'city_id' => $city->id,
+        ]);
+
+        $this->actingAsCustomer($user);
+
+        $this->deleteJson("/api/v1/addresses/{$address->id}")
+            ->assertForbidden();
+
+        $this->assertDatabaseHas('addresses', [
+            'id' => $address->id,
+        ]);
+    }
+
+    public function test_admin_can_delete_another_users_address(): void
+    {
+        $owner = User::factory()->create();
+        $admin = User::factory()->create();
+        $province = Province::factory()->create();
+        $city = City::factory()->create(['province_id' => $province->id]);
+
+        $address = Address::factory()->create([
+            'user_id' => $owner->id,
+            'province_id' => $province->id,
+            'city_id' => $city->id,
+        ]);
+
+        $this->actingAsAdmin($admin);
+
+        $this->deleteJson("/api/v1/addresses/{$address->id}")
+            ->assertOk();
 
         $this->assertDatabaseMissing('addresses', [
             'id' => $address->id,
@@ -197,7 +318,7 @@ class AddressTest extends TestCase
             'is_default_shipping' => false,
         ]);
 
-        Sanctum::actingAs($user);
+        $this->actingAsCustomer($user);
 
         $this->postJson("/api/v1/addresses/{$second->id}/default-shipping")
             ->assertOk()

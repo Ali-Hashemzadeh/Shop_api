@@ -5,14 +5,15 @@ use Modules\Identity\Infrastructure\Http\Controllers\ProfileController;
 
 Route::middleware(['api', 'auth:sanctum'])->group(function () {
     Route::prefix('profile')->group(function () {
-        Route::get('/', [ProfileController::class, 'index']);
+        Route::get('/', [ProfileController::class, 'showMe']);
+        Route::patch('/', [ProfileController::class, 'updateMe']);
 
         Route::get('/me', [ProfileController::class, 'showMe']);
-        Route::POST('/me', [ProfileController::class, 'updateMe']);
+        Route::patch('/me', [ProfileController::class, 'updateMe']);
         Route::get('/myAddresses', [ProfileController::class, 'myAddresses']);
         Route::get('/show/{user}', [ProfileController::class, 'show']);
         Route::get('/{user}/addresses', [ProfileController::class, 'addresses']);
-        Route::POST('/{user}', [ProfileController::class, 'update']);
+        Route::patch('/{user}', [ProfileController::class, 'update']);
         Route::delete('/{user}', [ProfileController::class, 'destroy']);
     });
 });
