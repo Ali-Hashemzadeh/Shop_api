@@ -6,11 +6,13 @@ use App\Http\Controllers\Controller;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
+use Modules\Identity\Application\Actions\CreateAddress;
 use Modules\Identity\Application\Actions\DeleteAddress;
 use Modules\Identity\Application\Actions\ShowAddress;
 use Modules\Identity\Application\Actions\UpdateAddress;
 use Modules\Identity\Domain\Models\Address;
 use Modules\Identity\Domain\Models\User;
+use Modules\Identity\Infrastructure\Http\Requests\StoreAddressRequest;
 use Modules\Identity\Infrastructure\Http\Requests\UpdateAddressRequest;
 use Modules\Identity\Infrastructure\Http\Resources\AddressResource;
 
@@ -46,6 +48,21 @@ class AdminAddressController extends Controller
         return response()->json([
             'data' => new AddressResource($action->handle($address)),
         ]);
+    }
+
+    /**
+     * @throws AuthorizationException
+     */
+    public function store(StoreAddressRequest $request, User $user, CreateAddress $action): JsonResponse
+    {
+        $this->authorize('create', Address::class);
+        $address = $action->handle($user, $request->validated());
+
+        return response()->json([
+            'message' => 'Address created successfully.',
+            'data' => new AddressResource($address),
+        ], 201);
+
     }
 
     /**
