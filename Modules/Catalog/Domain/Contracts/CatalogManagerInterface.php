@@ -60,4 +60,28 @@ interface CatalogManagerInterface
      * (cents), never floats — enforced by the Cents Rule.
      */
     public function updateVariantPrice(int $variantId, int $basePrice, ?int $compareAtPrice = null): ProductVariantDTO;
+
+    /**
+     * Persist a new product shell and return it as a DTO.
+     * Gallery images and variants are attached in separate calls.
+     */
+    public function createProduct(array $data): ProductDTO;
+
+    /**
+     * Attach a single image entry to a product's ordered gallery.
+     * Uses a loose media_id reference — no FK to the media table.
+     */
+    public function addProductImage(int $productId, int $mediaId, int $sortOrder = 0): void;
+
+    /**
+     * Persist a new purchasable variant linked to a product.
+     * Caller is responsible for enforcing the is_default invariant before calling.
+     */
+    public function createProductVariant(int $productId, array $data): ProductVariantDTO;
+
+    /**
+     * Fetch a product by ID regardless of its publish status.
+     * Used internally after write operations to return a fully hydrated DTO.
+     */
+    public function findProductAdmin(int $id): ?ProductDTO;
 }

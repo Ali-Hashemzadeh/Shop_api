@@ -12,6 +12,7 @@ use Modules\Catalog\Domain\DTOs\ProductImageDTO;
 use Modules\Catalog\Domain\DTOs\ProductVariantDTO;
 use Modules\Catalog\Domain\Models\Category;
 use Modules\Catalog\Domain\Models\Product;
+use Modules\Catalog\Domain\Models\ProductImage;
 use Modules\Catalog\Domain\Models\ProductVariant;
 use Modules\Media\Domain\Contracts\MediaManagerInterface;
 use Modules\Media\Domain\DTOs\MediaDTO;
@@ -112,6 +113,44 @@ class EloquentCatalogManager implements CatalogManagerInterface
         ]);
 
         return ProductVariantDTO::fromModel($variant->fresh(), $this->resolveUrl($variant->media_id));
+    }
+
+    public function createProduct(array $data): ProductDTO
+    {
+        $product = Product::query()->create($data);
+
+        $primaryImageUrl = $product->primary_media_id
+            ? $this->resolveUrl($product->primary_media_id)
+            : null;
+
+        return ProductDTO::fromModel($product, $primaryImageUrl, [], []);
+    }
+
+    public function addProductImage(int $productId, int $mediaId, int $sortOrder = 0): void
+    {
+        ProductImage::query()->create([
+            'product_id' => $productId,
+            'media_id'   => $mediaId,
+            'sort_order' => $sortOrder,
+        ]);
+    }
+
+    public function createProductVariant(int $productId, array $data): ProductVariantDTO
+    {
+        $variant = ProductVariant::query()->create(
+            array_merge($data, ['product_id' => $productId])
+        );
+
+        return ProductVariantDTO::fromModel($variant, $this->resolveUrl($variant->media_id));
+    }
+
+    public function findProductAdmin(int $id): ?ProductDTO
+    {
+        $product = Product::query()
+            ->with(['images', 'variants'])
+            ->find($id);
+
+        return $product ? $this->hydrateProduct($product) : null;
     }
 
     // -------------------------------------------------------------------------

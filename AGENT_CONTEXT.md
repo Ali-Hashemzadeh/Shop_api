@@ -53,7 +53,7 @@ Modules/
     * `Modules\Media\Domain\DTOs\MediaDTO`: The immutable object returned containing the absolute accessible public URL via `Storage::url()`.
     * `Modules\Media\Infrastructure\Persistence\Repositories\LocalMediaManager`: Concrete implementation executing local disk file saves and tracking log generation.
 
-### 🏷️ 3. Catalog Module (Status: IN PROGRESS - Sprint Step 4 Complete)
+### 🏷️ 3. Catalog Module (Status: IN PROGRESS - Sprint Step 5 Complete)
 * **Responsibility:** Control storefront presentation layout including infinite hierarchical categories, parent products, multi-image product media galleries, and purchasable product variant options.
 * **Schema Layout (Step 2 Complete):**
     * `categories`: Supports nesting (`parent_id`) and holds a loose asset reference (`media_id`).
@@ -64,22 +64,27 @@ Modules/
     * `Category`, `Product`, `ProductImage`, `ProductVariant` models declared with clean internal relationships. `ProductVariant` casts `is_default` → boolean, `base_price`/`compare_at_price` → integer (Cents Rule), `attributes` → array.
 * **DTOs & Contracts (Step 4 Complete):**
     * `CategoryDTO`, `ProductImageDTO`, `ProductVariantDTO` (includes `isDefault: bool`, `basePrice: int`, `compareAtPrice: ?int`), `ProductDTO` (composes image and variant DTO arrays).
-    * `CatalogManagerInterface`: public surface for Cart/Order/Inventory modules. Key write methods: `createCategory(array): CategoryDTO`, `updateVariantPrice(int, int, ?int): ProductVariantDTO`. Key read methods: `findProduct`, `findProductBySlug`, `findVariant`, `findVariantBySku`, `getProductsByCategory`, `getActiveRootCategories`.
-    * `EloquentCatalogManager`: concrete implementation under `Infrastructure/Persistence/Repositories/`. Uses `MediaManagerInterface::getMediaCollection()` for batch URL hydration. Bound in `CatalogServiceProvider::register()`.
+    * `CatalogManagerInterface`: full write/read surface. Write: `createCategory`, `createProduct`, `addProductImage`, `createProductVariant`, `updateVariantPrice`. Read: `findProduct`, `findProductBySlug`, `findProductAdmin`, `findVariant`, `findVariantBySku`, `getProductsByCategory`, `getActiveRootCategories`.
+    * `EloquentCatalogManager`: concrete implementation. Uses `getMediaCollection()` for batch URL hydration. Bound in `CatalogServiceProvider::register()`.
+* **Application Actions (Step 5 Complete):**
+    * `CreateCategoryAction::handle(array, ?UploadedFile): CategoryDTO` — auto-generates slug via `Str::slug`; accepts uploaded file or existing `media_id`.
+    * `CreateProductAction::handle(array, ?UploadedFile, UploadedFile[]): ProductDTO` — creates product shell, uploads primary thumbnail and ordered gallery in a single `DB::transaction`; array index becomes `sort_order`.
+    * `CreateProductVariantAction::handle(int, array, ?UploadedFile): ProductVariantDTO` — enforces Cents Rule with hard `InvalidArgumentException` on non-integer prices; enforces `is_default` single-true invariant inside a `DB::transaction` by unsetting any prior default before writing the new variant.
 
 ---
 
 ## 4. Active Workflow & Next Instructions
 
-The Catalog module is being built from total scratch. Steps 1 through 4 are fully written and committed.
+The Catalog module is being built from total scratch. Steps 1 through 5 are fully written and committed.
 
 ### Your Immediate Objective:
-Proceed directly to **Step 5** of the Catalog Module design blueprint:
-1. **Build Catalog Actions:** Create single-responsibility Action classes under `Modules/Catalog/Application/Actions/` for storefront operations (e.g., `CreateCategoryAction`, `UpdateVariantPriceAction`). Actions receive validated input, call `CatalogManagerInterface`, and return DTOs.
-2. **Build HTTP Layer:** Create Controllers, Form Request validators, and API Resources under `Modules/Catalog/Infrastructure/Http/`. Resources must transform DTOs (not raw Eloquent models) into JSON responses. Prices must be exposed in cents — no float conversion at this layer.
+Proceed directly to **Step 6** of the Catalog Module design blueprint:
+1. **Build HTTP Layer:** Create Controllers, Form Request validators, and API Resources under `Modules/Catalog/Infrastructure/Http/`. Each Controller method should resolve the relevant Action from the container and call its `handle()` method.
+2. **Form Requests:** Validate that `base_price` and `compare_at_price` are `integer` type (not numeric string) so the Cents Rule guard in `CreateProductVariantAction` is never triggered by malformed HTTP input.
+3. **API Resources:** Transform DTOs into JSON. Monetary values stay as integers — no float division at this layer. Image URLs come directly from DTO string fields.
 
 ### Implementation Checklist Rules for Agent:
-* Actions must accept scalar/array input — never raw Eloquent models crossing an Action boundary.
-* API Resources format monetary values as integers (cents); presentation formatting (e.g., dividing by 100) is a front-end responsibility.
+* Controllers must not instantiate Actions directly — resolve them via the service container (`app(CreateCategoryAction::class)`), or inject them via constructor.
+* API Resources accept DTOs, not raw Eloquent models. Never import `Modules\Catalog\Domain\Models\*` inside the Http layer.
 * Do not attempt to add direct database foreign keys from `Catalog` tables to the `media` table.
 * Ensure all files are properly typed with accurate namespaces matching the modular layout structure.
