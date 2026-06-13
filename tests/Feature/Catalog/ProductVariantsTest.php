@@ -19,6 +19,8 @@ class ProductVariantsTest extends TestCase
     {
         parent::setUp();
         Storage::fake();
+        $this->seedIdentityRolesAndPermissions();
+        $this->actingAsAdmin();
 
         $this->product = Product::create([
             'title'  => 'Test Product',
@@ -50,14 +52,12 @@ class ProductVariantsTest extends TestCase
     /** @test */
     public function it_accepts_a_whole_number_string_price_from_form_encoded_requests(): void
     {
-        // postJson sends JSON integers directly; simulate form-encoded string via post()
         $response = $this->post(
             "/api/v1/catalog/products/{$this->product->id}/variants",
             ['sku' => 'SKU-FORM', 'base_price' => '2999'],
             ['Accept' => 'application/json']
         );
 
-        // prepareForValidation casts "2999" → 2999 so the Action's Cents Rule guard passes
         $response->assertCreated()
             ->assertJsonPath('base_price', 2999);
     }
@@ -111,13 +111,11 @@ class ProductVariantsTest extends TestCase
     /** @test */
     public function it_stores_a_compare_at_price_alongside_the_base_price(): void
     {
-        $response = $this->postJson("/api/v1/catalog/products/{$this->product->id}/variants", [
+        $this->postJson("/api/v1/catalog/products/{$this->product->id}/variants", [
             'sku'              => 'SALE-ITEM',
             'base_price'       => 1999,
             'compare_at_price' => 2999,
-        ]);
-
-        $response->assertCreated()
+        ])->assertCreated()
             ->assertJsonPath('base_price', 1999)
             ->assertJsonPath('compare_at_price', 2999);
     }
@@ -125,13 +123,11 @@ class ProductVariantsTest extends TestCase
     /** @test */
     public function it_can_create_a_variant_with_attributes(): void
     {
-        $response = $this->postJson("/api/v1/catalog/products/{$this->product->id}/variants", [
+        $this->postJson("/api/v1/catalog/products/{$this->product->id}/variants", [
             'sku'        => 'SHIRT-RED-L',
             'base_price' => 2999,
             'attributes' => ['color' => 'red', 'size' => 'L'],
-        ]);
-
-        $response->assertCreated()
+        ])->assertCreated()
             ->assertJsonPath('attributes.color', 'red')
             ->assertJsonPath('attributes.size', 'L');
     }
@@ -152,15 +148,13 @@ class ProductVariantsTest extends TestCase
     /** @test */
     public function setting_a_new_default_variant_unsets_the_previous_one(): void
     {
-        // Arrange: first variant is the default
-        $firstVariant = ProductVariant::create([
+        ProductVariant::create([
             'product_id' => $this->product->id,
             'sku'        => 'VARIANT-A',
             'is_default' => true,
             'base_price' => 1000,
         ]);
 
-        // Act: create a second variant claiming is_default
         $this->postJson("/api/v1/catalog/products/{$this->product->id}/variants", [
             'sku'        => 'VARIANT-B',
             'base_price' => 2000,
@@ -168,15 +162,154 @@ class ProductVariantsTest extends TestCase
         ])->assertCreated()
             ->assertJsonPath('is_default', true);
 
-        // Assert: original default was unset
-        $this->assertDatabaseHas('product_variants', [
-            'sku'        => 'VARIANT-A',
+        $this->assertDatabaseHas('product_variants', ['sku' => 'VARIANT-A', 'is_default' => false]);
+        $this->assertDatabaseHas('product_variants', ['sku' => 'VARIANT-B', 'is_default' => true]);
+    }
+
+    // ── PATCH /api/v1/catalog/variants/{variantId} ───────────────────────────
+
+    /** @test */
+    public function it_can_update_a_variant_sku(): void
+    {
+        $variant = ProductVariant::create([
+            'product_id' => $this->product->id,
+            'sku'        => 'OLD-SKU',
             'is_default' => false,
+            'base_price' => 1000,
         ]);
-        $this->assertDatabaseHas('product_variants', [
-            'sku'        => 'VARIANT-B',
+
+        $this->patchJson("/api/v1/catalog/variants/{$variant->id}", ['sku' => 'NEW-SKU'])
+            ->assertOk()
+            ->assertJsonPath('sku', 'NEW-SKU');
+
+        $this->assertDatabaseHas('product_variants', ['id' => $variant->id, 'sku' => 'NEW-SKU']);
+    }
+
+    /** @test */
+    public function it_can_update_variant_prices(): void
+    {
+        $variant = ProductVariant::create([
+            'product_id' => $this->product->id,
+            'sku'        => 'PRICE-SKU',
+            'is_default' => false,
+            'base_price' => 1000,
+        ]);
+
+        $this->patchJson("/api/v1/catalog/variants/{$variant->id}", [
+            'base_price'       => 2500,
+            'compare_at_price' => 3000,
+        ])->assertOk()
+            ->assertJsonPath('base_price', 2500)
+            ->assertJsonPath('compare_at_price', 3000);
+    }
+
+    /** @test */
+    public function it_rejects_a_float_price_on_variant_update(): void
+    {
+        $variant = ProductVariant::create([
+            'product_id' => $this->product->id,
+            'sku'        => 'FLOAT-UPDATE',
+            'is_default' => false,
+            'base_price' => 1000,
+        ]);
+
+        $this->patchJson("/api/v1/catalog/variants/{$variant->id}", ['base_price' => 19.99])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['base_price']);
+    }
+
+    /** @test */
+    public function it_rejects_updating_to_a_duplicate_sku(): void
+    {
+        ProductVariant::create([
+            'product_id' => $this->product->id,
+            'sku'        => 'TAKEN-SKU',
+            'is_default' => false,
+            'base_price' => 500,
+        ]);
+        $variant = ProductVariant::create([
+            'product_id' => $this->product->id,
+            'sku'        => 'MY-SKU',
+            'is_default' => false,
+            'base_price' => 600,
+        ]);
+
+        $this->patchJson("/api/v1/catalog/variants/{$variant->id}", ['sku' => 'TAKEN-SKU'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['sku']);
+    }
+
+    /** @test */
+    public function it_allows_patching_without_changing_the_sku(): void
+    {
+        $variant = ProductVariant::create([
+            'product_id' => $this->product->id,
+            'sku'        => 'KEEP-SKU',
+            'is_default' => false,
+            'base_price' => 1000,
+        ]);
+
+        $this->patchJson("/api/v1/catalog/variants/{$variant->id}", [
+            'sku'        => 'KEEP-SKU',
+            'base_price' => 2000,
+        ])->assertOk()
+            ->assertJsonPath('base_price', 2000);
+    }
+
+    /** @test */
+    public function updating_a_variant_to_default_unsets_the_previous_default(): void
+    {
+        $variantA = ProductVariant::create([
+            'product_id' => $this->product->id,
+            'sku'        => 'VAR-A',
             'is_default' => true,
+            'base_price' => 1000,
         ]);
+        $variantB = ProductVariant::create([
+            'product_id' => $this->product->id,
+            'sku'        => 'VAR-B',
+            'is_default' => false,
+            'base_price' => 2000,
+        ]);
+
+        $this->patchJson("/api/v1/catalog/variants/{$variantB->id}", ['is_default' => true])
+            ->assertOk()
+            ->assertJsonPath('is_default', true);
+
+        $this->assertDatabaseHas('product_variants', ['sku' => 'VAR-A', 'is_default' => false]);
+        $this->assertDatabaseHas('product_variants', ['sku' => 'VAR-B', 'is_default' => true]);
+    }
+
+    /** @test */
+    public function it_returns_404_when_updating_a_non_existent_variant(): void
+    {
+        $this->patchJson('/api/v1/catalog/variants/99999', ['sku' => 'GHOST'])
+            ->assertNotFound();
+    }
+
+    // ── DELETE /api/v1/catalog/variants/{variantId} ──────────────────────────
+
+    /** @test */
+    public function it_can_delete_a_variant(): void
+    {
+        $variant = ProductVariant::create([
+            'product_id' => $this->product->id,
+            'sku'        => 'DELETE-ME',
+            'is_default' => false,
+            'base_price' => 500,
+        ]);
+
+        $this->deleteJson("/api/v1/catalog/variants/{$variant->id}")
+            ->assertNoContent();
+
+        $this->assertDatabaseMissing('product_variants', ['id' => $variant->id]);
+    }
+
+    /** @test */
+    public function it_returns_404_when_deleting_a_non_existent_variant(): void
+    {
+        $this->deleteJson('/api/v1/catalog/variants/99999')
+            ->assertNotFound();
     }
 
     // ── GET /api/v1/catalog/variants/{variantId} ─────────────────────────────

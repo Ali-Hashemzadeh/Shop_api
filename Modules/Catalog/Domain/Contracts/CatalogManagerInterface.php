@@ -52,9 +52,6 @@ interface CatalogManagerInterface
 
     public function createProductVariant(int $productId, array $data): ProductVariantDTO;
 
-    /** Update a variant's price; both values must be raw integers (cents). */
-    public function updateVariantPrice(int $variantId, int $basePrice, ?int $compareAtPrice = null): ProductVariantDTO;
-
     /** Update arbitrary variant fields; enforces is_default single-true invariant. */
     public function updateProductVariant(int $variantId, array $data): ProductVariantDTO;
 

@@ -172,18 +172,6 @@ class EloquentCatalogManager implements CatalogManagerInterface
         return ProductVariantDTO::fromModel($variant, $this->resolveUrl($variant->media_id));
     }
 
-    public function updateVariantPrice(int $variantId, int $basePrice, ?int $compareAtPrice = null): ProductVariantDTO
-    {
-        $variant = ProductVariant::query()->findOrFail($variantId);
-        $variant->update([
-            'base_price'       => $basePrice,
-            'compare_at_price' => $compareAtPrice,
-        ]);
-        $variant->refresh();
-
-        return ProductVariantDTO::fromModel($variant, $this->resolveUrl($variant->media_id));
-    }
-
     public function updateProductVariant(int $variantId, array $data): ProductVariantDTO
     {
         return DB::transaction(function () use ($variantId, $data) {
