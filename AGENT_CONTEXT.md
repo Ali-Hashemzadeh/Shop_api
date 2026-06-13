@@ -20,19 +20,21 @@ Modules/
     │   ├── Models/       # Internal Eloquent models (Encapsulated)
     │   ├── Contracts/    # Public Interface Contracts for other modules
     │   └── DTOs/         # Immutable data carriers crossing the border
+    │   └── Policies/         # policies of the modules
     ├── Application/
     │   └── Actions/      # Single-responsibility business logic handlers
     └── Infrastructure/
         ├── Http/         # Controllers, Request Validators, API Resources
-        ├── Persistence/  # Migrations, Repositories
+        ├── Persistence/  # Migrations, Repositories, Seeders
         └── Providers/    # Module-specific Service Providers
+        └── Routes/    # Module-specific routes
 ```
 
 ---
 
 ## 2. Inviolable Engineering Rules
 
-* **Financial Integrity (The Cents Rule):** All monetary values (prices, discounts, taxes) must be processed and stored in the database exclusively as raw integers representing the smallest currency unit (e.g., cents: `$19.99` is stored as `1999`). Floating-point numbers are completely barred for financial attributes.
+* **Financial Integrity (The Cents Rule):** All monetary values (prices, discounts, taxes) must be processed and stored in the database exclusively as raw integers representing the smallest currency unit (e.g., its persian numbers so keep that in mind). Floating-point numbers are completely barred for financial attributes.
 * **Loose Media Coupling:** To keep modules completely decoupled, tables outside the Media module must **never** use cascading database foreign keys pointing to the `media` table. Instead, store them as standard `unsignedBigInteger('media_id')->nullable()` columns.
 * **Test-Driven Modifications:** Any block that mutates data state (Actions, Repositories, Managers) must have matching Feature/Unit tests covering success and failure edge-cases.
 * **Storage Environment:** The application relies 100% on fast, streamlined local filesystem storage using Laravel's native `Storage` facade mapping to the `public` disk stream via symlink. Database records do not track target storage drives.
@@ -45,6 +47,9 @@ Modules/
 * **Responsibility:** Multi-role authentication, user profile management, shipping location matrices, and user addresses.
 * **Key Entities:** `User`, `Address`, `Province`, `City`.
 * **State:** Fully functional, using decoupled Eloquent repositories bound to service contracts (`UserRepositoryInterface`, `AddressRepositoryInterface`).
+* **Public Cross-Module Contract:**
+    * `Modules\Identity\Domain\Contracts\IdentityManagerInterface`: exposes `isAdmin(int $userId): bool`. This is the ONLY authorised entry point for other modules to query user privilege — never import the `User` model or `HasRoles` trait across module boundaries.
+    * Concrete: `EloquentIdentityManager` (bound in `IdentityServiceProvider::register()`). Internally calls `User::find()->hasRole('admin')` — all Spatie internals stay inside Identity.
 
 ### 📁 2. Media Module (Status: Active & Complete)
 * **Responsibility:** Lightweight, high-performance physical file uploads and tracking ledger.
@@ -77,7 +82,12 @@ Modules/
 * **Routes & Feature Tests (Step 7):**
     * 20 RESTful routes: POST/GET/PATCH/DELETE for categories, products, variants.
     * 29 comprehensive feature tests covering CRUD happy paths, validation errors (including Cents Rule), 404 scenarios, invariant enforcement.
-    * Pagination: `getActiveRootCategories` and `getProductsByCategory` return `LengthAwarePaginator` (15 items/page, 1–100 configurable via `per_page` query param). Scramble auto-documents the `per_page` param.
+    * Pagination: `getActiveRootCategories` and `getProductsByCategory` return `LengthAwarePaginator` (15 items/page, 1–100 configurable via `per_page` query param, `page` for page number). Scramble auto-documents both params.
+* **Authorization Layer (Step 8):**
+    * **Public routes** (no auth): all GET read endpoints (category list/show, product show/by-slug/by-category, variant show/by-sku).
+    * **Admin routes** (`auth:sanctum` + `catalog.admin` middleware): all write operations (POST/PATCH/DELETE) and `GET /products/{id}/admin`.
+    * `RequireAdminRole` middleware (`Modules\Catalog\Infrastructure\Http\Middleware`) resolves `IdentityManagerInterface` from the container and calls `isAdmin($user->id)` — zero Identity model imports inside Catalog.
+    * Middleware alias `catalog.admin` registered in `CatalogServiceProvider::boot()` via `$this->app['router']->aliasMiddleware(...)`.
 
 ---
 

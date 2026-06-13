@@ -10,6 +10,8 @@ use Modules\Identity\Domain\Policies\AddressPolicy;
 use Modules\Identity\Domain\Policies\ProfilePolicy;
 use Modules\Identity\Infrastructure\Persistence\Repositories\AddressRepositoryInterface;
 use Modules\Identity\Infrastructure\Persistence\Repositories\EloquentAddressRepository;
+use Modules\Identity\Domain\Contracts\IdentityManagerInterface;
+use Modules\Identity\Infrastructure\Persistence\Repositories\EloquentIdentityManager;
 use Modules\Identity\Infrastructure\Persistence\Repositories\EloquentUserRepository;
 use Modules\Identity\Infrastructure\Persistence\Repositories\UserRepositoryInterface;
 
@@ -17,6 +19,7 @@ class IdentityServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
+        $this->app->bind(IdentityManagerInterface::class, EloquentIdentityManager::class);
         $this->app->bind(
             UserRepositoryInterface::class,
             EloquentUserRepository::class);

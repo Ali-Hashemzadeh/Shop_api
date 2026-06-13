@@ -4,6 +4,7 @@ namespace Modules\Catalog\Infrastructure\Providers;
 
 use Illuminate\Support\ServiceProvider;
 use Modules\Catalog\Domain\Contracts\CatalogManagerInterface;
+use Modules\Catalog\Infrastructure\Http\Middleware\RequireAdminRole;
 use Modules\Catalog\Infrastructure\Persistence\Repositories\EloquentCatalogManager;
 
 class CatalogServiceProvider extends ServiceProvider
@@ -13,12 +14,11 @@ class CatalogServiceProvider extends ServiceProvider
         $this->app->bind(CatalogManagerInterface::class, EloquentCatalogManager::class);
     }
 
-    /**
-     * Bootstrap any module services.
-     */
     public function boot(): void
     {
         $this->loadRoutesFrom(__DIR__ . '/../Routes/api.php');
         $this->loadMigrationsFrom(__DIR__ . '/../Persistence/Migrations');
+
+        $this->app['router']->aliasMiddleware('catalog.admin', RequireAdminRole::class);
     }
 }
