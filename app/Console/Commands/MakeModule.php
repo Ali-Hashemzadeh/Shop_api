@@ -43,6 +43,7 @@ class MakeModule extends Command
             "{$basePath}/Domain/Contracts",
             "{$basePath}/Domain/DTOs",
             "{$basePath}/Domain/Models",
+            "{$basePath}/Domain/Policies",
             "{$basePath}/Infrastructure/Http/Controllers",
             "{$basePath}/Infrastructure/Http/Requests",
             "{$basePath}/Infrastructure/Http/Resources",
