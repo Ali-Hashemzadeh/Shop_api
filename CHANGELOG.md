@@ -2,6 +2,70 @@
 
 ## [Unreleased](https://github.com/laravel/laravel/compare/v12.12.1...12.x)
 
+### Catalog Module (v1.0.0)
+
+**Complete rewrite of the storefront product catalog system as a modular, fully-tested DDD/Hexagonal monolith component.**
+
+#### New Features
+- **Categories:** Infinite-depth hierarchical categories with image assets. Read: by ID, list active roots (paginated). Write: create, update, delete.
+- **Products:** Product shells with draft/published lifecycle, multi-image galleries, and category linking. Read: by ID, by slug, by category (paginated), admin override for draft products. Write: create (uploads primary + gallery in one transaction), update, delete.
+- **Product Variants:** Purchasable options (size, color, etc.) with unique SKUs, prices in cents (integers only), per-variant images, and JSON attributes. Exactly one default variant per product enforced at the application layer. Read: by ID, by SKU. Write: create, update, delete.
+- **HTTP Layer:** 3 controllers, 8 form requests (including pagination + update validators), 4 API resources.
+- **Pagination:** List endpoints return `LengthAwarePaginator` envelopes (data + links + meta). Configurable `per_page` (1–100, default 15) auto-documented by Scramble.
+- **Cents Rule Enforcement:** All prices (base_price, compare_at_price) must be integers in cents. Form requests cast whole-number strings to int; decimals are rejected. Actions double-check with `InvalidArgumentException`.
+- **Feature Tests:** 29 PHPUnit tests across categories, products, and variants covering CRUD happy paths, validation errors, 404 scenarios, and invariant enforcement.
+
+#### Architecture
+- **Domain Layer:** 4 Eloquent models (`Category`, `Product`, `ProductImage`, `ProductVariant`), 4 DTOs, 1 contract interface.
+- **Application Layer:** 9 Actions (3 create + 3 update + 3 delete), single-responsibility handlers.
+- **Infrastructure Layer:** 3 controllers (dependency-injected), 8 form requests, 4 API resources, 20 RESTful routes.
+- **Modular Isolation:** Zero imports of catalog models outside the module. All cross-module communication via `CatalogManagerInterface` and DTOs.
+- **Test Coverage:** All data mutations (Actions, Manager methods) have corresponding feature tests with edge cases.
+
+#### Database
+```sql
+CREATE TABLE categories (
+  id, parent_id, name, slug (unique), media_id (loose ref), is_active, timestamps
+);
+
+CREATE TABLE products (
+  id, category_id (FK), title, slug (unique), description, status (draft|published), primary_media_id (loose ref), timestamps
+);
+
+CREATE TABLE product_images (
+  id, product_id (FK cascade), media_id (loose ref), sort_order, timestamps
+);
+
+CREATE TABLE product_variants (
+  id, product_id (FK cascade), sku (unique), is_default, base_price (int cents), compare_at_price (int cents, nullable), media_id (loose ref), attributes (json), timestamps
+);
+```
+
+#### API Routes (20 endpoints)
+```
+POST   /api/v1/catalog/categories              — Create
+GET    /api/v1/catalog/categories/roots        — List active root categories (paginated)
+GET    /api/v1/catalog/categories/{id}         — Read
+PATCH  /api/v1/catalog/categories/{id}         — Update
+DELETE /api/v1/catalog/categories/{id}         — Delete
+
+POST   /api/v1/catalog/products                — Create (uploads primary + gallery)
+GET    /api/v1/catalog/products/{id}           — Read (published only)
+GET    /api/v1/catalog/products/{id}/admin     — Read (any status)
+GET    /api/v1/catalog/products/slug/{slug}    — Read by slug (published only)
+GET    /api/v1/catalog/categories/{categoryId}/products  — List by category (paginated, published only)
+PATCH  /api/v1/catalog/products/{id}           — Update
+DELETE /api/v1/catalog/products/{id}           — Delete
+
+POST   /api/v1/catalog/products/{productId}/variants  — Create
+GET    /api/v1/catalog/variants/{variantId}   — Read
+GET    /api/v1/catalog/variants/sku/{sku}     — Read by SKU
+PATCH  /api/v1/catalog/variants/{variantId}   — Update
+DELETE /api/v1/catalog/variants/{variantId}   — Delete
+```
+
+---
+
 ## [v12.12.1](https://github.com/laravel/laravel/compare/v12.12.0...v12.12.1) - 2026-03-10
 
 * [12.x] Makes imports consistent by [@nunomaduro](https://github.com/nunomaduro) in https://github.com/laravel/laravel/pull/6760
@@ -78,7 +142,7 @@
 ## [v12.3.1](https://github.com/laravel/laravel/compare/v12.3.0...v12.3.1) - 2025-08-21
 
 * [12.x] Bump Pint version by [@AhmedAlaa4611](https://github.com/AhmedAlaa4611) in https://github.com/laravel/laravel/pull/6653
-* [12.x] Making sure all related processed are closed when terminating the currently command by [@AhmedAlaa4611](https://github.com/AhmedAlaa4611) in https://github.com/laravel/laravel/pull/6654
+* [12.x] Making sure all related processed are closed when terminating the currently command by [@AhmedAlaa4611](https://github.com/AhmedAlaa4611) in https://github.com/laravel/laravel/pull/6655
 * [12.x] Use application name from configuration by [@AhmedAlaa4611](https://github.com/AhmedAlaa4611) in https://github.com/laravel/laravel/pull/6655
 * Bring back postAutoloadDump script by [@jasonvarga](https://github.com/jasonvarga) in https://github.com/laravel/laravel/pull/6662
 

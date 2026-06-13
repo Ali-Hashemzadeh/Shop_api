@@ -53,38 +53,37 @@ Modules/
     * `Modules\Media\Domain\DTOs\MediaDTO`: The immutable object returned containing the absolute accessible public URL via `Storage::url()`.
     * `Modules\Media\Infrastructure\Persistence\Repositories\LocalMediaManager`: Concrete implementation executing local disk file saves and tracking log generation.
 
-### 🏷️ 3. Catalog Module (Status: IN PROGRESS - Sprint Step 5 Complete)
+### 🏷️ 3. Catalog Module (Status: COMPLETE — Steps 1–7 Finished)
 * **Responsibility:** Control storefront presentation layout including infinite hierarchical categories, parent products, multi-image product media galleries, and purchasable product variant options.
-* **Schema Layout (Step 2 Complete):**
+* **Schema Layout (Step 2):**
     * `categories`: Supports nesting (`parent_id`) and holds a loose asset reference (`media_id`).
     * `products`: High-level presentation shell with operational tracking (`status: draft, published`) and a main thumbnail (`primary_media_id`).
     * `product_images`: Pivot table supporting **multiple gallery images per product** with a custom display sequence mapping (`sort_order`, `media_id`).
     * `product_variants`: Houses concrete purchasable inventory details tracking unique `sku`, currency integers (`base_price`, `compare_at_price`), attributes JSON arrays, a **per-variant image** (`media_id`), and a **`is_default` boolean** marking exactly one variant per product as the storefront fallback. The single-true invariant is enforced at the application layer.
-* **Domain Models (Step 3 Complete):**
+* **Domain Models (Step 3):**
     * `Category`, `Product`, `ProductImage`, `ProductVariant` models declared with clean internal relationships. `ProductVariant` casts `is_default` → boolean, `base_price`/`compare_at_price` → integer (Cents Rule), `attributes` → array.
-* **DTOs & Contracts (Step 4 Complete):**
+* **DTOs & Contracts (Step 4):**
     * `CategoryDTO`, `ProductImageDTO`, `ProductVariantDTO` (includes `isDefault: bool`, `basePrice: int`, `compareAtPrice: ?int`), `ProductDTO` (composes image and variant DTO arrays).
-    * `CatalogManagerInterface`: full write/read surface. Write: `createCategory`, `createProduct`, `addProductImage`, `createProductVariant`, `updateVariantPrice`. Read: `findProduct`, `findProductBySlug`, `findProductAdmin`, `findVariant`, `findVariantBySku`, `getProductsByCategory`, `getActiveRootCategories`.
-    * `EloquentCatalogManager`: concrete implementation. Uses `getMediaCollection()` for batch URL hydration. Bound in `CatalogServiceProvider::register()`.
-* **Application Actions (Step 5 Complete):**
-    * `CreateCategoryAction::handle(array, ?UploadedFile): CategoryDTO` — auto-generates slug via `Str::slug`; accepts uploaded file or existing `media_id`.
-    * `CreateProductAction::handle(array, ?UploadedFile, UploadedFile[]): ProductDTO` — creates product shell, uploads primary thumbnail and ordered gallery in a single `DB::transaction`; array index becomes `sort_order`.
-    * `CreateProductVariantAction::handle(int, array, ?UploadedFile): ProductVariantDTO` — enforces Cents Rule with hard `InvalidArgumentException` on non-integer prices; enforces `is_default` single-true invariant inside a `DB::transaction` by unsetting any prior default before writing the new variant.
+    * `CatalogManagerInterface`: full read/write surface. Write: `createCategory`, `updateCategory`, `deleteCategory`, `createProduct`, `updateProduct`, `deleteProduct`, `addProductImage`, `createProductVariant`, `updateProductVariant`, `deleteProductVariant`, `updateVariantPrice`. Read: `findProduct`, `findProductBySlug`, `findProductAdmin`, `findVariant`, `findVariantBySku`, `getProductsByCategory` (paginated), `getActiveRootCategories` (paginated).
+    * `EloquentCatalogManager`: concrete implementation. Uses `getMediaCollection()` for batch URL hydration. Supports pagination on list endpoints via `LengthAwarePaginator`. Bound in `CatalogServiceProvider::register()`.
+* **Application Actions (Step 5):**
+    * Create triplet: `CreateCategoryAction`, `CreateProductAction`, `CreateProductVariantAction` handle creation and enforce invariants (Cents Rule, is_default single-true).
+    * Update triplet: `UpdateCategoryAction`, `UpdateProductAction`, `UpdateProductVariantAction` handle partial updates with file uploads and invariant enforcement.
+    * Delete triplet: `DeleteCategoryAction`, `DeleteProductAction`, `DeleteProductVariantAction` are thin wrappers.
+* **HTTP Layer (Step 6):**
+    * 3 Controllers: `CategoriesController`, `ProductsController`, `ProductVariantsController`.
+    * 8 Form Requests: `StoreCategoryRequest`, `UpdateCategoryRequest`, `IndexCategoriesRequest`, `StoreProductRequest`, `UpdateProductRequest`, `IndexProductsRequest`, `StoreProductVariantRequest`, `UpdateProductVariantRequest`.
+    * 4 API Resources: `CategoryResource`, `ProductResource`, `ProductImageResource`, `ProductVariantResource` — all accept DTOs, no Eloquent models.
+* **Routes & Feature Tests (Step 7):**
+    * 20 RESTful routes: POST/GET/PATCH/DELETE for categories, products, variants.
+    * 29 comprehensive feature tests covering CRUD happy paths, validation errors (including Cents Rule), 404 scenarios, invariant enforcement.
+    * Pagination: `getActiveRootCategories` and `getProductsByCategory` return `LengthAwarePaginator` (15 items/page, 1–100 configurable via `per_page` query param). Scramble auto-documents the `per_page` param.
 
 ---
 
-## 4. Active Workflow & Next Instructions
+## 4. Completed & Ready
 
-The Catalog module is being built from total scratch. Steps 1 through 5 are fully written and committed.
+✅ **Catalog module is 100% complete and tested.** All three layers (Domain/Application/Infrastructure) are in place and feature-tested.
 
-### Your Immediate Objective:
-Proceed directly to **Step 6** of the Catalog Module design blueprint:
-1. **Build HTTP Layer:** Create Controllers, Form Request validators, and API Resources under `Modules/Catalog/Infrastructure/Http/`. Each Controller method should resolve the relevant Action from the container and call its `handle()` method.
-2. **Form Requests:** Validate that `base_price` and `compare_at_price` are `integer` type (not numeric string) so the Cents Rule guard in `CreateProductVariantAction` is never triggered by malformed HTTP input.
-3. **API Resources:** Transform DTOs into JSON. Monetary values stay as integers — no float division at this layer. Image URLs come directly from DTO string fields.
+**Next module in queue:** Inventory, Order, or Payment — pending product roadmap review.
 
-### Implementation Checklist Rules for Agent:
-* Controllers must not instantiate Actions directly — resolve them via the service container (`app(CreateCategoryAction::class)`), or inject them via constructor.
-* API Resources accept DTOs, not raw Eloquent models. Never import `Modules\Catalog\Domain\Models\*` inside the Http layer.
-* Do not attempt to add direct database foreign keys from `Catalog` tables to the `media` table.
-* Ensure all files are properly typed with accurate namespaces matching the modular layout structure.
