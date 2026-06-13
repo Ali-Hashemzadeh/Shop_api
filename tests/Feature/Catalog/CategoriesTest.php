@@ -17,6 +17,7 @@ class CategoriesTest extends TestCase
         parent::setUp();
         Storage::fake();
         $this->seedIdentityRolesAndPermissions();
+        $this->seedCatalogPermissions();
         $this->actingAsAdmin();
     }
 

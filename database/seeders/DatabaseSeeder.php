@@ -4,8 +4,8 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
+use Modules\Catalog\Infrastructure\Persistence\Seeders\CatalogModuleSeeder;
 use Modules\Identity\Infrastructure\Persistence\Seeders\IdentityModuleSeeder;
-use Modules\Identity\Infrastructure\Persistence\Seeders\LocationSeeder;
 
 class DatabaseSeeder extends Seeder
 {
@@ -16,8 +16,9 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        $this->call(
+        $this->call([
             IdentityModuleSeeder::class,
-        );
+            CatalogModuleSeeder::class,
+        ]);
     }
 }

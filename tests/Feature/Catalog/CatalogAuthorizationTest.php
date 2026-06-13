@@ -20,6 +20,7 @@ class CatalogAuthorizationTest extends TestCase
     {
         parent::setUp();
         $this->seedIdentityRolesAndPermissions();
+        $this->seedCatalogPermissions();
     }
 
     // ── Unauthenticated → 401 on all admin (write) routes ───────────────────
@@ -183,6 +184,28 @@ class CatalogAuthorizationTest extends TestCase
         $this->actingAsCustomer();
 
         $this->deleteJson('/api/v1/catalog/variants/1')
+            ->assertForbidden();
+    }
+
+    // ── Permission-based (not role-based) proof ─────────────────────────────
+
+    /** @test */
+    public function user_with_a_specific_catalog_permission_can_perform_that_action_without_the_admin_role(): void
+    {
+        $user = $this->actingAsCustomer();
+        $user->givePermissionTo('catalog.category.create');
+
+        $this->postJson('/api/v1/catalog/categories', ['name' => 'Allowed'])
+            ->assertCreated();
+    }
+
+    /** @test */
+    public function user_with_one_catalog_permission_is_still_forbidden_on_others(): void
+    {
+        $user = $this->actingAsCustomer();
+        $user->givePermissionTo('catalog.category.create');
+
+        $this->postJson('/api/v1/catalog/products', ['title' => 'Blocked'])
             ->assertForbidden();
     }
 
