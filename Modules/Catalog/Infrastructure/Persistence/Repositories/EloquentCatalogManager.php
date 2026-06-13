@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Modules\Catalog\Infrastructure\Persistence\Repositories;
 
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Modules\Catalog\Domain\Contracts\CatalogManagerInterface;
 use Modules\Catalog\Domain\DTOs\CategoryDTO;
 use Modules\Catalog\Domain\DTOs\ProductDTO;
@@ -21,29 +23,53 @@ class EloquentCatalogManager implements CatalogManagerInterface
 {
     public function __construct(private readonly MediaManagerInterface $media) {}
 
+    // ── Categories ────────────────────────────────────────────────────────────
+
     public function findCategory(int $id): ?CategoryDTO
     {
         $category = Category::query()->find($id);
-        if (! $category) {
-            return null;
-        }
+
+        return $category
+            ? CategoryDTO::fromModel($category, $this->resolveUrl($category->media_id))
+            : null;
+    }
+
+    public function getActiveRootCategories(int $perPage = 15): LengthAwarePaginator
+    {
+        $paginator = Category::query()
+            ->where('is_active', true)
+            ->whereNull('parent_id')
+            ->paginate($perPage);
+
+        $mediaMap = $this->buildMediaMap($paginator->pluck('media_id')->filter()->all());
+
+        return $paginator->through(
+            fn (Category $cat) => CategoryDTO::fromModel($cat, $mediaMap->get($cat->media_id)?->url)
+        );
+    }
+
+    public function createCategory(array $data): CategoryDTO
+    {
+        $category = Category::query()->create($data);
 
         return CategoryDTO::fromModel($category, $this->resolveUrl($category->media_id));
     }
 
-    public function getActiveRootCategories(): Collection
+    public function updateCategory(int $id, array $data): CategoryDTO
     {
-        $categories = Category::query()
-            ->where('is_active', true)
-            ->whereNull('parent_id')
-            ->get();
+        $category = Category::query()->findOrFail($id);
+        $category->update($data);
+        $category->refresh();
 
-        $mediaMap = $this->buildMediaMap($categories->pluck('media_id')->filter()->all());
-
-        return $categories->map(
-            fn (Category $cat) => CategoryDTO::fromModel($cat, $mediaMap->get($cat->media_id)?->url)
-        );
+        return CategoryDTO::fromModel($category, $this->resolveUrl($category->media_id));
     }
+
+    public function deleteCategory(int $id): void
+    {
+        Category::query()->findOrFail($id)->delete();
+    }
+
+    // ── Products ──────────────────────────────────────────────────────────────
 
     public function findProduct(int $id): ?ProductDTO
     {
@@ -66,59 +92,28 @@ class EloquentCatalogManager implements CatalogManagerInterface
         return $product ? $this->hydrateProduct($product) : null;
     }
 
-    public function findVariant(int $variantId): ?ProductVariantDTO
+    public function findProductAdmin(int $id): ?ProductDTO
     {
-        $variant = ProductVariant::query()->find($variantId);
-        if (! $variant) {
-            return null;
-        }
+        $product = Product::query()
+            ->with(['images', 'variants'])
+            ->find($id);
 
-        return ProductVariantDTO::fromModel($variant, $this->resolveUrl($variant->media_id));
+        return $product ? $this->hydrateProduct($product) : null;
     }
 
-    public function findVariantBySku(string $sku): ?ProductVariantDTO
-    {
-        $variant = ProductVariant::query()->where('sku', $sku)->first();
-        if (! $variant) {
-            return null;
-        }
-
-        return ProductVariantDTO::fromModel($variant, $this->resolveUrl($variant->media_id));
-    }
-
-    public function getProductsByCategory(int $categoryId): Collection
+    public function getProductsByCategory(int $categoryId, int $perPage = 15): LengthAwarePaginator
     {
         return Product::query()
             ->where('status', 'published')
             ->where('category_id', $categoryId)
             ->with(['images', 'variants'])
-            ->get()
-            ->map(fn (Product $p) => $this->hydrateProduct($p));
-    }
-
-    public function createCategory(array $data): CategoryDTO
-    {
-        $category = Category::query()->create($data);
-
-        return CategoryDTO::fromModel($category, $this->resolveUrl($category->media_id));
-    }
-
-    public function updateVariantPrice(int $variantId, int $basePrice, ?int $compareAtPrice = null): ProductVariantDTO
-    {
-        $variant = ProductVariant::query()->findOrFail($variantId);
-
-        $variant->update([
-            'base_price'       => $basePrice,
-            'compare_at_price' => $compareAtPrice,
-        ]);
-
-        return ProductVariantDTO::fromModel($variant->fresh(), $this->resolveUrl($variant->media_id));
+            ->paginate($perPage)
+            ->through(fn (Product $p) => $this->hydrateProduct($p));
     }
 
     public function createProduct(array $data): ProductDTO
     {
-        $product = Product::query()->create($data);
-
+        $product         = Product::query()->create($data);
         $primaryImageUrl = $product->primary_media_id
             ? $this->resolveUrl($product->primary_media_id)
             : null;
@@ -135,6 +130,39 @@ class EloquentCatalogManager implements CatalogManagerInterface
         ]);
     }
 
+    public function updateProduct(int $id, array $data): ProductDTO
+    {
+        $product = Product::query()->with(['images', 'variants'])->findOrFail($id);
+        $product->update($data);
+
+        return $this->hydrateProduct($product->fresh(['images', 'variants']));
+    }
+
+    public function deleteProduct(int $id): void
+    {
+        Product::query()->findOrFail($id)->delete();
+    }
+
+    // ── Product Variants ──────────────────────────────────────────────────────
+
+    public function findVariant(int $variantId): ?ProductVariantDTO
+    {
+        $variant = ProductVariant::query()->find($variantId);
+
+        return $variant
+            ? ProductVariantDTO::fromModel($variant, $this->resolveUrl($variant->media_id))
+            : null;
+    }
+
+    public function findVariantBySku(string $sku): ?ProductVariantDTO
+    {
+        $variant = ProductVariant::query()->where('sku', $sku)->first();
+
+        return $variant
+            ? ProductVariantDTO::fromModel($variant, $this->resolveUrl($variant->media_id))
+            : null;
+    }
+
     public function createProductVariant(int $productId, array $data): ProductVariantDTO
     {
         $variant = ProductVariant::query()->create(
@@ -144,18 +172,43 @@ class EloquentCatalogManager implements CatalogManagerInterface
         return ProductVariantDTO::fromModel($variant, $this->resolveUrl($variant->media_id));
     }
 
-    public function findProductAdmin(int $id): ?ProductDTO
+    public function updateVariantPrice(int $variantId, int $basePrice, ?int $compareAtPrice = null): ProductVariantDTO
     {
-        $product = Product::query()
-            ->with(['images', 'variants'])
-            ->find($id);
+        $variant = ProductVariant::query()->findOrFail($variantId);
+        $variant->update([
+            'base_price'       => $basePrice,
+            'compare_at_price' => $compareAtPrice,
+        ]);
+        $variant->refresh();
 
-        return $product ? $this->hydrateProduct($product) : null;
+        return ProductVariantDTO::fromModel($variant, $this->resolveUrl($variant->media_id));
     }
 
-    // -------------------------------------------------------------------------
-    // Private helpers
-    // -------------------------------------------------------------------------
+    public function updateProductVariant(int $variantId, array $data): ProductVariantDTO
+    {
+        return DB::transaction(function () use ($variantId, $data) {
+            $variant = ProductVariant::query()->findOrFail($variantId);
+
+            if (! empty($data['is_default'])) {
+                ProductVariant::query()
+                    ->where('product_id', $variant->product_id)
+                    ->where('id', '!=', $variantId)
+                    ->update(['is_default' => false]);
+            }
+
+            $variant->update($data);
+            $variant->refresh();
+
+            return ProductVariantDTO::fromModel($variant, $this->resolveUrl($variant->media_id));
+        });
+    }
+
+    public function deleteProductVariant(int $variantId): void
+    {
+        ProductVariant::query()->findOrFail($variantId)->delete();
+    }
+
+    // ── Private helpers ───────────────────────────────────────────────────────
 
     private function hydrateProduct(Product $product): ProductDTO
     {
@@ -201,10 +254,6 @@ class EloquentCatalogManager implements CatalogManagerInterface
 
     private function resolveUrl(?int $mediaId): ?string
     {
-        if (! $mediaId) {
-            return null;
-        }
-
-        return $this->media->getMedia($mediaId)?->url;
+        return $mediaId ? $this->media->getMedia($mediaId)?->url : null;
     }
 }

@@ -3,16 +3,23 @@
 namespace Modules\Catalog\Infrastructure\Http\Controllers;
 
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Routing\Controller;
 use Modules\Catalog\Application\Actions\CreateCategoryAction;
+use Modules\Catalog\Application\Actions\DeleteCategoryAction;
+use Modules\Catalog\Application\Actions\UpdateCategoryAction;
 use Modules\Catalog\Domain\Contracts\CatalogManagerInterface;
+use Modules\Catalog\Infrastructure\Http\Requests\IndexCategoriesRequest;
 use Modules\Catalog\Infrastructure\Http\Requests\StoreCategoryRequest;
+use Modules\Catalog\Infrastructure\Http\Requests\UpdateCategoryRequest;
 use Modules\Catalog\Infrastructure\Http\Resources\CategoryResource;
 
 class CategoriesController extends Controller
 {
     public function __construct(
         private readonly CreateCategoryAction    $createAction,
+        private readonly UpdateCategoryAction    $updateAction,
+        private readonly DeleteCategoryAction    $deleteAction,
         private readonly CatalogManagerInterface $catalog,
     ) {}
 
@@ -37,10 +44,30 @@ class CategoriesController extends Controller
         return response()->json(new CategoryResource($dto));
     }
 
-    public function indexRoots(): JsonResponse
+    public function update(UpdateCategoryRequest $request, int $id): JsonResponse
     {
-        $categories = $this->catalog->getActiveRootCategories();
+        $dto = $this->updateAction->handle(
+            $id,
+            $request->safe()->except(['image']),
+            $request->file('image'),
+        );
 
-        return response()->json(CategoryResource::collection($categories));
+        return response()->json(new CategoryResource($dto));
+    }
+
+    public function destroy(int $id): JsonResponse
+    {
+        $this->deleteAction->handle($id);
+
+        return response()->json(null, 204);
+    }
+
+    public function indexRoots(IndexCategoriesRequest $request): AnonymousResourceCollection
+    {
+        $categories = $this->catalog->getActiveRootCategories(
+            $request->integer('per_page', 15)
+        );
+
+        return CategoryResource::collection($categories);
     }
 }
