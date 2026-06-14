@@ -18,6 +18,8 @@ class MediaServiceProvider extends ServiceProvider
             MediaManagerInterface::class,
             LocalMediaManager::class
         );
+
+        $this->app->register(MediaAuthServiceProvider::class);
     }
 
     /**

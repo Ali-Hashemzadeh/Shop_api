@@ -48,15 +48,24 @@ Modules/
 * **Key Entities:** `User`, `Address`, `Province`, `City`.
 * **State:** Fully functional, using decoupled Eloquent repositories bound to service contracts (`UserRepositoryInterface`, `AddressRepositoryInterface`).
 * **Public Cross-Module Contract:**
-    * `Modules\Identity\Domain\Contracts\IdentityManagerInterface`: exposes `isAdmin(int $userId): bool`. This is the ONLY authorised entry point for other modules to query user privilege — never import the `User` model or `HasRoles` trait across module boundaries.
+    * `Modules\Identity\Domain\Contracts\IdentityManagerInterface`: exposes `isAdmin(int $userId): bool`. Available for cross-module role checks, but **prefer direct permission checks via `$user->can('...')` in policies instead** — see Authorization Pattern below.
     * Concrete: `EloquentIdentityManager` (bound in `IdentityServiceProvider::register()`). Internally calls `User::find()->hasRole('admin')` — all Spatie internals stay inside Identity.
 
 ### 📁 2. Media Module (Status: Active & Complete)
 * **Responsibility:** Lightweight, high-performance physical file uploads and tracking ledger.
 * **Key Interfaces & Artifacts:**
-    * `Modules\Media\Domain\Contracts\MediaManagerInterface`: The only entry point used by other modules to handle files.
+    * `Modules\Media\Domain\Contracts\MediaManagerInterface`: The only entry point used by other modules to handle files. Methods: `upload(UploadedFile, string $folder): MediaDTO`, `getMedia(int): ?MediaDTO`, `getMediaCollection(array): Collection`, `delete(int): bool`.
     * `Modules\Media\Domain\DTOs\MediaDTO`: The immutable object returned containing the absolute accessible public URL via `Storage::url()`.
     * `Modules\Media\Infrastructure\Persistence\Repositories\LocalMediaManager`: Concrete implementation executing local disk file saves and tracking log generation.
+* **HTTP Endpoints (added):**
+    * `POST /api/v1/media` — standalone file upload. Body: `file` (required, image, max 4096 KB) + optional `folder` string (alphanumeric/hyphens/slashes, defaults to `uploads`). Returns `201 {id, url, mime_type, file_size, original_name}`. Requires `media.upload` permission.
+    * `DELETE /api/v1/media/{id}` — deletes physical file + ledger row. Returns `204` or `404`. Requires `media.delete` permission.
+* **Authorization:**
+    * `MediaPolicy` (`Domain\Policies\`) — `upload()` and `delete()` delegate to `$user->can('media.upload')` / `$user->can('media.delete')`. Typehinted against `Authorizable`, never imports Identity's `User`.
+    * `MediaAuthServiceProvider` (`Infrastructure\Providers\`) — registers the policy; booted from `MediaServiceProvider::register()`.
+    * `MediaPermissionsSeeder` (`Infrastructure\Persistence\Seeders\`) — seeds `media.upload` and `media.delete`, both granted to the `admin` role.
+* **Inline upload pattern (unchanged):** Catalog's write actions (`CreateCategoryAction`, `CreateProductAction`, `CreateProductVariantAction`, and their Update counterparts) still accept a file directly and call `MediaManagerInterface::upload()` internally. The standalone endpoint enables the *pre-upload* SPA flow (upload → get `media_id` → pass to catalog endpoint) and makes the `media_id` / `primary_media_id` link inputs on Catalog endpoints usable.
+* **Test suite:** `tests/Feature/Media/MediaUploadTest.php` — 13 tests covering 401/403 boundaries, happy-path upload + custom folder + storage assertions, validation (no file, non-image, oversize, path-traversal folder), delete (204 + file gone, 404 on unknown), and permission-not-role proof.
 
 ### 🏷️ 3. Catalog Module (Status: COMPLETE — Steps 1–7 Finished)
 * **Responsibility:** Control storefront presentation layout including infinite hierarchical categories, parent products, multi-image product media galleries, and purchasable product variant options.
@@ -82,15 +91,18 @@ Modules/
 * **Routes & Feature Tests (Step 7):**
     * 20 RESTful routes: POST/GET/PATCH/DELETE for categories, products, variants.
     * Pagination: `getActiveRootCategories` and `getProductsByCategory` return `LengthAwarePaginator` (15 items/page, 1–100 configurable via `per_page` query param, `page` for page number). Scramble auto-documents both params.
-* **Authorization Layer (Step 8):**
+* **Authorization Layer (Step 8 — Permission-based Policies):**
     * **Public routes** (no auth): all GET read endpoints (category list/show, product show/by-slug/by-category, variant show/by-sku).
-    * **Admin routes** (`auth:sanctum` + `catalog.admin` middleware): all write operations (POST/PATCH/DELETE) and `GET /products/{id}/admin`.
-    * `RequireAdminRole` middleware (`Modules\Catalog\Infrastructure\Http\Middleware`) resolves `IdentityManagerInterface` from the container and calls `isAdmin($user->id)` — zero Identity model imports inside Catalog.
-    * Middleware alias `catalog.admin` registered in `CatalogServiceProvider::boot()` via `$this->app['router']->aliasMiddleware(...)`.
+    * **Protected routes** (`auth:sanctum` only on the route): all write operations (POST/PATCH/DELETE) and `GET /products/{id}/admin`. `auth:sanctum` gives 401 for unauthenticated; policies give 403 for unauthorized.
+    * **Policy files** (`Modules\Catalog\Domain\Policies\`): `CategoryPolicy`, `ProductPolicy`, `ProductVariantPolicy`. Each method delegates to `$user->can('catalog.X.Y')`. Typehinted against `Illuminate\Contracts\Auth\Access\Authorizable` — **never** import `Modules\Identity\Domain\Models\User` across the module boundary.
+    * **`CatalogAuthServiceProvider`** (`Modules\Catalog\Infrastructure\Providers\`) registers all three policies via `$policies` + `registerPolicies()`. It is booted from `CatalogServiceProvider::register()` via `$this->app->register(CatalogAuthServiceProvider::class)`.
+    * **Authorization split**: `FormRequest::authorize()` handles store/update (runs before validation → always 403, never 422, for unauthorized users). `$this->authorize()` in controllers handles destroy and showAdmin (no FormRequest involved). Controllers use the `AuthorizesRequests` trait.
+    * **Permissions** seeded in `RolesAndPermissionsSeeder`: `catalog.category.{create,update,delete}`, `catalog.product.{view-admin,create,update,delete}`, `catalog.variant.{create,update,delete}`. Admin role receives all permissions automatically (syncs all). Customer role receives none of these.
+    * Authorization is **permission-based, not role-based** — any user granted a specific permission can perform that action, independent of role.
 * **Test Suite (Step 9 — Final):**
-    * 4 feature test classes: `CategoriesTest`, `ProductsTest`, `ProductVariantsTest`, `CatalogAuthorizationTest`.
+    * 4 feature test classes: `CategoriesTest`, `ProductsTest`, `ProductVariantsTest`, `CatalogAuthorizationTest` — **95 tests total**.
     * Full CRUD coverage: all create, update, delete, and read actions tested with happy paths, validation failures, 404 scenarios, and invariant enforcement (Cents Rule, is_default single-true, slug uniqueness).
-    * Authorization matrix tested in `CatalogAuthorizationTest`: unauthenticated → 401, customer → 403, public routes → 200/404 (never 401/403).
+    * Authorization matrix tested in `CatalogAuthorizationTest`: unauthenticated → 401, customer → 403, public routes → 200/404 (never 401/403), plus two permission-not-role proof tests.
     * Dead code removed: `updateVariantPrice` eliminated from `CatalogManagerInterface` and `EloquentCatalogManager` (superseded by `updateProductVariant`).
 
 ---

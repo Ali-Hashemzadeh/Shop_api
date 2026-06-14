@@ -2,6 +2,40 @@
 
 ## [Unreleased](https://github.com/laravel/laravel/compare/v12.12.1...12.x)
 
+### Media Module — Standalone Upload/Delete Endpoints
+
+**Added HTTP endpoints to the Media module so clients can upload files independently of any Catalog write operation.**
+
+#### Added
+- `POST /api/v1/media` — accepts `file` (image, max 4 MB) + optional `folder` string; returns `201 {id, url, mime_type, file_size, original_name}`. Gates on `media.upload` permission via `StoreMediaRequest::authorize()`.
+- `DELETE /api/v1/media/{id}` — removes physical file and ledger row; returns `204` or `404`. Gates on `media.delete` permission via `MediaPolicy`.
+- `MediaPolicy` (`Domain\Policies\`) with `upload()` and `delete()` methods, typehinted against `Authorizable`.
+- `MediaAuthServiceProvider` — registers the policy; booted from `MediaServiceProvider::register()`.
+- `MediaPermissionsSeeder` — seeds `media.upload` and `media.delete` permissions; both granted to the `admin` role.
+- `MediaResource` — thin JSON resource wrapping `MediaDTO` (id, url, mime_type, file_size, original_name).
+- `seedMediaPermissions()` test helper added to `tests/TestCase.php`.
+- `MediaUploadTest` — 13 feature tests covering auth boundaries, happy paths, validation, delete, and permission-not-role proof.
+
+#### Context
+The existing `media_id` / `primary_media_id` link inputs on Catalog endpoints were dead (no way for a client to obtain a `media_id`). This enables the standard SPA pre-upload flow. Catalog's inline upload (passing a file directly on the Catalog write endpoints) is unchanged.
+
+---
+
+### Catalog Module — Permission-based Authorization Refactor
+
+**Replaced role-based middleware with granular Spatie-permission policies across the Catalog module.**
+
+#### Changed
+- **Removed** `RequireAdminRole` middleware and the `catalog.admin` route alias — authorization no longer checks `isAdmin()` or the admin role directly.
+- **Added** three policy classes (`CategoryPolicy`, `ProductPolicy`, `ProductVariantPolicy`) in `Modules\Catalog\Domain\Policies\`. Each method delegates to `$user->can('catalog.X.Y')` and is typehinted against `Illuminate\Contracts\Auth\Access\Authorizable` to respect the Identity module boundary.
+- **Added** `CatalogAuthServiceProvider` which registers the policies; booted from `CatalogServiceProvider::register()`.
+- **Added** 11 catalog permissions to `RolesAndPermissionsSeeder`: `catalog.category.{create,update,delete}`, `catalog.product.{view-admin,create,update,delete}`, `catalog.variant.{create,update,delete}`. Admin role receives all automatically.
+- **Updated** all 6 write `FormRequest` classes (`Store*/Update*`) — `authorize()` now checks the specific permission, ensuring 403 is always returned before validation (never a 422 bleed-through).
+- **Updated** controller destroy/showAdmin methods to use `$this->authorize()` via `AuthorizesRequests` trait.
+- **Updated** `CatalogAuthorizationTest` with two new tests proving authorization is permission-based (a user with a specific permission can act without the admin role; the same user is still forbidden on other actions).
+
+---
+
 ### Catalog Module (v1.0.0)
 
 **Complete rewrite of the storefront product catalog system as a modular, fully-tested DDD/Hexagonal monolith component.**

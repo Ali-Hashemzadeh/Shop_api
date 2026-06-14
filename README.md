@@ -1,59 +1,236 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Shop API
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+A production-grade e-commerce backend built as a **modular monolith** on Laravel 12. Each business domain lives in its own self-contained module with hard isolation boundaries, making the codebase trivially splittable into microservices later — without paying microservices DevOps costs today.
 
-## About Laravel
+---
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## Tech Stack
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+| Layer | Technology |
+|---|---|
+| Framework | Laravel 12 |
+| Language | PHP 8.2+ |
+| Authentication | Laravel Sanctum (token-based) |
+| Authorization | Spatie Laravel-Permission (RBAC) |
+| API Documentation | Dedoc Scramble (auto-generated from code) |
+| Testing | PHPUnit 11 |
+| Storage | Laravel Storage (local disk via public symlink) |
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+---
 
-## Learning Laravel
+## Architecture: Modular Monolith
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+The application is divided into independent modules under `Modules/`. Each module is a self-contained bounded context that owns its own models, migrations, routes, business logic, and service provider.
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+### Module Isolation Rules
 
-## Laravel Sponsors
+1. **No model sharing across modules.** A module never imports another module's Eloquent model.
+2. **Contract-based communication.** Cross-module calls happen exclusively through published `Domain/Contracts/` interfaces resolved from the service container.
+3. **DTOs at the boundary.** Data crossing a module wall is carried in immutable Data Transfer Objects, never raw Eloquent models.
+4. **No cross-module database joins.** Each module queries only its own tables.
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+### Module Directory Layout
 
-### Premium Partners
+```
+Modules/
+└── [ModuleName]/
+    ├── Domain/
+    │   ├── Models/        # Eloquent models (private to this module)
+    │   ├── Contracts/     # Public interface contracts for other modules
+    │   ├── DTOs/          # Immutable data carriers crossing the boundary
+    │   └── Policies/      # Laravel authorization policies
+    ├── Application/
+    │   └── Actions/       # Single-responsibility command handlers
+    └── Infrastructure/
+        ├── Http/           # Controllers, Form Requests, API Resources, Middleware
+        ├── Persistence/    # Migrations, Repositories, Seeders
+        ├── Providers/      # Module service provider
+        └── Routes/         # Module route file
+```
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+---
 
-## Contributing
+## Engineering Standards
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+### Financial Integrity — The Cents Rule
+All monetary values are stored and processed as **raw integers** representing the smallest currency unit (rials for Persian locale). Floats are completely forbidden for financial fields. The HTTP layer casts whole-number strings to `int` via `prepareForValidation()` before the `integer` validation rule fires, so form-encoded requests work naturally.
 
-## Code of Conduct
+### Loose Media Coupling
+Tables outside the Media module never use cascading foreign keys to the `media` table. They store `media_id` as a plain `unsignedBigInteger` nullable column. This lets the Media module evolve independently without breaking other schemas.
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+### Test-Driven Mutations
+Every Action and Repository method that mutates state has matching feature tests covering: happy path, validation failure, not-found (404), invariant enforcement, and authorization (401/403).
 
-## Security Vulnerabilities
+---
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+## Modules
+
+### Identity (Complete)
+Handles authentication, user profiles, multi-role RBAC, shipping provinces/cities, and user delivery addresses.
+
+- **Key entities:** `User`, `Address`, `Province`, `City`
+- **Public contract:** `IdentityManagerInterface::isAdmin(int $userId): bool` — the only authorized way for other modules to check user privilege without importing Identity's models.
+- **Auth pattern:** Sanctum tokens + Spatie roles (`admin`, `customer`)
+
+### Media (Complete)
+Lightweight, high-performance file upload handler and storage ledger.
+
+- **Key contract:** `MediaManagerInterface` — accepts an `UploadedFile`, persists it to the local disk, and returns a `MediaDTO` with the public URL.
+- **Pattern:** No other module handles raw file I/O; they delegate to `MediaManagerInterface` and store the returned `media_id`.
+- **Endpoints:** `POST /api/v1/media` (standalone upload, requires `media.upload` permission) and `DELETE /api/v1/media/{id}` (requires `media.delete` permission). Enables the pre-upload SPA flow: upload → receive `media_id` → pass to any Catalog write endpoint.
+
+### Catalog (Complete)
+Controls the storefront presentation layer: hierarchical categories, products with multi-image galleries, and purchasable product variants.
+
+- **Key entities:** `Category` (infinite nesting via `parent_id`), `Product` (`draft`/`published` status), `ProductImage` (gallery with sort order), `ProductVariant` (unique SKU, integer prices, JSON attributes, per-variant image, `is_default` single-true invariant)
+- **Key contract:** `CatalogManagerInterface` — full read/write surface consumed by higher-level modules (e.g. Orders, Inventory)
+- **Authorization:** Public read endpoints require no auth. Write endpoints and the admin product view require `auth:sanctum`; authorization is permission-based (`catalog.category.*`, `catalog.product.*`, `catalog.variant.*`) enforced via Laravel policies — any user granted a specific permission can act, independent of role.
+- **Pagination:** List endpoints return `LengthAwarePaginator` with a `{data, links, meta}` envelope. `per_page` (1–100) and `page` are documented automatically by Scramble.
+
+---
+
+## API Overview
+
+Base prefix: `/api/v1`
+
+### Media (`auth:sanctum` + permission required)
+
+| Method | Endpoint | Permission | Description |
+|---|---|---|---|
+| `POST` | `/media` | `media.upload` | Upload a file; returns `{id, url, …}` |
+| `DELETE` | `/media/{id}` | `media.delete` | Delete file and ledger record |
+
+### Catalog — Public (no auth)
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/catalog/categories/roots` | Paginated list of active root categories |
+| `GET` | `/catalog/categories/{id}` | Single category by ID |
+| `GET` | `/catalog/categories/{categoryId}/products` | Paginated published products in a category |
+| `GET` | `/catalog/products/{id}` | Single published product (with gallery + variants) |
+| `GET` | `/catalog/products/slug/{slug}` | Product by URL slug |
+| `GET` | `/catalog/variants/{variantId}` | Single variant by ID |
+| `GET` | `/catalog/variants/sku/{sku}` | Variant by SKU |
+
+### Catalog — Protected (`auth:sanctum` + catalog permission required)
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/catalog/products/{id}/admin` | Product by ID regardless of publish status |
+| `POST` | `/catalog/categories` | Create category |
+| `PATCH` | `/catalog/categories/{id}` | Update category |
+| `DELETE` | `/catalog/categories/{id}` | Delete category |
+| `POST` | `/catalog/products` | Create product |
+| `PATCH` | `/catalog/products/{id}` | Update product |
+| `DELETE` | `/catalog/products/{id}` | Delete product |
+| `POST` | `/catalog/products/{productId}/variants` | Add variant to product |
+| `PATCH` | `/catalog/variants/{variantId}` | Update variant |
+| `DELETE` | `/catalog/variants/{variantId}` | Delete variant |
+
+Auto-generated interactive API docs are available at `/docs/api` when running locally (powered by Scramble).
+
+---
+
+## Getting Started
+
+### Requirements
+
+- PHP 8.2+
+- Composer
+- SQLite (default for local) or MySQL/PostgreSQL
+
+### Install
+
+```bash
+git clone <repo-url> shop-api
+cd shop-api
+composer setup
+```
+
+The `composer setup` script installs dependencies, copies `.env.example` → `.env`, generates the app key, and runs migrations.
+
+### Environment
+
+Copy `.env.example` and configure your database and filesystem:
+
+```bash
+cp .env.example .env
+php artisan key:generate
+```
+
+Key `.env` values:
+
+```env
+APP_URL=http://localhost:8000
+
+DB_CONNECTION=sqlite
+# DB_CONNECTION=mysql
+# DB_HOST=127.0.0.1
+# DB_DATABASE=shop_api
+
+FILESYSTEM_DISK=public
+```
+
+Create the storage symlink:
+
+```bash
+php artisan storage:link
+```
+
+### Run
+
+```bash
+composer dev
+```
+
+This starts the Laravel dev server, queue worker, log tail, and Vite in parallel via concurrently.
+
+Or individually:
+
+```bash
+php artisan serve
+php artisan queue:listen
+```
+
+---
+
+## Testing
+
+```bash
+composer test
+```
+
+This clears config cache and runs the full PHPUnit suite against the in-memory SQLite database.
+
+Tests are organized by module under `tests/Feature/`:
+
+```
+tests/
+└── Feature/
+    ├── Catalog/
+    │   ├── CategoriesTest.php           # Category CRUD + validation
+    │   ├── ProductsTest.php             # Product CRUD + status + gallery
+    │   ├── ProductVariantsTest.php      # Variant CRUD + Cents Rule + is_default invariant
+    │   └── CatalogAuthorizationTest.php # Auth matrix: 401 / 403 / public access
+    └── Identity/
+        └── ...
+```
+
+---
+
+## Module Roadmap
+
+| Module | Status |
+|---|---|
+| Identity | Complete |
+| Media | Complete |
+| Catalog | Complete |
+| Inventory | Planned |
+| Order | Planned |
+| Payment | Planned |
+
+---
 
 ## License
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+MIT
