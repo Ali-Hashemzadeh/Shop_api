@@ -2,6 +2,7 @@
 
 namespace Modules\Catalog\Infrastructure\Http\Controllers;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Routing\Controller;
@@ -9,6 +10,7 @@ use Modules\Catalog\Application\Actions\CreateProductAction;
 use Modules\Catalog\Application\Actions\DeleteProductAction;
 use Modules\Catalog\Application\Actions\UpdateProductAction;
 use Modules\Catalog\Domain\Contracts\CatalogManagerInterface;
+use Modules\Catalog\Domain\Models\Product;
 use Modules\Catalog\Infrastructure\Http\Requests\IndexProductsRequest;
 use Modules\Catalog\Infrastructure\Http\Requests\StoreProductRequest;
 use Modules\Catalog\Infrastructure\Http\Requests\UpdateProductRequest;
@@ -16,6 +18,7 @@ use Modules\Catalog\Infrastructure\Http\Resources\ProductResource;
 
 class ProductsController extends Controller
 {
+    use AuthorizesRequests;
     public function __construct(
         private readonly CreateProductAction     $createAction,
         private readonly UpdateProductAction     $updateAction,
@@ -47,6 +50,8 @@ class ProductsController extends Controller
 
     public function showAdmin(int $id): JsonResponse
     {
+        $this->authorize('viewAdmin', Product::class);
+
         $dto = $this->catalog->findProductAdmin($id);
 
         if ($dto === null) {
@@ -80,6 +85,8 @@ class ProductsController extends Controller
 
     public function destroy(int $id): JsonResponse
     {
+        $this->authorize('delete', Product::class);
+
         $this->deleteAction->handle($id);
 
         return response()->json(null, 204);

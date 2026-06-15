@@ -8,7 +8,7 @@ class StoreProductVariantRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return true;
+        return (bool) $this->user()?->can('catalog.variant.create');
     }
 
     protected function prepareForValidation(): void

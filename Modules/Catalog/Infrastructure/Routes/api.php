@@ -18,8 +18,8 @@ Route::middleware('api')->prefix('api/v1/catalog')->group(function () {
     Route::get('/variants/sku/{sku}', [ProductVariantsController::class, 'showBySku']);
     Route::get('/variants/{variantId}', [ProductVariantsController::class, 'show']);
 
-    // ── ADMIN: Requires valid Sanctum token + administrator role ─────────────
-    Route::middleware(['auth:sanctum', 'catalog.admin'])->group(function () {
+    // ── PROTECTED: Requires valid Sanctum token; authorization enforced by policies ──
+    Route::middleware('auth:sanctum')->group(function () {
 
         // Categories
         Route::post('/categories', [CategoriesController::class, 'store']);

@@ -8,7 +8,7 @@ class StoreCategoryRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return true;
+        return (bool) $this->user()?->can('catalog.category.create');
     }
 
     public function rules(): array

@@ -2,18 +2,21 @@
 
 namespace Modules\Catalog\Infrastructure\Http\Controllers;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Routing\Controller;
 use Modules\Catalog\Application\Actions\CreateProductVariantAction;
 use Modules\Catalog\Application\Actions\DeleteProductVariantAction;
 use Modules\Catalog\Application\Actions\UpdateProductVariantAction;
 use Modules\Catalog\Domain\Contracts\CatalogManagerInterface;
+use Modules\Catalog\Domain\Models\ProductVariant;
 use Modules\Catalog\Infrastructure\Http\Requests\StoreProductVariantRequest;
 use Modules\Catalog\Infrastructure\Http\Requests\UpdateProductVariantRequest;
 use Modules\Catalog\Infrastructure\Http\Resources\ProductVariantResource;
 
 class ProductVariantsController extends Controller
 {
+    use AuthorizesRequests;
     public function __construct(
         private readonly CreateProductVariantAction $createAction,
         private readonly UpdateProductVariantAction $updateAction,
@@ -67,6 +70,8 @@ class ProductVariantsController extends Controller
 
     public function destroy(int $variantId): JsonResponse
     {
+        $this->authorize('delete', ProductVariant::class);
+
         $this->deleteAction->handle($variantId);
 
         return response()->json(null, 204);

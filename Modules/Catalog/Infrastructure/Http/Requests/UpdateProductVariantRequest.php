@@ -9,7 +9,7 @@ class UpdateProductVariantRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return true;
+        return (bool) $this->user()?->can('catalog.variant.update');
     }
 
     protected function prepareForValidation(): void
