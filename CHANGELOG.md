@@ -2,6 +2,18 @@
 
 ## [Unreleased](https://github.com/laravel/laravel/compare/v12.12.1...12.x)
 
+### Identity Module — Bug fixes & test alignment
+
+#### Fixed
+- `UpdateAddressRequest`: `city_id` was `required` instead of `sometimes`, causing all partial PATCH requests to the address endpoint to fail with 422. Changed to `sometimes` so callers can update individual fields without resending city.
+- Address routes registered under `prefix('address')` (singular) but tests and intended API contract used `prefix('addresses')` (plural). Renamed to `addresses` — the plural RESTful convention.
+- `ProfileTest`: 5 tests were calling non-existent URLs (`/api/v1/profile/show/{id}`, `/api/v1/profile/{id}` PATCH/DELETE). Updated to the real admin user management URLs (`/api/v1/admin/users/show/{id}`, `/api/v1/admin/users/{id}`).
+- `MediaUploadTest`: removed the oversize-image test case after the `max:4096` rule was intentionally dropped from `StoreMediaRequest` (file size is now enforced by server config, not the application layer).
+
+**Result: test suite is now 146/146 green (was 128/146).**
+
+---
+
 ### Media Module — Standalone Upload/Delete Endpoints
 
 **Added HTTP endpoints to the Media module so clients can upload files independently of any Catalog write operation.**

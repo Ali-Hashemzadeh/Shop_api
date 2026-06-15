@@ -50,6 +50,9 @@ Modules/
 * **Public Cross-Module Contract:**
     * `Modules\Identity\Domain\Contracts\IdentityManagerInterface`: exposes `isAdmin(int $userId): bool`. Available for cross-module role checks, but **prefer direct permission checks via `$user->can('...')` in policies instead** — see Authorization Pattern below.
     * Concrete: `EloquentIdentityManager` (bound in `IdentityServiceProvider::register()`). Internally calls `User::find()->hasRole('admin')` — all Spatie internals stay inside Identity.
+* **Route structure:** user-facing address routes registered under `prefix('addresses')` (plural). Admin user management under `prefix('admin/users')`. Profile self-service under `prefix('profile')`.
+* **Known fix applied:** `UpdateAddressRequest` had `city_id` as `required` instead of `sometimes` — corrected so PATCH requests can update partial fields without supplying city.
+* **Test suite:** `AddressTest` (13), `ProfileTest` (8), `AuthControllerTest` (1), `RolePermissionTest` — all passing.
 
 ### 📁 2. Media Module (Status: Active & Complete)
 * **Responsibility:** Lightweight, high-performance physical file uploads and tracking ledger.
@@ -65,7 +68,7 @@ Modules/
     * `MediaAuthServiceProvider` (`Infrastructure\Providers\`) — registers the policy; booted from `MediaServiceProvider::register()`.
     * `MediaPermissionsSeeder` (`Infrastructure\Persistence\Seeders\`) — seeds `media.upload` and `media.delete`, both granted to the `admin` role.
 * **Inline upload pattern (unchanged):** Catalog's write actions (`CreateCategoryAction`, `CreateProductAction`, `CreateProductVariantAction`, and their Update counterparts) still accept a file directly and call `MediaManagerInterface::upload()` internally. The standalone endpoint enables the *pre-upload* SPA flow (upload → get `media_id` → pass to catalog endpoint) and makes the `media_id` / `primary_media_id` link inputs on Catalog endpoints usable.
-* **Test suite:** `tests/Feature/Media/MediaUploadTest.php` — 13 tests covering 401/403 boundaries, happy-path upload + custom folder + storage assertions, validation (no file, non-image, oversize, path-traversal folder), delete (204 + file gone, 404 on unknown), and permission-not-role proof.
+* **Test suite:** `tests/Feature/Media/MediaUploadTest.php` — 12 tests covering 401/403 boundaries, happy-path upload + custom folder + storage assertions, validation (no file, non-image, path-traversal folder), delete (204 + file gone, 404 on unknown), and permission-not-role proof. No file-size cap is enforced at the application layer (server php.ini / nginx limits apply instead).
 
 ### 🏷️ 3. Catalog Module (Status: COMPLETE — Steps 1–7 Finished)
 * **Responsibility:** Control storefront presentation layout including infinite hierarchical categories, parent products, multi-image product media galleries, and purchasable product variant options.
@@ -109,7 +112,13 @@ Modules/
 
 ## 4. Completed & Ready
 
-✅ **Catalog module is 100% complete and tested.** All three layers (Domain/Application/Infrastructure) are in place and feature-tested.
+| Module | Status | Tests |
+|---|---|---|
+| Identity | ✅ Complete | 23 passing |
+| Media | ✅ Complete | 12 passing (MediaUploadTest) + existing MediaManagerTest |
+| Catalog | ✅ Complete | 95 passing across 4 test classes |
+
+**Total test suite: 146 tests, 382 assertions — all green.**
 
 **Next module in queue:** Inventory, Order, or Payment — pending product roadmap review.
 

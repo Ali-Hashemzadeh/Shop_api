@@ -212,8 +212,14 @@ tests/
     │   ├── ProductsTest.php             # Product CRUD + status + gallery
     │   ├── ProductVariantsTest.php      # Variant CRUD + Cents Rule + is_default invariant
     │   └── CatalogAuthorizationTest.php # Auth matrix: 401 / 403 / public access
-    └── Identity/
-        └── ...
+    ├── Identity/
+    │   ├── AddressTest.php              # Address CRUD + ownership + admin override
+    │   ├── ProfileTest.php             # Profile self-service + admin user management
+    │   ├── AuthControllerTest.php       # Login / token issuance
+    │   └── RolePermissionTest.php       # Role and permission assignment
+    └── Media/
+        ├── MediaManagerTest.php         # MediaManagerInterface contract tests
+        └── MediaUploadTest.php          # Upload/delete endpoints + auth boundaries
 ```
 
 ---
