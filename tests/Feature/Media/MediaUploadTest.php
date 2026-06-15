@@ -21,7 +21,7 @@ class MediaUploadTest extends TestCase
         parent::setUp();
         $this->seedIdentityRolesAndPermissions();
         $this->seedMediaPermissions();
-        Storage::fake();
+        Storage::fake('public');
     }
 
     // ── Unauthenticated → 401 ───────────────────────────────────────────────
@@ -77,7 +77,7 @@ class MediaUploadTest extends TestCase
 
         $media = Media::find($response->json('id'));
         $this->assertNotNull($media);
-        Storage::assertExists($media->file_path);
+        Storage::disk('public')->assertExists($media->file_path);
     }
 
     /** @test */
@@ -150,7 +150,7 @@ class MediaUploadTest extends TestCase
         ])->json('id');
 
         $path = Media::find($id)->file_path;
-        Storage::assertExists($path);
+        Storage::disk('public')->assertExists($path);
 
         $uploader->givePermissionTo('media.delete');
 
@@ -158,7 +158,7 @@ class MediaUploadTest extends TestCase
             ->assertNoContent();
 
         $this->assertNull(Media::find($id));
-        Storage::assertMissing($path);
+        Storage::disk('public')->assertMissing($path);
     }
 
     /** @test */

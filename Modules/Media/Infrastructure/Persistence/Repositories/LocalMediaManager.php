@@ -19,7 +19,7 @@ class LocalMediaManager implements MediaManagerInterface
     {
         // 1. Store the physical file on the local public disk inside storage/app/public/{$folder}
         // This makes it publicly accessible via the storage symlink
-        $path = $file->store("public/{$folder}");
+        $path = $file->store($folder, 'public');
 
         // 2. Create the record in our local media ledger database table
         $media = Media::create([
@@ -69,8 +69,8 @@ class LocalMediaManager implements MediaManagerInterface
         }
 
         // Remove the physical file from the local drive
-        if (Storage::exists($media->file_path)) {
-            Storage::delete($media->file_path);
+        if (Storage::disk('public')->exists($media->file_path)) {
+            Storage::disk('public')->delete($media->file_path);
         }
 
         // Wipe the database tracking record

@@ -23,8 +23,8 @@ class MediaManagerTest extends TestCase
         // Resolve the interface from Laravel's service container
         $this->mediaManager = $this->app->make(MediaManagerInterface::class);
 
-        // Mock the default storage disk so we do not write real junk files to your computer during tests
-        Storage::fake();
+        // Fake the public disk so uploads stay in memory during tests
+        Storage::fake('public');
     }
 
     /** @test */
@@ -51,7 +51,7 @@ class MediaManagerTest extends TestCase
 
         // Assert: Check that the file was physically saved to the correct mock directory
         $mediaRecord = Media::find($dto->id);
-        Storage::assertExists($mediaRecord->file_path);
+        Storage::disk('public')->assertExists($mediaRecord->file_path);
     }
 
     /** @test */
@@ -110,7 +110,7 @@ class MediaManagerTest extends TestCase
         $dto = $this->mediaManager->upload($fakeFile, 'products');
 
         $mediaRecord = Media::find($dto->id);
-        Storage::assertExists($mediaRecord->file_path);
+        Storage::disk('public')->assertExists($mediaRecord->file_path);
 
         // Act
         $result = $this->mediaManager->delete($dto->id);
@@ -118,6 +118,6 @@ class MediaManagerTest extends TestCase
         // Assert
         $this->assertTrue($result);
         $this->assertDatabaseMissing('media', ['id' => $dto->id]);
-        Storage::assertMissing($mediaRecord->file_path);
+        Storage::disk('public')->assertMissing($mediaRecord->file_path);
     }
 }
