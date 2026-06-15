@@ -21,6 +21,6 @@ class Media extends Model
     public function getUrlAttribute(): string
     {
         // Extracts 'public/path' into an accessible URL stream
-        return Storage::disk('public')->url($this->file_path);
+        return Storage::disk()->url($this->file_path);
     }
 }
