@@ -98,7 +98,7 @@ class ProfileTest extends TestCase
 
         $this->actingAsCustomer($user);
 
-        $this->getJson("/api/v1/profile/show/{$otherUser->id}")
+        $this->getJson("/api/v1/admin/users/show/{$otherUser->id}")
             ->assertForbidden();
     }
 
@@ -111,7 +111,7 @@ class ProfileTest extends TestCase
 
         $this->actingAsAdmin($admin);
 
-        $this->getJson("/api/v1/profile/show/{$user->id}")
+        $this->getJson("/api/v1/admin/users/show/{$user->id}")
             ->assertOk()
             ->assertJsonPath('data.id', $user->id)
             ->assertJsonPath('data.name', 'Target User');
@@ -126,7 +126,7 @@ class ProfileTest extends TestCase
 
         $this->actingAsCustomer($user);
 
-        $this->patchJson("/api/v1/profile/{$otherUser->id}", [
+        $this->patchJson("/api/v1/admin/users/{$otherUser->id}", [
             'name' => 'Changed Name',
         ])->assertForbidden();
 
@@ -145,7 +145,7 @@ class ProfileTest extends TestCase
 
         $this->actingAsAdmin($admin);
 
-        $this->patchJson("/api/v1/profile/{$user->id}", [
+        $this->patchJson("/api/v1/admin/users/{$user->id}", [
             'name' => 'Changed Name',
         ])
             ->assertOk()
@@ -158,7 +158,7 @@ class ProfileTest extends TestCase
 
         $this->actingAsAdmin($admin);
 
-        $this->deleteJson("/api/v1/profile/{$admin->id}")
+        $this->deleteJson("/api/v1/admin/users/{$admin->id}")
             ->assertForbidden();
 
         $this->assertDatabaseHas('users', [

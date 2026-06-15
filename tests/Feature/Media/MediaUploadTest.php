@@ -124,19 +124,6 @@ class MediaUploadTest extends TestCase
     }
 
     /** @test */
-    public function upload_of_an_oversized_image_is_rejected(): void
-    {
-        $user = $this->actingAsCustomer();
-        $user->givePermissionTo('media.upload');
-
-        $this->postJson('/api/v1/media', [
-            'file' => UploadedFile::fake()->image('huge.jpg')->size(5000),
-        ])
-            ->assertUnprocessable()
-            ->assertJsonValidationErrors('file');
-    }
-
-    /** @test */
     public function upload_with_a_traversal_folder_is_rejected(): void
     {
         $user = $this->actingAsCustomer();

@@ -4,7 +4,7 @@ use Illuminate\Support\Facades\Route;
 use Modules\Identity\Infrastructure\Http\Controllers\AddressController;
 use Modules\Identity\Infrastructure\Http\Controllers\AdminAddressController;
 
-Route::prefix('address')->group(function () {
+Route::prefix('addresses')->group(function () {
     Route::get('/', [AddressController::class, 'index']);
     Route::post('/', [AddressController::class, 'store']);
     Route::get('/{address}', [AddressController::class, 'show']);

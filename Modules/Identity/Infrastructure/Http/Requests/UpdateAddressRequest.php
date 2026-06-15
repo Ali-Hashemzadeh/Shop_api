@@ -18,7 +18,7 @@ class UpdateAddressRequest extends FormRequest
             'title' => ['sometimes', 'nullable', 'string', 'max:100'],
             'province_id' => ['sometimes', 'nullable', 'integer', Rule::exists('provinces', 'id')],
             'city_id' => [
-                'required',
+                'sometimes',
                 'integer',
                 Rule::exists('cities', 'id')->where(function ($query) {
                     $query->where('province_id', $this->input('province_id'));
