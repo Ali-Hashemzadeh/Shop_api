@@ -14,7 +14,7 @@ class StoreMediaRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'file'   => ['required', 'file', 'image', 'max:4096'],
+            'file'   => ['required', 'file', 'image'], // , 'max:4096'
             'folder' => ['nullable', 'string', 'max:255', 'regex:/^[A-Za-z0-9_\-\/]+$/'],
         ];
     }
