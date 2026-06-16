@@ -7,6 +7,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Modules\Catalog\Domain\Models\Category;
 use Modules\Catalog\Domain\Models\Product;
+use Modules\Catalog\Domain\Models\ProductVariant;
 use Tests\TestCase;
 
 class ProductsTest extends TestCase
@@ -278,5 +279,144 @@ class ProductsTest extends TestCase
             ->assertJsonStructure(['data', 'links', 'meta']);
 
         $this->assertCount(2, $response->json('data'));
+    }
+
+    // ── GET /api/v1/catalog/products (general index + filters + search) ───────
+
+    /** @test */
+    public function it_lists_all_published_products(): void
+    {
+        Product::create(['title' => 'Published A', 'slug' => 'pub-a', 'status' => 'published']);
+        Product::create(['title' => 'Published B', 'slug' => 'pub-b', 'status' => 'published']);
+        Product::create(['title' => 'Draft C', 'slug' => 'draft-c', 'status' => 'draft']);
+
+        $this->getJson('/api/v1/catalog/products')
+            ->assertOk()
+            ->assertJsonStructure(['data', 'links', 'meta'])
+            ->assertJsonCount(2, 'data');
+    }
+
+    /** @test */
+    public function it_returns_empty_when_no_published_products_exist(): void
+    {
+        Product::create(['title' => 'Draft Only', 'slug' => 'draft-only', 'status' => 'draft']);
+
+        $response = $this->getJson('/api/v1/catalog/products');
+
+        $response->assertOk()
+            ->assertJsonCount(0, 'data')
+            ->assertJsonPath('meta.total', 0);
+    }
+
+    /** @test */
+    public function it_filters_products_by_category_id(): void
+    {
+        $tech = Category::create(['name' => 'Tech', 'slug' => 'tech', 'is_active' => true]);
+        $fashion = Category::create(['name' => 'Fashion', 'slug' => 'fashion', 'is_active' => true]);
+
+        Product::create(['title' => 'Phone', 'slug' => 'phone', 'status' => 'published', 'category_id' => $tech->id]);
+        Product::create(['title' => 'Shirt', 'slug' => 'shirt', 'status' => 'published', 'category_id' => $fashion->id]);
+
+        $this->getJson("/api/v1/catalog/products?category_id={$tech->id}")
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.category_id', $tech->id);
+    }
+
+    /** @test */
+    public function it_returns_422_for_nonexistent_category_id(): void
+    {
+        $this->getJson('/api/v1/catalog/products?category_id=99999')
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['category_id']);
+    }
+
+    /** @test */
+    public function it_filters_products_by_min_price_using_the_default_variant(): void
+    {
+        $cheap = Product::create(['title' => 'Budget Item', 'slug' => 'budget-item', 'status' => 'published']);
+        ProductVariant::create(['product_id' => $cheap->id, 'sku' => 'CHEAP-01', 'is_default' => true, 'base_price' => 50000]);
+
+        $expensive = Product::create(['title' => 'Premium Item', 'slug' => 'premium-item', 'status' => 'published']);
+        ProductVariant::create(['product_id' => $expensive->id, 'sku' => 'PREM-01', 'is_default' => true, 'base_price' => 500000]);
+
+        $this->getJson('/api/v1/catalog/products?min_price=100000')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.title', 'Premium Item');
+    }
+
+    /** @test */
+    public function it_filters_products_by_max_price_using_the_default_variant(): void
+    {
+        $cheap = Product::create(['title' => 'Budget Item', 'slug' => 'budget-item', 'status' => 'published']);
+        ProductVariant::create(['product_id' => $cheap->id, 'sku' => 'CHEAP-01', 'is_default' => true, 'base_price' => 50000]);
+
+        $expensive = Product::create(['title' => 'Premium Item', 'slug' => 'premium-item', 'status' => 'published']);
+        ProductVariant::create(['product_id' => $expensive->id, 'sku' => 'PREM-01', 'is_default' => true, 'base_price' => 500000]);
+
+        $this->getJson('/api/v1/catalog/products?max_price=100000')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.title', 'Budget Item');
+    }
+
+    /** @test */
+    public function it_ignores_non_default_variants_when_filtering_by_price(): void
+    {
+        $product = Product::create(['title' => 'Multi-variant', 'slug' => 'multi-variant', 'status' => 'published']);
+        ProductVariant::create(['product_id' => $product->id, 'sku' => 'MV-DEFAULT', 'is_default' => true, 'base_price' => 50000]);
+        ProductVariant::create(['product_id' => $product->id, 'sku' => 'MV-OTHER', 'is_default' => false, 'base_price' => 999000]);
+
+        // min_price is above the default variant price — product should NOT appear
+        $this->getJson('/api/v1/catalog/products?min_price=100000')
+            ->assertOk()
+            ->assertJsonCount(0, 'data');
+    }
+
+    /** @test */
+    public function it_searches_products_by_title(): void
+    {
+        Product::create(['title' => 'Wireless Headphones', 'slug' => 'wireless-headphones', 'status' => 'published']);
+        Product::create(['title' => 'Running Shoes', 'slug' => 'running-shoes', 'status' => 'published']);
+
+        $this->getJson('/api/v1/catalog/products?search=Wireless')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.title', 'Wireless Headphones');
+    }
+
+    /** @test */
+    public function it_searches_products_by_description(): void
+    {
+        Product::create(['title' => 'Laptop A', 'slug' => 'laptop-a', 'status' => 'published', 'description' => 'Great for long distance travel']);
+        Product::create(['title' => 'Laptop B', 'slug' => 'laptop-b', 'status' => 'published', 'description' => 'Noise cancelling technology']);
+
+        $this->getJson('/api/v1/catalog/products?search=distance')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.title', 'Laptop A');
+    }
+
+    /** @test */
+    public function it_applies_combined_filters_correctly(): void
+    {
+        $tech = Category::create(['name' => 'Tech', 'slug' => 'tech', 'is_active' => true]);
+        $fashion = Category::create(['name' => 'Fashion', 'slug' => 'fashion', 'is_active' => true]);
+
+        $keyboard = Product::create(['title' => 'Keyboard', 'slug' => 'keyboard', 'status' => 'published', 'category_id' => $tech->id]);
+        ProductVariant::create(['product_id' => $keyboard->id, 'sku' => 'KB-01', 'is_default' => true, 'base_price' => 80000]);
+
+        $monitor = Product::create(['title' => 'Monitor', 'slug' => 'monitor', 'status' => 'published', 'category_id' => $tech->id]);
+        ProductVariant::create(['product_id' => $monitor->id, 'sku' => 'MON-01', 'is_default' => true, 'base_price' => 300000]);
+
+        $shirt = Product::create(['title' => 'Keyboard Shirt', 'slug' => 'keyboard-shirt', 'status' => 'published', 'category_id' => $fashion->id]);
+        ProductVariant::create(['product_id' => $shirt->id, 'sku' => 'SHIRT-01', 'is_default' => true, 'base_price' => 80000]);
+
+        // category=tech + max_price=100000 + search=Key → only Keyboard matches all three
+        $this->getJson("/api/v1/catalog/products?category_id={$tech->id}&max_price=100000&search=Key")
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.title', 'Keyboard');
     }
 }

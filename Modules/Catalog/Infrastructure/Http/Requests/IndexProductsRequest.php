@@ -16,6 +16,10 @@ class IndexProductsRequest extends FormRequest
         return [
             'page' => ['nullable', 'integer', 'min:1'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+            'category_id' => ['nullable', 'integer', 'exists:categories,id'],
+            'min_price' => ['nullable', 'integer', 'min:0'],
+            'max_price' => ['nullable', 'integer', 'min:0'],
+            'search' => ['nullable', 'string', 'max:255'],
         ];
     }
 }

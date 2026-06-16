@@ -1,0 +1,1500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shop API — Frontend Reference</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #222537;
+      --border: #2e3147;
+      --text: #e2e4f0;
+      --muted: #8b8fa8;
+      --accent: #7c6af7;
+      --get: #22c55e;
+      --post: #3b82f6;
+      --patch: #f59e0b;
+      --delete: #ef4444;
+      --get-bg: rgba(34,197,94,.1);
+      --post-bg: rgba(59,130,246,.1);
+      --patch-bg: rgba(245,158,11,.1);
+      --delete-bg: rgba(239,68,68,.1);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); display: flex; min-height: 100vh; }
+
+    nav { width: 260px; min-width: 260px; background: var(--surface); border-right: 1px solid var(--border); height: 100vh; overflow-y: auto; position: sticky; top: 0; padding: 24px 0; }
+    nav .logo { padding: 0 20px 24px; font-size: 15px; font-weight: 700; color: var(--accent); border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+    nav .logo span { color: var(--muted); font-weight: 400; font-size: 12px; display: block; margin-top: 3px; }
+    nav a { display: block; padding: 6px 20px; font-size: 13px; color: var(--muted); text-decoration: none; border-left: 2px solid transparent; transition: all .15s; }
+    nav a:hover { color: var(--text); background: var(--surface2); }
+    nav .section-label { padding: 16px 20px 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: #4a4d65; }
+
+    main { flex: 1; padding: 48px 56px; max-width: 960px; }
+    h1 { font-size: 32px; font-weight: 700; margin-bottom: 8px; }
+    h2 { font-size: 22px; font-weight: 700; margin: 56px 0 20px; padding-top: 56px; border-top: 1px solid var(--border); }
+    h2:first-of-type { border-top: none; padding-top: 0; margin-top: 32px; }
+    h3 { font-size: 14px; font-weight: 600; margin: 32px 0 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+    p { font-size: 14px; line-height: 1.7; color: var(--muted); margin-bottom: 12px; }
+    p strong { color: var(--text); }
+    ul, ol { font-size: 14px; color: var(--muted); padding-left: 20px; line-height: 2; }
+    ul li strong, ol li strong { color: var(--text); }
+
+    .endpoint { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin: 20px 0; overflow: hidden; }
+    .endpoint-header { display: flex; align-items: center; gap: 12px; padding: 14px 18px; }
+    .method { font-size: 11px; font-weight: 800; padding: 3px 8px; border-radius: 4px; letter-spacing: .05em; min-width: 54px; text-align: center; }
+    .method.get { background: var(--get-bg); color: var(--get); }
+    .method.post { background: var(--post-bg); color: var(--post); }
+    .method.patch { background: var(--patch-bg); color: var(--patch); }
+    .method.delete { background: var(--delete-bg); color: var(--delete); }
+    .endpoint-path { font-size: 14px; font-family: 'SF Mono', 'Fira Code', monospace; color: var(--text); flex: 1; }
+    .badge { font-size: 10px; padding: 2px 7px; border-radius: 99px; background: var(--surface2); border: 1px solid var(--border); color: var(--muted); white-space: nowrap; }
+    .badge.auth { border-color: var(--accent); color: var(--accent); }
+    .badge.admin { border-color: var(--delete); color: var(--delete); }
+
+    .endpoint-body { border-top: 1px solid var(--border); padding: 20px 18px; display: flex; flex-direction: column; gap: 16px; }
+    .block-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--accent); margin-bottom: 6px; }
+    pre { background: #12141e; border: 1px solid var(--border); border-radius: 7px; padding: 14px 16px; font-size: 12.5px; font-family: 'SF Mono', 'Fira Code', monospace; overflow-x: auto; line-height: 1.7; color: #c9d1d9; }
+    .key { color: #79c0ff; }
+    .str { color: #a5d6ff; }
+    .num { color: #f79329; }
+    .bool { color: #ff7b72; }
+    .null-val { color: #8b949e; }
+    .comment { color: #4a4f6a; font-style: italic; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 6px 0; }
+    th { text-align: left; padding: 8px 12px; background: var(--surface2); color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; border-bottom: 1px solid var(--border); }
+    td { padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    td:first-child { font-family: 'SF Mono', monospace; color: #79c0ff; font-size: 12px; white-space: nowrap; }
+    td:nth-child(2) { color: var(--patch); font-size: 12px; white-space: nowrap; }
+    td:nth-child(3) { color: var(--muted); }
+    .req { color: var(--delete) !important; font-weight: 600; }
+    .opt { color: #4a4f6a !important; }
+
+    .note { background: rgba(124,106,247,.08); border: 1px solid rgba(124,106,247,.25); border-radius: 7px; padding: 12px 16px; font-size: 13px; color: var(--muted); margin: 8px 0; }
+    .note strong { color: var(--accent); }
+    .warn { background: rgba(245,158,11,.08); border: 1px solid rgba(245,158,11,.25); border-radius: 7px; padding: 12px 16px; font-size: 13px; color: var(--muted); margin: 8px 0; }
+    .warn strong { color: var(--patch); }
+
+    .intro-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 24px 0; }
+    .info-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px; }
+    .info-card h4 { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--accent); margin-bottom: 10px; }
+    .info-card p { margin: 0; font-size: 13px; }
+    code { font-family: 'SF Mono', monospace; background: var(--surface2); padding: 1px 5px; border-radius: 3px; font-size: 12px; color: #79c0ff; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="logo">Shop API <span>Frontend Reference v1</span></div>
+
+  <div class="section-label">General</div>
+  <a href="#overview">Overview</a>
+  <a href="#auth-flow">Authentication Flow</a>
+  <a href="#errors">Errors &amp; Validation</a>
+  <a href="#pagination">Pagination</a>
+  <a href="#money">Money &amp; Prices</a>
+  <a href="#media-strategy">Media Upload Strategy</a>
+
+  <div class="section-label">Identity</div>
+  <a href="#otp">OTP — Login / Register</a>
+  <a href="#me">Current User &amp; Logout</a>
+  <a href="#profile">Profile</a>
+  <a href="#locations">Provinces &amp; Cities</a>
+  <a href="#addresses">Addresses</a>
+  <a href="#admin-users">Admin — Users</a>
+
+  <div class="section-label">Media</div>
+  <a href="#media">Media Library</a>
+
+  <div class="section-label">Catalog</div>
+  <a href="#categories">Categories</a>
+  <a href="#products">Products</a>
+  <a href="#gallery">Product Gallery</a>
+  <a href="#variants">Product Variants</a>
+
+  <div class="section-label">Inventory</div>
+  <a href="#inventory">Stock</a>
+</nav>
+
+<main>
+  <h1>Shop API</h1>
+  <p>Complete API reference for frontend developers. Every endpoint is documented with realistic request bodies and full response shapes.</p>
+
+  <div class="intro-grid">
+    <div class="info-card">
+      <h4>Base URL</h4>
+      <p><code>http://localhost:8000/api/v1</code></p>
+      <p style="margin-top:8px">All paths in this document are relative to this base.</p>
+    </div>
+    <div class="info-card">
+      <h4>Content-Type</h4>
+      <p>Send <code>Content-Type: application/json</code> for every JSON request.</p>
+      <p style="margin-top:8px">File upload endpoints use <code>multipart/form-data</code>.</p>
+    </div>
+    <div class="info-card">
+      <h4>Authentication</h4>
+      <p>Protected routes require: <code>Authorization: Bearer {token}</code></p>
+    </div>
+    <div class="info-card">
+      <h4>Response Format</h4>
+      <p>All responses are JSON. Paginated lists include <code>data</code>, <code>links</code>, and <code>meta</code> keys.</p>
+    </div>
+  </div>
+
+  <!-- OVERVIEW -->
+  <h2 id="overview">Overview</h2>
+
+  <h3 id="auth-flow">Authentication Flow</h3>
+  <p>This API uses <strong>passwordless OTP authentication</strong>. There are no passwords. The flow is always:</p>
+  <ol>
+    <li>Call <strong>POST /otp/request</strong> with the user's phone number — the server sends an OTP code (SMS in production, logged in development).</li>
+    <li>Call <strong>POST /otp/verify</strong> with the phone, the code, and a device name — the server returns a <strong>Bearer token</strong>.</li>
+    <li>Store the token and include it as <code>Authorization: Bearer {token}</code> on every subsequent protected request.</li>
+    <li>The first time a phone number is used, an account is created automatically — register and login are the same endpoint.</li>
+  </ol>
+  <div class="note"><strong>Note:</strong> OTP codes are single-use and expire after 5 minutes. Calling /otp/request again invalidates the previous code.</div>
+
+  <h3 id="errors">Errors &amp; Validation</h3>
+  <p>The API uses standard HTTP status codes:</p>
+  <ul>
+    <li><strong>200</strong> — OK</li>
+    <li><strong>201</strong> — Created</li>
+    <li><strong>204</strong> — No Content (successful delete)</li>
+    <li><strong>401</strong> — Unauthenticated (missing or expired token)</li>
+    <li><strong>403</strong> — Forbidden (token valid, but user lacks permission)</li>
+    <li><strong>404</strong> — Not Found</li>
+    <li><strong>422</strong> — Validation error</li>
+  </ul>
+  <p>Validation errors (422) always look like this:</p>
+  <pre>{
+  <span class="key">"message"</span>: <span class="str">"The title field is required."</span>,
+  <span class="key">"errors"</span>: {
+    <span class="key">"title"</span>: [<span class="str">"The title field is required."</span>]
+  }
+}</pre>
+
+  <h3 id="pagination">Pagination</h3>
+  <p>Paginated list endpoints accept <code>page</code> and <code>per_page</code> query parameters. <code>per_page</code> is clamped between 1 and 100, defaulting to 15.</p>
+  <pre>{
+  <span class="key">"data"</span>: [ <span class="comment">/* array of items */</span> ],
+  <span class="key">"links"</span>: {
+    <span class="key">"first"</span>: <span class="str">"http://localhost:8000/api/v1/catalog/categories/roots?page=1"</span>,
+    <span class="key">"last"</span>:  <span class="str">"http://localhost:8000/api/v1/catalog/categories/roots?page=4"</span>,
+    <span class="key">"prev"</span>:  <span class="null-val">null</span>,
+    <span class="key">"next"</span>:  <span class="str">"http://localhost:8000/api/v1/catalog/categories/roots?page=2"</span>
+  },
+  <span class="key">"meta"</span>: {
+    <span class="key">"current_page"</span>: <span class="num">1</span>,
+    <span class="key">"last_page"</span>:    <span class="num">4</span>,
+    <span class="key">"per_page"</span>:     <span class="num">15</span>,
+    <span class="key">"total"</span>:        <span class="num">54</span>,
+    <span class="key">"from"</span>:         <span class="num">1</span>,
+    <span class="key">"to"</span>:           <span class="num">15</span>
+  }
+}</pre>
+
+  <h3 id="money">Money &amp; Prices</h3>
+  <div class="warn"><strong>Important:</strong> All monetary values are stored and returned as <strong>plain integers in rials</strong> — the smallest currency unit. No floats, no currency symbols, no decimals. A product priced at 1,500,000 rials is returned as <code>1500000</code>. Divide by 10 in your UI to display tomans.</div>
+
+  <h3 id="media-strategy">Media Upload Strategy</h3>
+  <p>The API supports two ways to attach images to any entity that accepts one:</p>
+  <ul>
+    <li><strong>Pre-upload (recommended):</strong> Upload the file first via <code>POST /media</code>, receive a <code>media_id</code>, then pass that integer ID to the create/update endpoint as a plain JSON field. This is the cleanest flow for image pickers.</li>
+    <li><strong>Inline upload:</strong> Send the image file directly in a <code>multipart/form-data</code> request to the create/update endpoint itself. Convenient for simple single-step forms.</li>
+  </ul>
+  <div class="note"><strong>These two approaches are mutually exclusive per field.</strong> For example, send <code>primary_media_id</code> OR <code>primary_image</code>, never both at the same time.</div>
+
+
+  <!-- ═══ IDENTITY ═══ -->
+  <h2 id="otp">OTP — Login / Register</h2>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/otp/request</span>
+      <span class="badge">Public</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Sends an OTP code to the given phone number. Creates the user account on first use. The same endpoint handles both first-time registration and subsequent logins.</p>
+      <div class="block-label">Request Body</div>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr><td>phone</td><td class="req">required</td><td>11-digit mobile number starting with 09. Example: <code>09123456789</code></td></tr>
+        <tr><td>name</td><td class="opt">optional</td><td>Display name. Only applied on account creation (first login). Ignored on return visits. Max 120 chars.</td></tr>
+      </table>
+      <pre>{
+  <span class="key">"phone"</span>: <span class="str">"09123456789"</span>,
+  <span class="key">"name"</span>:  <span class="str">"Sara Ahmadi"</span>
+}</pre>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{
+  <span class="key">"message"</span>:    <span class="str">"OTP sent successfully."</span>,
+  <span class="key">"expires_in"</span>: <span class="num">5</span>
+}</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/otp/verify</span>
+      <span class="badge">Public</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Verifies the OTP code and returns a Bearer token. The code is consumed immediately and cannot be reused. Store the returned token securely (e.g. <code>localStorage</code> or a secure cookie).</p>
+      <div class="block-label">Request Body</div>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr><td>phone</td><td class="req">required</td><td>Same phone number used in /otp/request</td></tr>
+        <tr><td>code</td><td class="req">required</td><td>The numeric OTP code received by the user</td></tr>
+        <tr><td>device_name</td><td class="req">required</td><td>Label for this login session. Shown in token management. Max 100 chars. E.g. <code>"Chrome on Windows"</code> or <code>"Samsung Galaxy S24"</code></td></tr>
+      </table>
+      <pre>{
+  <span class="key">"phone"</span>:       <span class="str">"09123456789"</span>,
+  <span class="key">"code"</span>:        <span class="str">"481923"</span>,
+  <span class="key">"device_name"</span>: <span class="str">"Chrome on Windows 11"</span>
+}</pre>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{
+  <span class="key">"message"</span>: <span class="str">"Login successful."</span>,
+  <span class="key">"token"</span>:   <span class="str">"1|AbCdEfGhIjKlMnOpQrStUvWxYz1234567890abcdef"</span>,
+  <span class="key">"user"</span>: {
+    <span class="key">"id"</span>:         <span class="num">42</span>,
+    <span class="key">"name"</span>:       <span class="str">"Sara Ahmadi"</span>,
+    <span class="key">"email"</span>:      <span class="null-val">null</span>,
+    <span class="key">"phone"</span>:      <span class="str">"09123456789"</span>,
+    <span class="key">"created_at"</span>: <span class="str">"2026-06-16T10:30:00.000000Z"</span>
+  }
+}</pre>
+    </div>
+  </div>
+
+  <h2 id="me">Current User &amp; Logout</h2>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/me</span>
+      <span class="badge auth">Auth Required</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Returns the currently authenticated user. Use on app load to validate the stored token and hydrate the user session.</p>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{
+  <span class="key">"user"</span>: {
+    <span class="key">"id"</span>:         <span class="num">42</span>,
+    <span class="key">"name"</span>:       <span class="str">"Sara Ahmadi"</span>,
+    <span class="key">"email"</span>:      <span class="null-val">null</span>,
+    <span class="key">"phone"</span>:      <span class="str">"09123456789"</span>,
+    <span class="key">"created_at"</span>: <span class="str">"2026-06-16T10:30:00.000000Z"</span>
+  }
+}</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/logout</span>
+      <span class="badge auth">Auth Required</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Revokes the current device's token. No request body needed. After this call the token is permanently invalid — all requests using it will return 401.</p>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{ <span class="key">"message"</span>: <span class="str">"Logged out successfully."</span> }</pre>
+    </div>
+  </div>
+
+  <!-- PROFILE -->
+  <h2 id="profile">Profile</h2>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/profile/</span>
+      <span class="badge auth">Auth Required</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Returns the full profile of the authenticated user.</p>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{
+  <span class="key">"data"</span>: {
+    <span class="key">"id"</span>:         <span class="num">42</span>,
+    <span class="key">"name"</span>:       <span class="str">"Sara Ahmadi"</span>,
+    <span class="key">"email"</span>:      <span class="str">"sara@example.com"</span>,
+    <span class="key">"phone"</span>:      <span class="str">"09123456789"</span>,
+    <span class="key">"created_at"</span>: <span class="str">"2026-06-16T10:30:00.000000Z"</span>,
+    <span class="key">"updated_at"</span>: <span class="str">"2026-06-16T12:15:00.000000Z"</span>
+  }
+}</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method patch">PATCH</span>
+      <span class="endpoint-path">/profile/</span>
+      <span class="badge auth">Auth Required</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Updates the current user's profile. All fields are optional — only send what you want to change.</p>
+      <div class="block-label">Request Body</div>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr><td>name</td><td class="opt">optional string</td><td>Display name. Max 120 chars.</td></tr>
+        <tr><td>email</td><td class="opt">optional string</td><td>Email address. Must be unique. Send <code>null</code> to clear.</td></tr>
+        <tr><td>phone</td><td class="opt">optional string</td><td>Phone number. Must be unique. Send <code>null</code> to clear.</td></tr>
+      </table>
+      <pre>{
+  <span class="key">"name"</span>:  <span class="str">"Sara Mohammadi"</span>,
+  <span class="key">"email"</span>: <span class="str">"sara.m@example.com"</span>
+}</pre>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{
+  <span class="key">"message"</span>: <span class="str">"Profile updated successfully."</span>,
+  <span class="key">"data"</span>: {
+    <span class="key">"id"</span>:         <span class="num">42</span>,
+    <span class="key">"name"</span>:       <span class="str">"Sara Mohammadi"</span>,
+    <span class="key">"email"</span>:      <span class="str">"sara.m@example.com"</span>,
+    <span class="key">"phone"</span>:      <span class="str">"09123456789"</span>,
+    <span class="key">"created_at"</span>: <span class="str">"2026-06-16T10:30:00.000000Z"</span>,
+    <span class="key">"updated_at"</span>: <span class="str">"2026-06-16T13:00:00.000000Z"</span>
+  }
+}</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/profile/myAddresses</span>
+      <span class="badge auth">Auth Required</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Shortcut that returns all addresses for the current user. Identical to <code>GET /addresses</code>.</p>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{
+  <span class="key">"data"</span>: [
+    {
+      <span class="key">"id"</span>:                   <span class="num">7</span>,
+      <span class="key">"title"</span>:               <span class="str">"Home"</span>,
+      <span class="key">"province_id"</span>:         <span class="num">8</span>,
+      <span class="key">"city_id"</span>:             <span class="num">153</span>,
+      <span class="key">"postal_code"</span>:         <span class="str">"1456893201"</span>,
+      <span class="key">"address"</span>:             <span class="str">"خیابان ولیعصر، کوچه بهار، پلاک ۱۲، واحد ۳"</span>,
+      <span class="key">"is_default_shipping"</span>: <span class="bool">true</span>,
+      <span class="key">"province"</span>:            { <span class="key">"id"</span>: <span class="num">8</span>, <span class="key">"name"</span>: <span class="str">"تهران"</span> },
+      <span class="key">"city"</span>:               { <span class="key">"id"</span>: <span class="num">153</span>, <span class="key">"name"</span>: <span class="str">"تهران"</span> },
+      <span class="key">"created_at"</span>:          <span class="str">"2026-06-10T09:00:00.000000Z"</span>,
+      <span class="key">"updated_at"</span>:          <span class="str">"2026-06-10T09:00:00.000000Z"</span>
+    }
+  ]
+}</pre>
+    </div>
+  </div>
+
+  <!-- LOCATIONS -->
+  <h2 id="locations">Provinces &amp; Cities</h2>
+  <p>Location data is public. Use these endpoints to populate province/city dropdowns in address forms.</p>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/locations/provinces</span>
+      <span class="badge">Public</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Lists all provinces. Pass <code>?with_cities=true</code> to embed each province's cities in one request — useful for loading all location data upfront.</p>
+      <div class="block-label">Query Parameters</div>
+      <table>
+        <tr><th>Param</th><th>Type</th><th>Description</th></tr>
+        <tr><td>with_cities</td><td class="opt">optional boolean</td><td>Set <code>true</code> to include cities nested under each province.</td></tr>
+      </table>
+      <div class="block-label">Response — 200 OK (with ?with_cities=true)</div>
+      <pre>{
+  <span class="key">"data"</span>: [
+    {
+      <span class="key">"id"</span>:   <span class="num">8</span>,
+      <span class="key">"name"</span>: <span class="str">"تهران"</span>,
+      <span class="key">"cities"</span>: [
+        { <span class="key">"id"</span>: <span class="num">153</span>, <span class="key">"province_id"</span>: <span class="num">8</span>, <span class="key">"name"</span>: <span class="str">"تهران"</span> },
+        { <span class="key">"id"</span>: <span class="num">154</span>, <span class="key">"province_id"</span>: <span class="num">8</span>, <span class="key">"name"</span>: <span class="str">"شمیرانات"</span> }
+      ]
+    },
+    {
+      <span class="key">"id"</span>:   <span class="num">1</span>,
+      <span class="key">"name"</span>: <span class="str">"آذربایجان شرقی"</span>,
+      <span class="key">"cities"</span>: [
+        { <span class="key">"id"</span>: <span class="num">1</span>, <span class="key">"province_id"</span>: <span class="num">1</span>, <span class="key">"name"</span>: <span class="str">"تبریز"</span> }
+      ]
+    }
+  ]
+}</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/locations/provinces/{province_id}</span>
+      <span class="badge">Public</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Returns a single province with all its cities embedded.</p>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{
+  <span class="key">"data"</span>: {
+    <span class="key">"id"</span>:   <span class="num">8</span>,
+    <span class="key">"name"</span>: <span class="str">"تهران"</span>,
+    <span class="key">"cities"</span>: [
+      { <span class="key">"id"</span>: <span class="num">153</span>, <span class="key">"province_id"</span>: <span class="num">8</span>, <span class="key">"name"</span>: <span class="str">"تهران"</span> },
+      { <span class="key">"id"</span>: <span class="num">154</span>, <span class="key">"province_id"</span>: <span class="num">8</span>, <span class="key">"name"</span>: <span class="str">"شمیرانات"</span> }
+    ]
+  }
+}</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/locations/provinces/{province_id}/cities</span>
+      <span class="badge">Public</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Returns only the cities of a given province. Use this to lazy-load a city dropdown after the user selects a province.</p>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{
+  <span class="key">"data"</span>: [
+    { <span class="key">"id"</span>: <span class="num">153</span>, <span class="key">"province_id"</span>: <span class="num">8</span>, <span class="key">"name"</span>: <span class="str">"تهران"</span> },
+    { <span class="key">"id"</span>: <span class="num">154</span>, <span class="key">"province_id"</span>: <span class="num">8</span>, <span class="key">"name"</span>: <span class="str">"شمیرانات"</span> },
+    { <span class="key">"id"</span>: <span class="num">162</span>, <span class="key">"province_id"</span>: <span class="num">8</span>, <span class="key">"name"</span>: <span class="str">"ری"</span> }
+  ]
+}</pre>
+    </div>
+  </div>
+
+  <!-- ADDRESSES -->
+  <h2 id="addresses">Addresses</h2>
+  <p>Users manage their own shipping addresses. All routes require authentication. The <code>city_id</code> must belong to the selected <code>province_id</code>.</p>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/addresses</span>
+      <span class="badge auth">Auth Required</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Returns all saved addresses for the authenticated user. Not paginated.</p>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{
+  <span class="key">"data"</span>: [
+    {
+      <span class="key">"id"</span>:                   <span class="num">7</span>,
+      <span class="key">"title"</span>:               <span class="str">"خانه"</span>,
+      <span class="key">"province_id"</span>:         <span class="num">8</span>,
+      <span class="key">"city_id"</span>:             <span class="num">153</span>,
+      <span class="key">"postal_code"</span>:         <span class="str">"1456893201"</span>,
+      <span class="key">"address"</span>:             <span class="str">"تهران، خیابان ولیعصر، کوچه بهار، پلاک ۱۲، واحد ۳"</span>,
+      <span class="key">"is_default_shipping"</span>: <span class="bool">true</span>,
+      <span class="key">"province"</span>:            { <span class="key">"id"</span>: <span class="num">8</span>,   <span class="key">"name"</span>: <span class="str">"تهران"</span> },
+      <span class="key">"city"</span>:               { <span class="key">"id"</span>: <span class="num">153</span>, <span class="key">"name"</span>: <span class="str">"تهران"</span> },
+      <span class="key">"created_at"</span>:          <span class="str">"2026-06-10T09:00:00.000000Z"</span>,
+      <span class="key">"updated_at"</span>:          <span class="str">"2026-06-10T09:00:00.000000Z"</span>
+    }
+  ]
+}</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/addresses</span>
+      <span class="badge auth">Auth Required</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="block-label">Request Body</div>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr><td>province_id</td><td class="req">required integer</td><td>ID from /locations/provinces</td></tr>
+        <tr><td>city_id</td><td class="req">required integer</td><td>Must belong to the chosen province</td></tr>
+        <tr><td>address</td><td class="req">required string</td><td>Full street address. Max 1000 chars.</td></tr>
+        <tr><td>title</td><td class="opt">optional string</td><td>Label, e.g. "Home" or "Work". Max 100 chars.</td></tr>
+        <tr><td>postal_code</td><td class="opt">optional string</td><td>Postal code. Max 20 chars.</td></tr>
+        <tr><td>is_default_shipping</td><td class="opt">optional boolean</td><td>Set to <code>true</code> to make this the default shipping address. Unsets the previous default.</td></tr>
+      </table>
+      <pre>{
+  <span class="key">"title"</span>:               <span class="str">"خانه"</span>,
+  <span class="key">"province_id"</span>:         <span class="num">8</span>,
+  <span class="key">"city_id"</span>:             <span class="num">153</span>,
+  <span class="key">"postal_code"</span>:         <span class="str">"1456893201"</span>,
+  <span class="key">"address"</span>:             <span class="str">"تهران، خیابان ولیعصر، کوچه بهار، پلاک ۱۲، واحد ۳"</span>,
+  <span class="key">"is_default_shipping"</span>: <span class="bool">true</span>
+}</pre>
+      <div class="block-label">Response — 201 Created</div>
+      <pre>{
+  <span class="key">"message"</span>: <span class="str">"Address created successfully."</span>,
+  <span class="key">"data"</span>: {
+    <span class="key">"id"</span>:                   <span class="num">7</span>,
+    <span class="key">"title"</span>:               <span class="str">"خانه"</span>,
+    <span class="key">"province_id"</span>:         <span class="num">8</span>,
+    <span class="key">"city_id"</span>:             <span class="num">153</span>,
+    <span class="key">"postal_code"</span>:         <span class="str">"1456893201"</span>,
+    <span class="key">"address"</span>:             <span class="str">"تهران، خیابان ولیعصر، کوچه بهار، پلاک ۱۲، واحد ۳"</span>,
+    <span class="key">"is_default_shipping"</span>: <span class="bool">true</span>,
+    <span class="key">"province"</span>:            { <span class="key">"id"</span>: <span class="num">8</span>, <span class="key">"name"</span>: <span class="str">"تهران"</span> },
+    <span class="key">"city"</span>:               { <span class="key">"id"</span>: <span class="num">153</span>, <span class="key">"name"</span>: <span class="str">"تهران"</span> },
+    <span class="key">"created_at"</span>:          <span class="str">"2026-06-16T14:30:00.000000Z"</span>,
+    <span class="key">"updated_at"</span>:          <span class="str">"2026-06-16T14:30:00.000000Z"</span>
+  }
+}</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/addresses/{address_id}</span>
+      <span class="badge auth">Auth Required</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Returns a single address. Only accessible by the owning user.</p>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{ <span class="key">"data"</span>: { <span class="comment">/* same shape as the address object above */</span> } }</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method patch">PATCH</span>
+      <span class="endpoint-path">/addresses/{address_id}</span>
+      <span class="badge auth">Auth Required</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Partial update. Only fields you send are changed.</p>
+      <pre>{
+  <span class="key">"title"</span>:   <span class="str">"محل کار"</span>,
+  <span class="key">"address"</span>: <span class="str">"تهران، میدان آزادی، خیابان آزادی، پلاک ۵"</span>
+}</pre>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{ <span class="key">"message"</span>: <span class="str">"Address updated successfully."</span>, <span class="key">"data"</span>: { <span class="comment">/* AddressResource */</span> } }</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method delete">DELETE</span>
+      <span class="endpoint-path">/addresses/{address_id}</span>
+      <span class="badge auth">Auth Required</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{ <span class="key">"message"</span>: <span class="str">"Address deleted successfully."</span> }</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/addresses/{address_id}/default-shipping</span>
+      <span class="badge auth">Auth Required</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Marks this address as the user's default shipping address. The previous default is automatically unset. No request body needed.</p>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{
+  <span class="key">"message"</span>: <span class="str">"Default shipping address updated successfully."</span>,
+  <span class="key">"data"</span>: { <span class="comment">/* the address that is now default */</span> }
+}</pre>
+    </div>
+  </div>
+
+  <!-- ADMIN USERS -->
+  <h2 id="admin-users">Admin — Users</h2>
+  <p>These endpoints require admin-level permissions. Regular customers will receive <strong>403 Forbidden</strong>.</p>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/admin/users</span>
+      <span class="badge admin">Admin Only</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Paginated list of all users.</p>
+      <div class="block-label">Query Parameters</div>
+      <table><tr><th>Param</th><th>Type</th><th>Description</th></tr>
+        <tr><td>per_page</td><td class="opt">optional</td><td>Results per page. Default: 15.</td></tr>
+        <tr><td>page</td><td class="opt">optional</td><td>Page number. Default: 1.</td></tr>
+      </table>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{
+  <span class="key">"data"</span>: [
+    { <span class="key">"id"</span>: <span class="num">1</span>, <span class="key">"name"</span>: <span class="str">"Admin"</span>, <span class="key">"email"</span>: <span class="null-val">null</span>, <span class="key">"phone"</span>: <span class="str">"09100000000"</span>, <span class="key">"created_at"</span>: <span class="str">"..."</span>, <span class="key">"updated_at"</span>: <span class="str">"..."</span> },
+    { <span class="key">"id"</span>: <span class="num">42</span>, <span class="key">"name"</span>: <span class="str">"Sara Ahmadi"</span>, <span class="key">"email"</span>: <span class="null-val">null</span>, <span class="key">"phone"</span>: <span class="str">"09123456789"</span>, <span class="key">"created_at"</span>: <span class="str">"..."</span>, <span class="key">"updated_at"</span>: <span class="str">"..."</span> }
+  ],
+  <span class="key">"meta"</span>:  { <span class="key">"current_page"</span>: <span class="num">1</span>, <span class="key">"last_page"</span>: <span class="num">3</span>, <span class="key">"per_page"</span>: <span class="num">15</span>, <span class="key">"total"</span>: <span class="num">38</span>, <span class="key">"from"</span>: <span class="num">1</span>, <span class="key">"to"</span>: <span class="num">15</span> },
+  <span class="key">"links"</span>: { <span class="key">"first"</span>: <span class="str">"..."</span>, <span class="key">"last"</span>: <span class="str">"..."</span>, <span class="key">"prev"</span>: <span class="null-val">null</span>, <span class="key">"next"</span>: <span class="str">"..."</span> }
+}</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/admin/users/show/{user_id}</span>
+      <span class="badge admin">Admin Only</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{ <span class="key">"data"</span>: { <span class="key">"id"</span>: <span class="num">42</span>, <span class="key">"name"</span>: <span class="str">"Sara Ahmadi"</span>, <span class="key">"email"</span>: <span class="null-val">null</span>, <span class="key">"phone"</span>: <span class="str">"09123456789"</span>, <span class="key">"created_at"</span>: <span class="str">"..."</span>, <span class="key">"updated_at"</span>: <span class="str">"..."</span> } }</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/admin/users/{user_id}/addresses</span>
+      <span class="badge admin">Admin Only</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Lists all addresses belonging to any user. Same response shape as <code>GET /addresses</code>.</p>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method patch">PATCH</span>
+      <span class="endpoint-path">/admin/users/{user_id}</span>
+      <span class="badge admin">Admin Only</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Update any user's profile. Same fields as <code>PATCH /profile/</code>.</p>
+      <pre>{ <span class="key">"name"</span>: <span class="str">"Sara Ahmadi"</span>, <span class="key">"email"</span>: <span class="str">"sara@newdomain.com"</span> }</pre>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{ <span class="key">"message"</span>: <span class="str">"User updated successfully."</span>, <span class="key">"data"</span>: { <span class="comment">/* UserResource */</span> } }</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method delete">DELETE</span>
+      <span class="endpoint-path">/admin/users/{user_id}</span>
+      <span class="badge admin">Admin Only</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{ <span class="key">"message"</span>: <span class="str">"User deleted successfully."</span> }</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/admin/address/{address_id}</span>
+      <span class="badge admin">Admin Only</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Returns any address by ID regardless of which user owns it.</p>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{ <span class="key">"data"</span>: { <span class="comment">/* AddressResource */</span> } }</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/admin/address/{user_id}</span>
+      <span class="badge admin">Admin Only</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Creates an address on behalf of any user. Same fields as <code>POST /addresses</code>.</p>
+      <pre>{
+  <span class="key">"title"</span>:       <span class="str">"آدرس انبار"</span>,
+  <span class="key">"province_id"</span>: <span class="num">10</span>,
+  <span class="key">"city_id"</span>:     <span class="num">212</span>,
+  <span class="key">"address"</span>:     <span class="str">"اصفهان، خیابان چهارباغ، پلاک ۷"</span>
+}</pre>
+      <div class="block-label">Response — 201 Created</div>
+      <pre>{ <span class="key">"message"</span>: <span class="str">"Address created successfully."</span>, <span class="key">"data"</span>: { <span class="comment">/* AddressResource */</span> } }</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method patch">PATCH</span>
+      <span class="endpoint-path">/admin/address/{address_id}</span>
+      <span class="badge admin">Admin Only</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Update any address. Same fields as <code>PATCH /addresses/{id}</code>.</p>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method delete">DELETE</span>
+      <span class="endpoint-path">/admin/address/{address_id}</span>
+      <span class="badge admin">Admin Only</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{ <span class="key">"message"</span>: <span class="str">"Address deleted successfully."</span> }</pre>
+    </div>
+  </div>
+
+
+  <!-- ═══ MEDIA ═══ -->
+  <h2 id="media">Media Library</h2>
+  <p>The Media module manages all uploaded files. Files live on the server's local public disk and are served via a direct URL.</p>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/media</span>
+      <span class="badge">Public</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Paginated list of all uploaded media files, newest first. Use this to build an image picker in the CMS or anywhere on the site. No auth required — all file URLs are already public.</p>
+      <div class="block-label">Query Parameters</div>
+      <table><tr><th>Param</th><th>Type</th><th>Description</th></tr>
+        <tr><td>per_page</td><td class="opt">optional</td><td>1–100. Default: 15.</td></tr>
+        <tr><td>page</td><td class="opt">optional</td><td>Page number. Default: 1.</td></tr>
+      </table>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{
+  <span class="key">"data"</span>: [
+    {
+      <span class="key">"id"</span>:            <span class="num">18</span>,
+      <span class="key">"url"</span>:           <span class="str">"http://localhost:8000/storage/products/hero_banner.webp"</span>,
+      <span class="key">"mime_type"</span>:     <span class="str">"image/webp"</span>,
+      <span class="key">"file_size"</span>:     <span class="num">204800</span>,
+      <span class="key">"original_name"</span>: <span class="str">"hero_banner.webp"</span>
+    }
+  ],
+  <span class="key">"links"</span>: { <span class="comment">/* ... */</span> },
+  <span class="key">"meta"</span>:  { <span class="comment">/* ... */</span> }
+}</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/media</span>
+      <span class="badge admin">Requires media.upload permission</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Upload a single image file and receive a <code>media_id</code> + public URL. Use this for the pre-upload flow before creating products, categories, or variants.</p>
+      <div class="warn"><strong>Must send as <code>multipart/form-data</code></strong>, not JSON. Do NOT manually set the <code>Content-Type</code> header — let the browser or HTTP client set it automatically when you use a <code>FormData</code> object.</div>
+      <div class="block-label">Request Fields (multipart/form-data)</div>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr><td>file</td><td class="req">required image</td><td>Image file. Accepted: JPEG, PNG, WebP, GIF.</td></tr>
+        <tr><td>folder</td><td class="opt">optional string</td><td>Storage subfolder, e.g. <code>products</code>, <code>banners</code>, <code>avatars</code>. Only letters, numbers, hyphens, underscores, slashes. Defaults to <code>uploads</code>.</td></tr>
+      </table>
+      <div class="block-label">JavaScript Example</div>
+      <pre><span class="comment">// Using fetch + FormData</span>
+const form = new FormData();
+form.append(<span class="str">'file'</span>,   fileInput.files[<span class="num">0</span>]);
+form.append(<span class="str">'folder'</span>, <span class="str">'products'</span>);
+
+const res = await fetch(<span class="str">'/api/v1/media'</span>, {
+  method:  <span class="str">'POST'</span>,
+  headers: { <span class="str">'Authorization'</span>: <span class="str">'Bearer '</span> + token },
+  body:    form,
+});</pre>
+      <div class="block-label">Response — 201 Created</div>
+      <pre>{
+  <span class="key">"data"</span>: {
+    <span class="key">"id"</span>:            <span class="num">18</span>,
+    <span class="key">"url"</span>:           <span class="str">"http://localhost:8000/storage/products/5f3k9a.webp"</span>,
+    <span class="key">"mime_type"</span>:     <span class="str">"image/webp"</span>,
+    <span class="key">"file_size"</span>:     <span class="num">153600</span>,
+    <span class="key">"original_name"</span>: <span class="str">"product-hero.webp"</span>
+  }
+}</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method delete">DELETE</span>
+      <span class="endpoint-path">/media/{id}</span>
+      <span class="badge admin">Requires media.delete permission</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Permanently deletes a media file from disk and removes the database record. Cannot be undone.</p>
+      <div class="block-label">Response — 204 No Content</div>
+      <pre><span class="comment">// Empty body</span></pre>
+    </div>
+  </div>
+
+
+  <!-- ═══ CATEGORIES ═══ -->
+  <h2 id="categories">Catalog — Categories</h2>
+  <p>Categories form an infinite tree. A category with <code>parent_id: null</code> is a root category. Children reference their parent via <code>parent_id</code>.</p>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/catalog/categories/roots</span>
+      <span class="badge">Public</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Paginated list of active root-level categories (no parent). Use this for the main navigation menu.</p>
+      <div class="block-label">Query Parameters</div>
+      <table><tr><th>Param</th><th>Type</th><th>Description</th></tr>
+        <tr><td>per_page</td><td class="opt">optional</td><td>1–100. Default: 15.</td></tr>
+        <tr><td>page</td><td class="opt">optional</td><td>Page number. Default: 1.</td></tr>
+      </table>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{
+  <span class="key">"data"</span>: [
+    {
+      <span class="key">"id"</span>:        <span class="num">1</span>,
+      <span class="key">"name"</span>:      <span class="str">"پوشاک"</span>,
+      <span class="key">"slug"</span>:      <span class="str">"clothing"</span>,
+      <span class="key">"is_active"</span>: <span class="bool">true</span>,
+      <span class="key">"parent_id"</span>: <span class="null-val">null</span>,
+      <span class="key">"image_url"</span>: <span class="str">"http://localhost:8000/storage/categories/clothing.webp"</span>
+    },
+    {
+      <span class="key">"id"</span>:        <span class="num">2</span>,
+      <span class="key">"name"</span>:      <span class="str">"الکترونیک"</span>,
+      <span class="key">"slug"</span>:      <span class="str">"electronics"</span>,
+      <span class="key">"is_active"</span>: <span class="bool">true</span>,
+      <span class="key">"parent_id"</span>: <span class="null-val">null</span>,
+      <span class="key">"image_url"</span>: <span class="null-val">null</span>
+    }
+  ],
+  <span class="key">"links"</span>: { <span class="comment">/* ... */</span> },
+  <span class="key">"meta"</span>:  { <span class="comment">/* ... */</span> }
+}</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/catalog/categories/{id}</span>
+      <span class="badge">Public</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Returns a single category by ID. Use this to fetch sub-categories after the user navigates into a root category.</p>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{
+  <span class="key">"data"</span>: {
+    <span class="key">"id"</span>:        <span class="num">5</span>,
+    <span class="key">"name"</span>:      <span class="str">"گوشی هوشمند"</span>,
+    <span class="key">"slug"</span>:      <span class="str">"smartphones"</span>,
+    <span class="key">"is_active"</span>: <span class="bool">true</span>,
+    <span class="key">"parent_id"</span>: <span class="num">2</span>,
+    <span class="key">"image_url"</span>: <span class="null-val">null</span>
+  }
+}</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/catalog/categories</span>
+      <span class="badge admin">Requires catalog.category.create</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="block-label">Request Body (JSON)</div>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr><td>name</td><td class="req">required string</td><td>Category display name. Max 255 chars.</td></tr>
+        <tr><td>slug</td><td class="opt">optional string</td><td>URL-friendly identifier. Must be globally unique. Auto-generated from name if omitted.</td></tr>
+        <tr><td>parent_id</td><td class="opt">optional integer</td><td>ID of an existing parent category. Omit or send <code>null</code> for a root category.</td></tr>
+        <tr><td>is_active</td><td class="opt">optional boolean</td><td>Whether this category is visible in the storefront.</td></tr>
+        <tr><td>media_id</td><td class="opt">optional integer</td><td>Pre-uploaded media ID. Mutually exclusive with <code>image</code>.</td></tr>
+      </table>
+      <pre>{
+  <span class="key">"name"</span>:      <span class="str">"گوشی هوشمند"</span>,
+  <span class="key">"slug"</span>:      <span class="str">"smartphones"</span>,
+  <span class="key">"parent_id"</span>: <span class="num">2</span>,
+  <span class="key">"is_active"</span>: <span class="bool">true</span>,
+  <span class="key">"media_id"</span>:  <span class="num">18</span>
+}</pre>
+      <div class="block-label">Response — 201 Created</div>
+      <pre>{
+  <span class="key">"data"</span>: {
+    <span class="key">"id"</span>:        <span class="num">5</span>,
+    <span class="key">"name"</span>:      <span class="str">"گوشی هوشمند"</span>,
+    <span class="key">"slug"</span>:      <span class="str">"smartphones"</span>,
+    <span class="key">"is_active"</span>: <span class="bool">true</span>,
+    <span class="key">"parent_id"</span>: <span class="num">2</span>,
+    <span class="key">"image_url"</span>: <span class="str">"http://localhost:8000/storage/categories/phones.webp"</span>
+  }
+}</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method patch">PATCH</span>
+      <span class="endpoint-path">/catalog/categories/{id}</span>
+      <span class="badge admin">Requires catalog.category.update</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Partial update. Only fields you send are changed.</p>
+      <pre>{ <span class="key">"is_active"</span>: <span class="bool">false</span> }</pre>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{ <span class="key">"data"</span>: { <span class="comment">/* CategoryResource */</span> } }</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method delete">DELETE</span>
+      <span class="endpoint-path">/catalog/categories/{id}</span>
+      <span class="badge admin">Requires catalog.category.delete</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="block-label">Response — 204 No Content</div>
+      <pre><span class="comment">// Empty body</span></pre>
+    </div>
+  </div>
+
+
+  <!-- ═══ PRODUCTS ═══ -->
+  <h2 id="products">Catalog — Products</h2>
+  <p>Products can be <code>draft</code> (admin-only) or <code>published</code> (public). Public routes only return published products. Each product response includes a nested <code>images</code> gallery array and a <code>variants</code> array.</p>
+  <p>The <code>features</code> field is an ordered array of <code>{"title": "...", "value": "..."}</code> objects — useful for displaying product specification tables.</p>
+  <p>Price filters (<code>min_price</code> / <code>max_price</code>) target the product's <strong>default variant</strong> (<code>is_default: true</code>) only, so the comparison reflects the storefront display price rather than any secondary variant.</p>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/catalog/products</span>
+      <span class="badge">Public</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Paginated list of all published products. Supports optional filtering by category, price range, and full-text search. All query parameters are optional and can be combined freely.</p>
+      <div class="block-label">Query Parameters</div>
+      <table>
+        <tr><th>Param</th><th>Type</th><th>Description</th></tr>
+        <tr><td>per_page</td><td class="opt">optional integer</td><td>Items per page. 1–100. Default: 15.</td></tr>
+        <tr><td>page</td><td class="opt">optional integer</td><td>Page number. Default: 1.</td></tr>
+        <tr><td>category_id</td><td class="opt">optional integer</td><td>Filter by category ID. Must be a valid existing category — returns 422 otherwise.</td></tr>
+        <tr><td>min_price</td><td class="opt">optional integer</td><td>Minimum price in rials. Compares against the default variant's <code>base_price</code>. Must be ≥ 0.</td></tr>
+        <tr><td>max_price</td><td class="opt">optional integer</td><td>Maximum price in rials. Compares against the default variant's <code>base_price</code>. Must be ≥ 0.</td></tr>
+        <tr><td>search</td><td class="opt">optional string</td><td>Free-text search. Matches against <code>title</code> OR <code>description</code> (case-insensitive contains). Max 255 chars.</td></tr>
+      </table>
+      <div class="block-label">Example Requests</div>
+      <pre><span class="comment">// All published products (page 1, 15 per page)</span>
+GET /api/v1/catalog/products
+
+<span class="comment">// Search for "گوشی" with a price ceiling of 50,000,000 rials</span>
+GET /api/v1/catalog/products?search=گوشی&amp;max_price=50000000
+
+<span class="comment">// Products in category 5 priced between 10M and 100M rials</span>
+GET /api/v1/catalog/products?category_id=5&amp;min_price=10000000&amp;max_price=100000000</pre>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{
+  <span class="key">"data"</span>: [
+    {
+      <span class="key">"id"</span>:                <span class="num">101</span>,
+      <span class="key">"title"</span>:             <span class="str">"Samsung Galaxy S25 Ultra"</span>,
+      <span class="key">"slug"</span>:              <span class="str">"samsung-galaxy-s25-ultra"</span>,
+      <span class="key">"description"</span>:      <span class="str">"پیشرفته‌ترین گوشی سامسونگ با دوربین ۲۰۰ مگاپیکسلی و قلم S Pen."</span>,
+      <span class="key">"features"</span>:         [<span class="comment">/* array of {title, value} */</span>],
+      <span class="key">"status"</span>:            <span class="str">"published"</span>,
+      <span class="key">"category_id"</span>:       <span class="num">5</span>,
+      <span class="key">"primary_image_url"</span>: <span class="str">"http://localhost:8000/storage/products/s25-hero.webp"</span>,
+      <span class="key">"images"</span>:            [<span class="comment">/* array of gallery image objects */</span>],
+      <span class="key">"variants"</span>:          [<span class="comment">/* array of variant objects */</span>]
+    }
+  ],
+  <span class="key">"links"</span>: { <span class="comment">/* first, last, prev, next */</span> },
+  <span class="key">"meta"</span>:  { <span class="key">"current_page"</span>: <span class="num">1</span>, <span class="key">"last_page"</span>: <span class="num">3</span>, <span class="key">"per_page"</span>: <span class="num">15</span>, <span class="key">"total"</span>: <span class="num">38</span> }
+}</pre>
+      <div class="note"><strong>Price filter note:</strong> A product must have a default variant (<code>is_default: true</code>) for price filters to match it. Products with no variants are excluded when <code>min_price</code> or <code>max_price</code> is applied.</div>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/catalog/products/{id}</span>
+      <span class="badge">Public</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Returns a published product by ID with full gallery and variants.</p>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{
+  <span class="key">"data"</span>: {
+    <span class="key">"id"</span>:                <span class="num">101</span>,
+    <span class="key">"title"</span>:             <span class="str">"Samsung Galaxy S25 Ultra"</span>,
+    <span class="key">"slug"</span>:              <span class="str">"samsung-galaxy-s25-ultra"</span>,
+    <span class="key">"description"</span>:      <span class="str">"پیشرفته‌ترین گوشی سامسونگ با دوربین ۲۰۰ مگاپیکسلی و قلم S Pen."</span>,
+    <span class="key">"features"</span>: [
+      { <span class="key">"title"</span>: <span class="str">"پردازنده"</span>,   <span class="key">"value"</span>: <span class="str">"Snapdragon 8 Elite"</span> },
+      { <span class="key">"title"</span>: <span class="str">"باتری"</span>,      <span class="key">"value"</span>: <span class="str">"۵۰۰۰ mAh"</span> },
+      { <span class="key">"title"</span>: <span class="str">"صفحه‌نمایش"</span>, <span class="key">"value"</span>: <span class="str">"۶.۹ اینچ Dynamic AMOLED 2X"</span> },
+      { <span class="key">"title"</span>: <span class="str">"دوربین"</span>,     <span class="key">"value"</span>: <span class="str">"۲۰۰ + ۵۰ + ۱۰ + ۱۲ مگاپیکسل"</span> },
+      { <span class="key">"title"</span>: <span class="str">"رم"</span>,        <span class="key">"value"</span>: <span class="str">"۱۲ گیگابایت"</span> }
+    ],
+    <span class="key">"status"</span>:            <span class="str">"published"</span>,
+    <span class="key">"category_id"</span>:       <span class="num">5</span>,
+    <span class="key">"primary_image_url"</span>: <span class="str">"http://localhost:8000/storage/products/s25-hero.webp"</span>,
+    <span class="key">"images"</span>: [
+      { <span class="key">"id"</span>: <span class="num">34</span>, <span class="key">"media_id"</span>: <span class="num">22</span>, <span class="key">"url"</span>: <span class="str">"http://localhost:8000/storage/products/gallery/s25-front.webp"</span>, <span class="key">"sort_order"</span>: <span class="num">0</span> },
+      { <span class="key">"id"</span>: <span class="num">35</span>, <span class="key">"media_id"</span>: <span class="num">23</span>, <span class="key">"url"</span>: <span class="str">"http://localhost:8000/storage/products/gallery/s25-back.webp"</span>,  <span class="key">"sort_order"</span>: <span class="num">1</span> }
+    ],
+    <span class="key">"variants"</span>: [
+      {
+        <span class="key">"id"</span>:               <span class="num">201</span>,
+        <span class="key">"sku"</span>:             <span class="str">"S25U-TBK-256"</span>,
+        <span class="key">"is_default"</span>:     <span class="bool">true</span>,
+        <span class="key">"base_price"</span>:     <span class="num">89000000</span>,
+        <span class="key">"compare_at_price"</span>: <span class="num">95000000</span>,
+        <span class="key">"attributes"</span>:    { <span class="key">"رنگ"</span>: <span class="str">"مشکی تیتانیومی"</span>, <span class="key">"حافظه"</span>: <span class="str">"۲۵۶ گیگابایت"</span> },
+        <span class="key">"image_url"</span>:     <span class="null-val">null</span>
+      },
+      {
+        <span class="key">"id"</span>:               <span class="num">202</span>,
+        <span class="key">"sku"</span>:             <span class="str">"S25U-TBK-512"</span>,
+        <span class="key">"is_default"</span>:     <span class="bool">false</span>,
+        <span class="key">"base_price"</span>:     <span class="num">99000000</span>,
+        <span class="key">"compare_at_price"</span>: <span class="null-val">null</span>,
+        <span class="key">"attributes"</span>:    { <span class="key">"رنگ"</span>: <span class="str">"مشکی تیتانیومی"</span>, <span class="key">"حافظه"</span>: <span class="str">"۵۱۲ گیگابایت"</span> },
+        <span class="key">"image_url"</span>:     <span class="null-val">null</span>
+      }
+    ]
+  }
+}</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/catalog/products/slug/{slug}</span>
+      <span class="badge">Public</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Returns a published product by its URL slug. Use this for SEO-friendly product pages like <code>/products/samsung-galaxy-s25-ultra</code>. Same response shape as the ID endpoint.</p>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/catalog/categories/{category_id}/products</span>
+      <span class="badge">Public</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Paginated list of published products in a specific category. Supports the same price and search filters as the general product index — useful for filtering within a category browse page.</p>
+      <div class="block-label">Query Parameters</div>
+      <table>
+        <tr><th>Param</th><th>Type</th><th>Description</th></tr>
+        <tr><td>per_page</td><td class="opt">optional integer</td><td>1–100. Default: 15.</td></tr>
+        <tr><td>page</td><td class="opt">optional integer</td><td>Page number. Default: 1.</td></tr>
+        <tr><td>min_price</td><td class="opt">optional integer</td><td>Minimum price in rials (default variant). Must be ≥ 0.</td></tr>
+        <tr><td>max_price</td><td class="opt">optional integer</td><td>Maximum price in rials (default variant). Must be ≥ 0.</td></tr>
+        <tr><td>search</td><td class="opt">optional string</td><td>Free-text search on <code>title</code> or <code>description</code>. Max 255 chars.</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/catalog/products/{id}/admin</span>
+      <span class="badge admin">Requires catalog.product.view-admin</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Returns a product regardless of status (<code>draft</code> or <code>published</code>). Use in the admin panel to preview or edit unpublished products.</p>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/catalog/products</span>
+      <span class="badge admin">Requires catalog.product.create</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Creates a new product. Send as <code>application/json</code> when using <code>media_id</code>/<code>gallery_media_ids</code>. Send as <code>multipart/form-data</code> when attaching image files directly.</p>
+      <div class="block-label">Request Body Fields</div>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr><td>title</td><td class="req">required string</td><td>Product name. Max 255 chars.</td></tr>
+        <tr><td>slug</td><td class="opt">optional string</td><td>URL slug. Must be globally unique. Auto-generated from title if omitted.</td></tr>
+        <tr><td>description</td><td class="opt">optional string</td><td>Long-form description. Plain text or HTML.</td></tr>
+        <tr><td>features</td><td class="opt">optional array</td><td>Ordered array of <code>{"title":"...","value":"..."}</code> objects for the spec table.</td></tr>
+        <tr><td>status</td><td class="opt">optional string</td><td><code>draft</code> (default) or <code>published</code>.</td></tr>
+        <tr><td>category_id</td><td class="opt">optional integer</td><td>ID of the category this product belongs to.</td></tr>
+        <tr><td>primary_media_id</td><td class="opt">optional integer</td><td>Pre-uploaded media ID for the hero/thumbnail. Mutually exclusive with <code>primary_image</code>.</td></tr>
+        <tr><td>primary_image</td><td class="opt">optional file</td><td>Hero image file (inline upload). JPEG/PNG/WebP, max 4 MB. Mutually exclusive with <code>primary_media_id</code>.</td></tr>
+        <tr><td>gallery_media_ids</td><td class="opt">optional integer[]</td><td>Array of pre-uploaded media IDs to add to the gallery. Array index sets sort order. Mutually exclusive with <code>gallery</code>.</td></tr>
+        <tr><td>gallery</td><td class="opt">optional file[]</td><td>Gallery image files for inline upload (<code>gallery[0]</code>, <code>gallery[1]</code>, …). Mutually exclusive with <code>gallery_media_ids</code>.</td></tr>
+      </table>
+      <div class="block-label">Example — JSON with pre-uploaded images</div>
+      <pre>{
+  <span class="key">"title"</span>:           <span class="str">"Samsung Galaxy S25 Ultra"</span>,
+  <span class="key">"slug"</span>:            <span class="str">"samsung-galaxy-s25-ultra"</span>,
+  <span class="key">"description"</span>:    <span class="str">"پیشرفته‌ترین گوشی سامسونگ با دوربین ۲۰۰ مگاپیکسلی و قلم S Pen."</span>,
+  <span class="key">"features"</span>: [
+    { <span class="key">"title"</span>: <span class="str">"پردازنده"</span>,   <span class="key">"value"</span>: <span class="str">"Snapdragon 8 Elite"</span> },
+    { <span class="key">"title"</span>: <span class="str">"باتری"</span>,      <span class="key">"value"</span>: <span class="str">"۵۰۰۰ mAh"</span> },
+    { <span class="key">"title"</span>: <span class="str">"صفحه‌نمایش"</span>, <span class="key">"value"</span>: <span class="str">"۶.۹ اینچ Dynamic AMOLED 2X"</span> }
+  ],
+  <span class="key">"status"</span>:          <span class="str">"draft"</span>,
+  <span class="key">"category_id"</span>:     <span class="num">5</span>,
+  <span class="key">"primary_media_id"</span>: <span class="num">18</span>,
+  <span class="key">"gallery_media_ids"</span>: [<span class="num">22</span>, <span class="num">23</span>, <span class="num">24</span>]
+}</pre>
+      <div class="block-label">Response — 201 Created</div>
+      <pre>{ <span class="key">"data"</span>: { <span class="comment">/* full ProductResource — same shape as GET /catalog/products/{id} */</span> } }</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method patch">PATCH</span>
+      <span class="endpoint-path">/catalog/products/{id}</span>
+      <span class="badge admin">Requires catalog.product.update</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Partial update of a product. Only fields you send are changed. To clear <code>features</code>, send <code>"features": null</code>.</p>
+      <div class="note"><strong>Note:</strong> The PATCH endpoint does not manage gallery images. Use the dedicated <code>POST/DELETE /catalog/products/{id}/gallery</code> routes to add or remove gallery images on an existing product.</div>
+      <pre>{
+  <span class="key">"status"</span>: <span class="str">"published"</span>,
+  <span class="key">"features"</span>: [
+    { <span class="key">"title"</span>: <span class="str">"پردازنده"</span>, <span class="key">"value"</span>: <span class="str">"Snapdragon 8 Elite for Galaxy"</span> }
+  ]
+}</pre>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{ <span class="key">"data"</span>: { <span class="comment">/* full ProductResource */</span> } }</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method delete">DELETE</span>
+      <span class="endpoint-path">/catalog/products/{id}</span>
+      <span class="badge admin">Requires catalog.product.delete</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="block-label">Response — 204 No Content</div>
+      <pre><span class="comment">// Empty body</span></pre>
+    </div>
+  </div>
+
+
+  <!-- ═══ GALLERY ═══ -->
+  <h2 id="gallery">Catalog — Product Gallery Management</h2>
+  <p>These routes add or remove images from an existing product's gallery. Requires <code>catalog.product.update</code> permission.</p>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/catalog/products/{product_id}/gallery</span>
+      <span class="badge admin">Requires catalog.product.update</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Adds a single image to a product's gallery. Use a pre-uploaded <code>media_id</code> (JSON) or upload the file inline (multipart). These are mutually exclusive.</p>
+      <div class="block-label">Option A — JSON (pre-uploaded media)</div>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr><td>media_id</td><td class="req">required integer</td><td>ID of an already-uploaded media file. Mutually exclusive with <code>image</code>.</td></tr>
+        <tr><td>sort_order</td><td class="opt">optional integer</td><td>Display position in the gallery (0 = first). Default: 0.</td></tr>
+      </table>
+      <pre>{
+  <span class="key">"media_id"</span>:   <span class="num">25</span>,
+  <span class="key">"sort_order"</span>: <span class="num">2</span>
+}</pre>
+      <div class="block-label">Option B — multipart/form-data (inline upload)</div>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr><td>image</td><td class="req">required file</td><td>Image file. JPEG/PNG/WebP, max 4 MB. Mutually exclusive with <code>media_id</code>.</td></tr>
+        <tr><td>sort_order</td><td class="opt">optional integer</td><td>Display position. Default: 0.</td></tr>
+      </table>
+      <div class="block-label">Response — 201 Created</div>
+      <pre>{
+  <span class="key">"data"</span>: {
+    <span class="key">"id"</span>:         <span class="num">36</span>,
+    <span class="key">"media_id"</span>:   <span class="num">25</span>,
+    <span class="key">"url"</span>:        <span class="str">"http://localhost:8000/storage/products/gallery/s25-box.webp"</span>,
+    <span class="key">"sort_order"</span>: <span class="num">2</span>
+  }
+}</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method delete">DELETE</span>
+      <span class="endpoint-path">/catalog/products/{product_id}/gallery/{image_id}</span>
+      <span class="badge admin">Requires catalog.product.update</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Removes a gallery image. The <code>image_id</code> is the gallery entry ID from <code>images[].id</code> in the product response — not the media ID.</p>
+      <div class="block-label">Response — 204 No Content</div>
+      <pre><span class="comment">// Empty body</span></pre>
+    </div>
+  </div>
+
+
+  <!-- ═══ VARIANTS ═══ -->
+  <h2 id="variants">Catalog — Product Variants</h2>
+  <p>Variants are the purchasable options of a product (e.g. color/size combinations). Each variant has a unique SKU and a price in rials. Exactly one variant per product has <code>is_default: true</code> — this is the variant shown by default.</p>
+  <div class="warn"><strong>Prices are integers in rials.</strong> Never send floats. Send <code>"base_price": 89000000</code> for 89,000,000 rials (8,900,000 tomans).</div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/catalog/variants/{variant_id}</span>
+      <span class="badge">Public</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{
+  <span class="key">"data"</span>: {
+    <span class="key">"id"</span>:               <span class="num">201</span>,
+    <span class="key">"sku"</span>:             <span class="str">"S25U-TBK-256"</span>,
+    <span class="key">"is_default"</span>:     <span class="bool">true</span>,
+    <span class="key">"base_price"</span>:     <span class="num">89000000</span>,
+    <span class="key">"compare_at_price"</span>: <span class="num">95000000</span>,
+    <span class="key">"attributes"</span>: {
+      <span class="key">"رنگ"</span>:    <span class="str">"مشکی تیتانیومی"</span>,
+      <span class="key">"حافظه"</span>: <span class="str">"۲۵۶ گیگابایت"</span>
+    },
+    <span class="key">"image_url"</span>: <span class="null-val">null</span>
+  }
+}</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/catalog/variants/sku/{sku}</span>
+      <span class="badge">Public</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Look up a variant directly by its SKU. Useful in cart/checkout flows where you have the SKU stored. Same response shape as the ID endpoint.</p>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/catalog/products/{product_id}/variants</span>
+      <span class="badge admin">Requires catalog.variant.create</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="block-label">Request Body</div>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr><td>sku</td><td class="req">required string</td><td>Stock Keeping Unit — must be globally unique across all products. Max 255 chars.</td></tr>
+        <tr><td>base_price</td><td class="req">required integer</td><td>Selling price in rials. Must be ≥ 0. No floats.</td></tr>
+        <tr><td>compare_at_price</td><td class="opt">optional integer</td><td>Original/crossed-out price in rials. Used for showing discounts. Must be ≥ 0.</td></tr>
+        <tr><td>is_default</td><td class="opt">optional boolean</td><td>Set to <code>true</code> to make this the default variant. Automatically unsets the current default.</td></tr>
+        <tr><td>attributes</td><td class="opt">optional object</td><td>Free-form key-value pairs for display. E.g. <code>{"رنگ": "آبی", "سایز": "XL"}</code>.</td></tr>
+        <tr><td>media_id</td><td class="opt">optional integer</td><td>Pre-uploaded media ID for a variant-specific image. Mutually exclusive with <code>variant_image</code>.</td></tr>
+        <tr><td>variant_image</td><td class="opt">optional file</td><td>Variant image file (inline upload). JPEG/PNG/WebP, max 4 MB. Mutually exclusive with <code>media_id</code>.</td></tr>
+      </table>
+      <pre>{
+  <span class="key">"sku"</span>:             <span class="str">"S25U-TBK-256"</span>,
+  <span class="key">"base_price"</span>:     <span class="num">89000000</span>,
+  <span class="key">"compare_at_price"</span>: <span class="num">95000000</span>,
+  <span class="key">"is_default"</span>:     <span class="bool">true</span>,
+  <span class="key">"attributes"</span>: {
+    <span class="key">"رنگ"</span>:    <span class="str">"مشکی تیتانیومی"</span>,
+    <span class="key">"حافظه"</span>: <span class="str">"۲۵۶ گیگابایت"</span>
+  },
+  <span class="key">"media_id"</span>: <span class="num">30</span>
+}</pre>
+      <div class="block-label">Response — 201 Created</div>
+      <pre>{ <span class="key">"data"</span>: { <span class="comment">/* ProductVariantResource */</span> } }</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method patch">PATCH</span>
+      <span class="endpoint-path">/catalog/variants/{variant_id}</span>
+      <span class="badge admin">Requires catalog.variant.update</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Partial update. Only fields you send are changed.</p>
+      <pre>{
+  <span class="key">"base_price"</span>: <span class="num">85000000</span>,
+  <span class="key">"is_default"</span>: <span class="bool">true</span>
+}</pre>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{ <span class="key">"data"</span>: { <span class="comment">/* ProductVariantResource */</span> } }</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method delete">DELETE</span>
+      <span class="endpoint-path">/catalog/variants/{variant_id}</span>
+      <span class="badge admin">Requires catalog.variant.delete</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="block-label">Response — 204 No Content</div>
+      <pre><span class="comment">// Empty body</span></pre>
+    </div>
+  </div>
+
+
+  <!-- ═══ INVENTORY ═══ -->
+  <h2 id="inventory">Inventory — Stock</h2>
+  <p>Inventory tracks stock levels per SKU. The SKU is the exact same string from the Catalog Variant — always match it precisely.</p>
+
+  <div class="note">
+    <strong>Three stock numbers:</strong><br>
+    <strong>physical_quantity</strong> — total units physically in storage.<br>
+    <strong>reserved_quantity</strong> — units locked by active (unpaid) orders.<br>
+    <strong>available_quantity</strong> = physical − reserved — the number customers can actually add to cart. Always use this for "in stock" checks.
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/inventory/sku/{sku}</span>
+      <span class="badge">Public</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Returns stock for a single SKU. Returns <strong>404</strong> if no stock record exists yet (product never stocked).</p>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{
+  <span class="key">"sku"</span>:                <span class="str">"S25U-TBK-256"</span>,
+  <span class="key">"available_quantity"</span>: <span class="num">47</span>,
+  <span class="key">"physical_quantity"</span>:  <span class="num">50</span>,
+  <span class="key">"reserved_quantity"</span>:  <span class="num">3</span>
+}</pre>
+      <div class="block-label">Error — 404 Not Found</div>
+      <pre>{ <span class="key">"message"</span>: <span class="str">"Stock record not found."</span> }</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/inventory/batch</span>
+      <span class="badge">Public</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Look up stock for multiple SKUs in one request. The response is a plain object keyed by SKU. SKUs with no stock record are silently omitted. Use this on a cart page or category listing to show stock indicators without N+1 requests.</p>
+      <div class="block-label">Request Body</div>
+      <pre>{
+  <span class="key">"skus"</span>: [<span class="str">"S25U-TBK-256"</span>, <span class="str">"S25U-TBK-512"</span>, <span class="str">"IPHONE-16-BLK-128"</span>]
+}</pre>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{
+  <span class="key">"S25U-TBK-256"</span>: {
+    <span class="key">"sku"</span>:                <span class="str">"S25U-TBK-256"</span>,
+    <span class="key">"available_quantity"</span>: <span class="num">47</span>,
+    <span class="key">"physical_quantity"</span>:  <span class="num">50</span>,
+    <span class="key">"reserved_quantity"</span>:  <span class="num">3</span>
+  },
+  <span class="key">"S25U-TBK-512"</span>: {
+    <span class="key">"sku"</span>:                <span class="str">"S25U-TBK-512"</span>,
+    <span class="key">"available_quantity"</span>: <span class="num">12</span>,
+    <span class="key">"physical_quantity"</span>:  <span class="num">12</span>,
+    <span class="key">"reserved_quantity"</span>:  <span class="num">0</span>
+  }
+  <span class="comment">// "IPHONE-16-BLK-128" omitted — no stock record</span>
+}</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/inventory/adjust</span>
+      <span class="badge admin">Requires inventory.stock.manage</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Adjusts stock for a SKU and appends an immutable ledger entry. Creates the stock record automatically if it doesn't exist yet.</p>
+      <div class="block-label">Request Body</div>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr><td>sku</td><td class="req">required string</td><td>The SKU to adjust. Must match a catalog variant exactly.</td></tr>
+        <tr><td>quantity_change</td><td class="req">required integer</td><td>Units to add (positive) or remove (negative). Cannot be 0.</td></tr>
+        <tr><td>type</td><td class="req">required string</td><td>Reason. One of: <code>restock</code>, <code>adjustment</code>, <code>return</code>.</td></tr>
+        <tr><td>notes</td><td class="opt">optional string</td><td>Free-text note stored on the ledger entry. E.g. invoice number or reason.</td></tr>
+      </table>
+      <div class="block-label">Example — Receiving new stock</div>
+      <pre>{
+  <span class="key">"sku"</span>:             <span class="str">"S25U-TBK-256"</span>,
+  <span class="key">"quantity_change"</span>: <span class="num">100</span>,
+  <span class="key">"type"</span>:            <span class="str">"restock"</span>,
+  <span class="key">"notes"</span>:           <span class="str">"فاکتور شماره INV-2026-0088 — انبار تهران"</span>
+}</pre>
+      <div class="block-label">Example — Damaged goods correction</div>
+      <pre>{
+  <span class="key">"sku"</span>:             <span class="str">"S25U-TBK-256"</span>,
+  <span class="key">"quantity_change"</span>: <span class="num">-2</span>,
+  <span class="key">"type"</span>:            <span class="str">"adjustment"</span>,
+  <span class="key">"notes"</span>:           <span class="str">"دو دستگاه آسیب‌دیده در حین حمل‌ونقل"</span>
+}</pre>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{
+  <span class="key">"sku"</span>:                <span class="str">"S25U-TBK-256"</span>,
+  <span class="key">"available_quantity"</span>: <span class="num">145</span>,
+  <span class="key">"physical_quantity"</span>:  <span class="num">148</span>,
+  <span class="key">"reserved_quantity"</span>:  <span class="num">3</span>
+}</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/inventory/sku/{sku}/ledger</span>
+      <span class="badge admin">Requires inventory.ledger.view</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Paginated history of all stock movements for a SKU, newest first. The ledger is append-only and immutable.</p>
+      <p><strong>Entry types:</strong> <code>restock</code>, <code>adjustment</code>, <code>return</code> (admin-initiated) — <code>allocation</code>, <code>sale</code>, <code>release</code> (order lifecycle, set by the system).</p>
+      <div class="block-label">Query Parameters</div>
+      <table><tr><th>Param</th><th>Type</th><th>Description</th></tr>
+        <tr><td>per_page</td><td class="opt">optional</td><td>1–100. Default: 15.</td></tr>
+        <tr><td>page</td><td class="opt">optional</td><td>Page number. Default: 1.</td></tr>
+      </table>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{
+  <span class="key">"data"</span>: [
+    {
+      <span class="key">"id"</span>:              <span class="num">88</span>,
+      <span class="key">"sku"</span>:             <span class="str">"S25U-TBK-256"</span>,
+      <span class="key">"type"</span>:            <span class="str">"restock"</span>,
+      <span class="key">"quantity_change"</span>: <span class="num">100</span>,
+      <span class="key">"reference_type"</span>:  <span class="null-val">null</span>,
+      <span class="key">"reference_id"</span>:    <span class="null-val">null</span>,
+      <span class="key">"notes"</span>:           <span class="str">"فاکتور شماره INV-2026-0088"</span>,
+      <span class="key">"created_at"</span>:      <span class="str">"2026-06-16T09:00:00.000000Z"</span>
+    },
+    {
+      <span class="key">"id"</span>:              <span class="num">91</span>,
+      <span class="key">"sku"</span>:             <span class="str">"S25U-TBK-256"</span>,
+      <span class="key">"type"</span>:            <span class="str">"allocation"</span>,
+      <span class="key">"quantity_change"</span>: <span class="num">-1</span>,
+      <span class="key">"reference_type"</span>:  <span class="str">"order"</span>,
+      <span class="key">"reference_id"</span>:    <span class="num">507</span>,
+      <span class="key">"notes"</span>:           <span class="null-val">null</span>,
+      <span class="key">"created_at"</span>:      <span class="str">"2026-06-16T11:45:00.000000Z"</span>
+    }
+  ],
+  <span class="key">"links"</span>: { <span class="comment">/* ... */</span> },
+  <span class="key">"meta"</span>:  { <span class="comment">/* ... */</span> }
+}</pre>
+    </div>
+  </div>
+
+</main>
+</body>
+</html>

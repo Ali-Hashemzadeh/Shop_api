@@ -12,6 +12,7 @@ Route::middleware('api')->prefix('api/v1/catalog')->group(function () {
     Route::get('/categories/roots', [CategoriesController::class, 'indexRoots']);
     Route::get('/categories/{id}', [CategoriesController::class, 'show']);
 
+    Route::get('/products', [ProductsController::class, 'index']);
     Route::get('/products/slug/{slug}', [ProductsController::class, 'showBySlug']);
     Route::get('/products/{id}', [ProductsController::class, 'show']);
     Route::get('/categories/{categoryId}/products', [ProductsController::class, 'indexByCategory']);

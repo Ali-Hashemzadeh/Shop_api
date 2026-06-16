@@ -255,6 +255,13 @@ class CatalogAuthorizationTest extends TestCase
     }
 
     /** @test */
+    public function public_product_index_route_does_not_require_authentication(): void
+    {
+        $this->getJson('/api/v1/catalog/products')
+            ->assertOk();
+    }
+
+    /** @test */
     public function public_variant_show_route_does_not_require_authentication(): void
     {
         $product = Product::create(['title' => 'Widget', 'slug' => 'widget', 'status' => 'published']);

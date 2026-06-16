@@ -101,16 +101,45 @@ class EloquentCatalogManager implements CatalogManagerInterface
         return $product ? $this->hydrateProduct($product) : null;
     }
 
-    public function getProductsByCategory(int $categoryId, int $perPage = 15): LengthAwarePaginator
+    public function getProductsByCategory(int $categoryId, array $filters = [], int $perPage = 15): LengthAwarePaginator
     {
-        $paginator = Product::query()
-            ->where('status', 'published')
-            ->where('category_id', $categoryId)
-            ->with(['images', 'variants'])
-            ->paginate($perPage);
+        return $this->getProducts(array_merge($filters, ['category_id' => $categoryId]), $perPage);
+    }
 
-        // Batch every media lookup for the page into a single fetch, rather than
-        // letting each product hydrate its own map (one round-trip per product).
+    public function getProducts(array $filters = [], int $perPage = 15): LengthAwarePaginator
+    {
+        $query = Product::query()
+            ->where('status', 'published')
+            ->with(['images', 'variants']);
+
+        if (isset($filters['category_id'])) {
+            $query->where('category_id', (int) $filters['category_id']);
+        }
+
+        if (isset($filters['min_price'])) {
+            $query->whereHas('variants', fn ($q) => $q
+                ->where('is_default', true)
+                ->where('base_price', '>=', (int) $filters['min_price'])
+            );
+        }
+
+        if (isset($filters['max_price'])) {
+            $query->whereHas('variants', fn ($q) => $q
+                ->where('is_default', true)
+                ->where('base_price', '<=', (int) $filters['max_price'])
+            );
+        }
+
+        if (isset($filters['search']) && $filters['search'] !== '') {
+            $term = '%'.$filters['search'].'%';
+            $query->where(fn ($q) => $q
+                ->where('title', 'like', $term)
+                ->orWhere('description', 'like', $term)
+            );
+        }
+
+        $paginator = $query->paginate($perPage);
+
         $mediaIds = $paginator->getCollection()
             ->flatMap(fn (Product $p) => $this->productMediaIds($p))
             ->unique()

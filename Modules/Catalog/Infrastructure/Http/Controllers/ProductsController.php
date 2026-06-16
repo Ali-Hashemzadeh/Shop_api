@@ -93,13 +93,30 @@ class ProductsController extends Controller
         return response()->json(null, 204);
     }
 
+    public function index(IndexProductsRequest $request): AnonymousResourceCollection
+    {
+        $filters = array_filter([
+            'category_id' => $request->integer('category_id') ?: null,
+            'min_price' => $request->has('min_price') ? $request->integer('min_price') : null,
+            'max_price' => $request->has('max_price') ? $request->integer('max_price') : null,
+            'search' => $request->string('search')->trim()->toString() ?: null,
+        ], fn ($v) => $v !== null);
+
+        return ProductResource::collection(
+            $this->catalog->getProducts($filters, $request->integer('per_page', 15))
+        );
+    }
+
     public function indexByCategory(int $categoryId, IndexProductsRequest $request): AnonymousResourceCollection
     {
-        $products = $this->catalog->getProductsByCategory(
-            $categoryId,
-            $request->integer('per_page', 15)
-        );
+        $filters = array_filter([
+            'min_price' => $request->has('min_price') ? $request->integer('min_price') : null,
+            'max_price' => $request->has('max_price') ? $request->integer('max_price') : null,
+            'search' => $request->string('search')->trim()->toString() ?: null,
+        ], fn ($v) => $v !== null);
 
-        return ProductResource::collection($products);
+        return ProductResource::collection(
+            $this->catalog->getProductsByCategory($categoryId, $filters, $request->integer('per_page', 15))
+        );
     }
 }
