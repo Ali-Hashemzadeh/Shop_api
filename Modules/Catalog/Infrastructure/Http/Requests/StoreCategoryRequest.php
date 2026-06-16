@@ -2,8 +2,10 @@
 
 namespace Modules\Catalog\Infrastructure\Http\Requests;
 
+use Dedoc\Scramble\Attributes\BodyParameter;
 use Illuminate\Foundation\Http\FormRequest;
 
+#[BodyParameter('image', description: 'Category banner image (JPEG/PNG/WebP, max 4 MB). Send as multipart/form-data. Mutually exclusive with media_id.', type: 'string', format: 'binary', required: false, infer: false)]
 class StoreCategoryRequest extends FormRequest
 {
     public function authorize(): bool

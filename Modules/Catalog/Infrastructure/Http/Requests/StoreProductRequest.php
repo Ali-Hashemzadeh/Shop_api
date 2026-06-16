@@ -2,8 +2,11 @@
 
 namespace Modules\Catalog\Infrastructure\Http\Requests;
 
+use Dedoc\Scramble\Attributes\BodyParameter;
 use Illuminate\Foundation\Http\FormRequest;
 
+#[BodyParameter('primary_image', description: 'Hero/thumbnail image for the product (JPEG/PNG/WebP, max 4 MB). Send as multipart/form-data. Mutually exclusive with primary_media_id.', type: 'string', format: 'binary', required: false, infer: false)]
+#[BodyParameter('gallery', description: 'Ordered gallery images. Send each file as a separate multipart field: gallery[0]=@img1.jpg, gallery[1]=@img2.jpg, … (JPEG/PNG/WebP, max 4 MB each). Array index sets the display sort order.', type: 'string', format: 'binary', required: false, infer: false)]
 class StoreProductRequest extends FormRequest
 {
     public function authorize(): bool

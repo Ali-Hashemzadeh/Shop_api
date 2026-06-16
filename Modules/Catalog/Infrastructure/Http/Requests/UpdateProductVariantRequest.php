@@ -2,9 +2,11 @@
 
 namespace Modules\Catalog\Infrastructure\Http\Requests;
 
+use Dedoc\Scramble\Attributes\BodyParameter;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
+#[BodyParameter('variant_image', description: 'Replace the variant image (JPEG/PNG/WebP, max 4 MB). Send as multipart/form-data. Mutually exclusive with media_id.', type: 'string', format: 'binary', required: false, infer: false)]
 class UpdateProductVariantRequest extends FormRequest
 {
     public function authorize(): bool

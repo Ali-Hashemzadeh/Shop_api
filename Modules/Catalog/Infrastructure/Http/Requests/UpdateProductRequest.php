@@ -2,9 +2,11 @@
 
 namespace Modules\Catalog\Infrastructure\Http\Requests;
 
+use Dedoc\Scramble\Attributes\BodyParameter;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
+#[BodyParameter('primary_image', description: 'Replace the hero image (JPEG/PNG/WebP, max 4 MB). Send as multipart/form-data. Mutually exclusive with primary_media_id.', type: 'string', format: 'binary', required: false, infer: false)]
 class UpdateProductRequest extends FormRequest
 {
     public function authorize(): bool

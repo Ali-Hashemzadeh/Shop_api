@@ -103,17 +103,28 @@ class EloquentCatalogManager implements CatalogManagerInterface
 
     public function getProductsByCategory(int $categoryId, int $perPage = 15): LengthAwarePaginator
     {
-        return Product::query()
+        $paginator = Product::query()
             ->where('status', 'published')
             ->where('category_id', $categoryId)
             ->with(['images', 'variants'])
-            ->paginate($perPage)
-            ->through(fn (Product $p) => $this->hydrateProduct($p));
+            ->paginate($perPage);
+
+        // Batch every media lookup for the page into a single fetch, rather than
+        // letting each product hydrate its own map (one round-trip per product).
+        $mediaIds = $paginator->getCollection()
+            ->flatMap(fn (Product $p) => $this->productMediaIds($p))
+            ->unique()
+            ->values()
+            ->all();
+
+        $mediaMap = $this->buildMediaMap($mediaIds);
+
+        return $paginator->through(fn (Product $p) => $this->hydrateProduct($p, $mediaMap));
     }
 
     public function createProduct(array $data): ProductDTO
     {
-        $product         = Product::query()->create($data);
+        $product = Product::query()->create($data);
         $primaryImageUrl = $product->primary_media_id
             ? $this->resolveUrl($product->primary_media_id)
             : null;
@@ -125,7 +136,7 @@ class EloquentCatalogManager implements CatalogManagerInterface
     {
         ProductImage::query()->create([
             'product_id' => $productId,
-            'media_id'   => $mediaId,
+            'media_id' => $mediaId,
             'sort_order' => $sortOrder,
         ]);
     }
@@ -198,17 +209,11 @@ class EloquentCatalogManager implements CatalogManagerInterface
 
     // ── Private helpers ───────────────────────────────────────────────────────
 
-    private function hydrateProduct(Product $product): ProductDTO
+    private function hydrateProduct(Product $product, ?Collection $mediaMap = null): ProductDTO
     {
-        $mediaIds = collect([$product->primary_media_id])
-            ->merge($product->images->pluck('media_id'))
-            ->merge($product->variants->pluck('media_id'))
-            ->filter()
-            ->unique()
-            ->values()
-            ->all();
-
-        $mediaMap = $this->buildMediaMap($mediaIds);
+        // Single-item callers omit the map and get one built for this product;
+        // list callers pass a shared, page-wide map built in a single fetch.
+        $mediaMap ??= $this->buildMediaMap($this->productMediaIds($product));
 
         $primaryImageUrl = $product->primary_media_id
             ? $mediaMap->get($product->primary_media_id)?->url
@@ -229,6 +234,20 @@ class EloquentCatalogManager implements CatalogManagerInterface
             ->all();
 
         return ProductDTO::fromModel($product, $primaryImageUrl, $images, $variants);
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    private function productMediaIds(Product $product): array
+    {
+        return collect([$product->primary_media_id])
+            ->merge($product->images->pluck('media_id'))
+            ->merge($product->variants->pluck('media_id'))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
     }
 
     private function buildMediaMap(array $ids): Collection

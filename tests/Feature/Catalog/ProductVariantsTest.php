@@ -18,7 +18,7 @@ class ProductVariantsTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        Storage::fake();
+        Storage::fake('public');
         $this->seedIdentityRolesAndPermissions();
         $this->seedCatalogPermissions();
         $this->actingAsAdmin();
