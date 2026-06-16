@@ -6,7 +6,7 @@ namespace Modules\Inventory\Infrastructure\Http\Controllers;
 
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
+use Modules\Inventory\Infrastructure\Http\Requests\IndexLedgerRequest;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Routing\Controller;
 use Modules\Inventory\Application\Actions\UpdateStockAction;
@@ -62,7 +62,7 @@ class InventoryController extends Controller
         return response()->json(new InventoryStockResource($dto));
     }
 
-    public function ledger(string $sku, Request $request): AnonymousResourceCollection
+    public function ledger(string $sku, IndexLedgerRequest $request): AnonymousResourceCollection
     {
         $this->authorize('viewLedger', InventoryStock::class);
 

@@ -233,7 +233,7 @@ tests/
 | Identity | Complete |
 | Media | Complete |
 | Catalog | Complete |
-| Inventory | Planned |
+| Inventory | Complete |
 | Order | Planned |
 | Payment | Planned |
 
