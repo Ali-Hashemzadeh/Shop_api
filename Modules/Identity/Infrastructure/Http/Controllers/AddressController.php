@@ -68,6 +68,7 @@ class AddressController extends Controller
     public function update(UpdateAddressRequest $request, Address $address, UpdateAddress $action): JsonResponse
     {
         $this->authorize('update', $address);
+
         return response()->json([
             'message' => 'Address updated successfully.',
             'data' => new AddressResource($action->handle($address, $request->validated())),

@@ -2,10 +2,9 @@
 
 namespace Modules\Identity\Infrastructure\Persistence\Repositories;
 
-use Modules\Identity\Domain\Models\User;
 use Illuminate\Support\Collection;
 use Modules\Identity\Domain\Models\Address;
-
+use Modules\Identity\Domain\Models\User;
 
 class EloquentAddressRepository implements AddressRepositoryInterface
 {

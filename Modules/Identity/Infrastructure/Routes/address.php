@@ -21,4 +21,3 @@ Route::prefix('admin')->group(function () {
         Route::delete('/{address}', [AdminAddressController::class, 'destroy']);
     });
 });
-

@@ -27,7 +27,6 @@ class LocationSeeder extends Seeder
 
             unset($provinceData['id']);
 
-
             $province = Province::firstOrCreate([
                 'name' => $provinceData['name'],
             ]);

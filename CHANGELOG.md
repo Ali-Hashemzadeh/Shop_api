@@ -2,6 +2,26 @@
 
 ## [Unreleased](https://github.com/laravel/laravel/compare/v12.12.1...12.x)
 
+### Identity Module — Passwordless OTP Authentication
+
+**Replaced password-based register/login with a unified phone OTP flow (sign-up == login).**
+
+#### Added
+- Migration `2026_06_15_120000_refactor_users_table_for_otp_auth`: `password` and `name` made nullable; added `otp_code` (stored hashed, hidden), `otp_expires_at` (datetime), and a loose FK-free `media_id` profile-image column.
+- `POST /api/v1/otp/request` — body `phone` (`09xxxxxxxxx`) + optional `name`. Finds-or-creates the user (assigns `customer` role on first contact), generates a numeric code, stores its hash with a TTL, and dispatches it. Returns `200 {message, expires_in}`.
+- `POST /api/v1/otp/verify` — body `phone`, `code`, `device_name`. Validates presence/expiry/hash, consumes the single-use code, and mints a Sanctum token. Returns `200 {message, user, token}`; `422` on `code` otherwise.
+- `OtpSenderInterface` delivery boundary, bound to a log-only `LogOtpSender` placeholder until the SMS web service is connected.
+- `RequestOtp` / `VerifyOtp` application actions, `RequestOtpRequest` / `VerifyOtpRequest`.
+- `config/identity.php` → `otp.length` (default 5), `otp.ttl_minutes` (default 2); `.env.example` keys `OTP_LENGTH`, `OTP_TTL_MINUTES`.
+- `AuthControllerTest` rewritten — 10 feature tests covering create-on-request, no-duplicate, invalid phone, verify+token, wrong/expired/unknown code, single-use replay protection, me, and logout.
+
+#### Removed
+- Password endpoints and supporting classes: `RegisterUser`, `LoginUserWithPassword` actions and `RegisterRequest`, `LoginRequest` form requests.
+
+**Result: test suite is 148/148 green.**
+
+---
+
 ### Identity Module — Bug fixes & test alignment
 
 #### Fixed

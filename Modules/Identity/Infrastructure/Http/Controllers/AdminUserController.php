@@ -19,7 +19,6 @@ class AdminUserController extends Controller
 {
     use AuthorizesRequests;
 
-
     /**
      * @throws AuthorizationException
      */

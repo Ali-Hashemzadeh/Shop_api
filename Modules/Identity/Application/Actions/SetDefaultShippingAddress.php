@@ -7,13 +7,11 @@ use Modules\Identity\Domain\Models\Address;
 use Modules\Identity\Domain\Models\User;
 use Modules\Identity\Infrastructure\Persistence\Repositories\AddressRepositoryInterface;
 
-
 class SetDefaultShippingAddress
 {
     public function __construct(
         private readonly AddressRepositoryInterface $addresses
-    ) {
-    }
+    ) {}
 
     public function handle(User $user, Address $address): Address
     {

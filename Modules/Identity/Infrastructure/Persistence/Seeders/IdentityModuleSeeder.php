@@ -14,7 +14,7 @@ class IdentityModuleSeeder extends Seeder
         $this->call([
             RolesAndPermissionsSeeder::class,
             DefaultUsersSeeder::class,
-            LocationSeeder::class
+            LocationSeeder::class,
         ]);
 
     }

@@ -2,8 +2,8 @@
 
 use Illuminate\Support\Facades\Route;
 use Modules\Identity\Infrastructure\Http\Controllers\AdminAddressController;
-use Modules\Identity\Infrastructure\Http\Controllers\ProfileController;
 use Modules\Identity\Infrastructure\Http\Controllers\AdminUserController;
+use Modules\Identity\Infrastructure\Http\Controllers\ProfileController;
 
 Route::prefix('profile')->group(function () {
     Route::get('/', [ProfileController::class, 'showMe']);
@@ -20,4 +20,3 @@ Route::prefix('admin')->group(function () {
         Route::delete('/{user}', [AdminUserController::class, 'destroy']);
     });
 });
-

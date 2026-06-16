@@ -6,22 +6,17 @@ use App\Http\Controllers\Controller;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
+use Modules\Identity\Application\Actions\ShowMyAddresses;
 use Modules\Identity\Application\Actions\ShowProfile;
 use Modules\Identity\Application\Actions\UpdateProfile;
-use Modules\Identity\Application\Actions\ShowMyAddresses;
-use Modules\Identity\Domain\Models\User;
-use Modules\Identity\Infrastructure\Http\Requests\ListProfileRequest;
 use Modules\Identity\Infrastructure\Http\Requests\ShowProfileRequest;
 use Modules\Identity\Infrastructure\Http\Requests\UpdateProfileRequest;
 use Modules\Identity\Infrastructure\Http\Resources\AddressResource;
 use Modules\Identity\Infrastructure\Http\Resources\UserResource;
-use Modules\Identity\Infrastructure\Persistence\Repositories\AddressRepositoryInterface;
-use Modules\Identity\Infrastructure\Persistence\Repositories\UserRepositoryInterface;
 
 class ProfileController extends Controller
 {
     use AuthorizesRequests;
-
 
     /**
      * @throws AuthorizationException
@@ -36,8 +31,6 @@ class ProfileController extends Controller
             'data' => new UserResource($user),
         ]);
     }
-
-
 
     /**
      * @throws AuthorizationException
@@ -54,7 +47,6 @@ class ProfileController extends Controller
         ]);
     }
 
-
     /**
      * @throws AuthorizationException
      */
@@ -63,10 +55,7 @@ class ProfileController extends Controller
         $this->authorize('viewAddresses', $request->user());
 
         return response()->json([
-            'data' => AddressResource::collection($action->handle($request->user()))
+            'data' => AddressResource::collection($action->handle($request->user())),
         ]);
     }
-
-
-
 }

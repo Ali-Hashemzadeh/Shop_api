@@ -7,13 +7,11 @@ use Modules\Identity\Domain\Models\Address;
 use Modules\Identity\Domain\Models\User;
 use Modules\Identity\Infrastructure\Persistence\Repositories\AddressRepositoryInterface;
 
-
 class CreateAddress
 {
     public function __construct(
         private readonly AddressRepositoryInterface $addresses
-    ) {
-    }
+    ) {}
 
     public function handle(User $user, array $data): Address
     {

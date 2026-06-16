@@ -6,13 +6,11 @@ use Illuminate\Support\Facades\DB;
 use Modules\Identity\Domain\Models\Address;
 use Modules\Identity\Infrastructure\Persistence\Repositories\AddressRepositoryInterface;
 
-
 class UpdateAddress
 {
     public function __construct(
         private readonly AddressRepositoryInterface $addresses
-    ) {
-    }
+    ) {}
 
     public function handle(Address $address, array $data): Address
     {

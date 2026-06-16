@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class City extends Model
 {
     use HasFactory;
+
     protected $fillable = ['province_id', 'name'];
 
     public function province(): BelongsTo

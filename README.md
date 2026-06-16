@@ -66,11 +66,12 @@ Every Action and Repository method that mutates state has matching feature tests
 ## Modules
 
 ### Identity (Complete)
-Handles authentication, user profiles, multi-role RBAC, shipping provinces/cities, and user delivery addresses.
+Handles passwordless OTP authentication, user profiles, multi-role RBAC, shipping provinces/cities, and user delivery addresses.
 
 - **Key entities:** `User`, `Address`, `Province`, `City`
 - **Public contract:** `IdentityManagerInterface::isAdmin(int $userId): bool` — the only authorized way for other modules to check user privilege without importing Identity's models.
-- **Auth pattern:** Sanctum tokens + Spatie roles (`admin`, `customer`)
+- **Auth pattern:** Passwordless OTP over Sanctum tokens + Spatie roles (`admin`, `customer`). `POST /api/v1/otp/request` (phone `09xxxxxxxxx`, optional `name`) finds-or-creates the user and sends a hashed, short-TTL code; `POST /api/v1/otp/verify` (phone, code, device_name) consumes the single-use code and mints a token. Sign-up and login are the same flow.
+- **OTP delivery:** swappable `OtpSenderInterface`, bound to a log-only `LogOtpSender` placeholder until the SMS gateway is connected. Tunables in `config/identity.php` → `otp.length`, `otp.ttl_minutes`.
 
 ### Media (Complete)
 Lightweight, high-performance file upload handler and storage ledger.
@@ -86,6 +87,7 @@ Controls the storefront presentation layer: hierarchical categories, products wi
 - **Key contract:** `CatalogManagerInterface` — full read/write surface consumed by higher-level modules (e.g. Orders, Inventory)
 - **Authorization:** Public read endpoints require no auth. Write endpoints and the admin product view require `auth:sanctum`; authorization is permission-based (`catalog.category.*`, `catalog.product.*`, `catalog.variant.*`) enforced via Laravel policies — any user granted a specific permission can act, independent of role.
 - **Pagination:** List endpoints return `LengthAwarePaginator` with a `{data, links, meta}` envelope. `per_page` (1–100) and `page` are documented automatically by Scramble.
+- **Image input:** Write endpoints accept images two ways — either send a `media_id` (pre-uploaded via the Media endpoint) or attach the file inline as `multipart/form-data`. The two are mutually exclusive per field. Inline fields: `image` on category create, `primary_image` + `gallery[]` (index sets sort order) on product create/update, and `variant_image` on variant create/update. These multipart fields are documented in Scramble via `#[BodyParameter]` attributes.
 
 ---
 
@@ -215,7 +217,7 @@ tests/
     ├── Identity/
     │   ├── AddressTest.php              # Address CRUD + ownership + admin override
     │   ├── ProfileTest.php             # Profile self-service + admin user management
-    │   ├── AuthControllerTest.php       # Login / token issuance
+    │   ├── AuthControllerTest.php       # OTP request/verify, token issuance, single-use replay
     │   └── RolePermissionTest.php       # Role and permission assignment
     └── Media/
         ├── MediaManagerTest.php         # MediaManagerInterface contract tests

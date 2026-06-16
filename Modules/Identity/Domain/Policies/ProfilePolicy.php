@@ -2,8 +2,6 @@
 
 namespace Modules\Identity\Domain\Policies;
 
-
-
 use Modules\Identity\Domain\Models\User;
 
 class ProfilePolicy

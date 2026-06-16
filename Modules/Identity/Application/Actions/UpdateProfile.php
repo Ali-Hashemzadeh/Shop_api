@@ -9,8 +9,7 @@ class UpdateProfile
 {
     public function __construct(
         private readonly UserRepositoryInterface $users
-    ) {
-    }
+    ) {}
 
     public function handle(User $user, array $data): User
     {

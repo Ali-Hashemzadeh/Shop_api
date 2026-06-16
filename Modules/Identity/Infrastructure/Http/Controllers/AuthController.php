@@ -5,27 +5,26 @@ namespace Modules\Identity\Infrastructure\Http\Controllers;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Modules\Identity\Application\Actions\LoginUserWithPassword;
 use Modules\Identity\Application\Actions\LogoutCurrentToken;
-use Modules\Identity\Application\Actions\RegisterUser;
-use Modules\Identity\Infrastructure\Http\Requests\LoginRequest;
-use Modules\Identity\Infrastructure\Http\Requests\RegisterRequest;
+use Modules\Identity\Application\Actions\RequestOtp;
+use Modules\Identity\Application\Actions\VerifyOtp;
+use Modules\Identity\Infrastructure\Http\Requests\RequestOtpRequest;
+use Modules\Identity\Infrastructure\Http\Requests\VerifyOtpRequest;
 use Modules\Identity\Infrastructure\Http\Resources\AuthUserResource;
 
 class AuthController extends Controller
 {
-    public function register(RegisterRequest $request, RegisterUser $action): JsonResponse
+    public function requestOtp(RequestOtpRequest $request, RequestOtp $action): JsonResponse
     {
         $result = $action->handle($request->validated());
 
         return response()->json([
             'message' => $result['message'],
-            'user' => new AuthUserResource($result['user']),
-            'token' => $result['token'],
-        ], 201);
+            'expires_in' => $result['expires_in'],
+        ]);
     }
 
-    public function login(LoginRequest $request, LoginUserWithPassword $action): JsonResponse
+    public function verifyOtp(VerifyOtpRequest $request, VerifyOtp $action): JsonResponse
     {
         $result = $action->handle($request->validated());
 

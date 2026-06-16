@@ -7,7 +7,6 @@ use Modules\Identity\Domain\Models\User;
 
 class AddressPolicy
 {
-
     public function viewAny(User $user): bool
     {
         return $user->can('address.view-any');
@@ -26,6 +25,7 @@ class AddressPolicy
 
         return $user->can('address.view-own') && (int) $user->id === (int) $address->user_id;
     }
+
     public function create(User $user): bool
     {
         return $user->can('address.create-own');
