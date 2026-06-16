@@ -260,7 +260,7 @@ class CatalogAuthorizationTest extends TestCase
         $product = Product::create(['title' => 'Widget', 'slug' => 'widget', 'status' => 'published']);
         $variant = ProductVariant::create([
             'product_id' => $product->id,
-            'sku'        => 'WGT-001',
+            'sku' => 'WGT-001',
             'is_default' => true,
             'base_price' => 1000,
         ]);
@@ -275,7 +275,7 @@ class CatalogAuthorizationTest extends TestCase
         $product = Product::create(['title' => 'Widget', 'slug' => 'widget', 'status' => 'published']);
         ProductVariant::create([
             'product_id' => $product->id,
-            'sku'        => 'WGT-SKU',
+            'sku' => 'WGT-SKU',
             'is_default' => true,
             'base_price' => 1000,
         ]);

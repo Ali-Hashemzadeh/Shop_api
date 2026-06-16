@@ -2,6 +2,7 @@
 
 namespace Modules\Media\Infrastructure\Persistence\Repositories;
 
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
@@ -55,6 +56,14 @@ class LocalMediaManager implements MediaManagerInterface
         return Media::whereIn('id', $ids)
             ->get()
             ->map(fn (Media $media) => MediaDTO::fromModel($media));
+    }
+
+    public function listMedia(int $perPage = 15): LengthAwarePaginator
+    {
+        return Media::query()
+            ->latest()
+            ->paginate($perPage)
+            ->through(fn (Media $media) => MediaDTO::fromModel($media));
     }
 
     /**

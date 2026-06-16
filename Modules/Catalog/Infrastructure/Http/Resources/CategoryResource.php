@@ -15,9 +15,9 @@ class CategoryResource extends JsonResource
         $dto = $this->resource;
 
         return [
-            'id'        => $dto->id,
-            'name'      => $dto->name,
-            'slug'      => $dto->slug,
+            'id' => $dto->id,
+            'name' => $dto->name,
+            'slug' => $dto->slug,
             'is_active' => $dto->isActive,
             'parent_id' => $dto->parentId,
             'image_url' => $dto->imageUrl,

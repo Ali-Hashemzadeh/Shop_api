@@ -20,10 +20,10 @@ class ProductVariant extends Model
     protected function casts(): array
     {
         return [
-            'is_default'       => 'boolean',
-            'base_price'       => 'integer',
+            'is_default' => 'boolean',
+            'base_price' => 'integer',
             'compare_at_price' => 'integer',
-            'attributes'       => 'array',
+            'attributes' => 'array',
         ];
     }
 

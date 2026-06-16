@@ -26,10 +26,10 @@ class CreateCategoryAction
         $mediaId = $this->resolveMediaId($image, $data['media_id'] ?? null);
 
         return $this->catalog->createCategory([
-            'name'      => $data['name'],
-            'slug'      => $data['slug'] ?? Str::slug($data['name']),
+            'name' => $data['name'],
+            'slug' => $data['slug'] ?? Str::slug($data['name']),
             'parent_id' => $data['parent_id'] ?? null,
-            'media_id'  => $mediaId,
+            'media_id' => $mediaId,
             'is_active' => $data['is_active'] ?? true,
         ]);
     }

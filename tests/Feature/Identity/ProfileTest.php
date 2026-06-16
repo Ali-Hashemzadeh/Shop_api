@@ -2,9 +2,9 @@
 
 namespace Tests\Feature\Identity;
 
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Modules\Identity\Domain\Models\User;
 use Tests\TestCase;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 
 class ProfileTest extends TestCase
 {

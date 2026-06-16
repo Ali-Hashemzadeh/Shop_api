@@ -11,14 +11,14 @@ class UpdateProductAction
 {
     public function __construct(
         private readonly CatalogManagerInterface $catalog,
-        private readonly MediaManagerInterface   $media,
+        private readonly MediaManagerInterface $media,
     ) {}
 
     public function handle(int $id, array $data, ?UploadedFile $primaryImage = null): ProductDTO
     {
         if ($primaryImage) {
-            $mediaDto                  = $this->media->upload($primaryImage, 'products');
-            $data['primary_media_id']  = $mediaDto->id;
+            $mediaDto = $this->media->upload($primaryImage, 'products');
+            $data['primary_media_id'] = $mediaDto->id;
         }
 
         return $this->catalog->updateProduct($id, $data);

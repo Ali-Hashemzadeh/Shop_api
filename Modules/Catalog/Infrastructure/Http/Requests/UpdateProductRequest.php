@@ -17,13 +17,16 @@ class UpdateProductRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'title'            => ['sometimes', 'string', 'max:255'],
-            'slug'             => ['sometimes', 'string', 'max:255', Rule::unique('products', 'slug')->ignore($this->route('id'))],
-            'description'      => ['nullable', 'string'],
-            'status'           => ['sometimes', 'in:draft,published'],
-            'category_id'      => ['nullable', 'integer', 'exists:categories,id'],
+            'title' => ['sometimes', 'string', 'max:255'],
+            'slug' => ['sometimes', 'string', 'max:255', Rule::unique('products', 'slug')->ignore($this->route('id'))],
+            'description' => ['nullable', 'string'],
+            'features' => ['nullable', 'array'],
+            'features.*.title' => ['required', 'string', 'max:255'],
+            'features.*.value' => ['required', 'string', 'max:255'],
+            'status' => ['sometimes', 'in:draft,published'],
+            'category_id' => ['nullable', 'integer', 'exists:categories,id'],
             'primary_media_id' => ['nullable', 'integer', 'prohibits:primary_image'],
-            'primary_image'    => ['nullable', 'file', 'image', 'max:4096', 'prohibits:primary_media_id'],
+            'primary_image' => ['nullable', 'file', 'image', 'max:4096', 'prohibits:primary_media_id'],
         ];
     }
 }

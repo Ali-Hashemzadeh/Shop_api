@@ -33,13 +33,13 @@ class UpdateProductVariantRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'sku'           => ['sometimes', 'string', 'max:255', Rule::unique('product_variants', 'sku')->ignore($this->route('variantId'))],
-            'base_price'    => ['sometimes', 'integer', 'min:0'],
+            'sku' => ['sometimes', 'string', 'max:255', Rule::unique('product_variants', 'sku')->ignore($this->route('variantId'))],
+            'base_price' => ['sometimes', 'integer', 'min:0'],
             'compare_at_price' => ['nullable', 'integer', 'min:0'],
-            'is_default'    => ['sometimes', 'boolean'],
-            'media_id'      => ['nullable', 'integer', 'prohibits:variant_image'],
+            'is_default' => ['sometimes', 'boolean'],
+            'media_id' => ['nullable', 'integer', 'prohibits:variant_image'],
             'variant_image' => ['nullable', 'file', 'image', 'max:4096', 'prohibits:media_id'],
-            'attributes'    => ['sometimes', 'array'],
+            'attributes' => ['sometimes', 'array'],
         ];
     }
 }

@@ -13,8 +13,8 @@ use Modules\Catalog\Domain\Policies\ProductVariantPolicy;
 class CatalogAuthServiceProvider extends ServiceProvider
 {
     protected $policies = [
-        Category::class       => CategoryPolicy::class,
-        Product::class        => ProductPolicy::class,
+        Category::class => CategoryPolicy::class,
+        Product::class => ProductPolicy::class,
         ProductVariant::class => ProductVariantPolicy::class,
     ];
 

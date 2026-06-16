@@ -4,10 +4,11 @@ namespace Tests;
 
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 use Laravel\Sanctum\Sanctum;
-use Modules\Identity\Domain\Models\User;
 use Modules\Catalog\Infrastructure\Persistence\Seeders\CatalogPermissionsSeeder;
-use Modules\Media\Infrastructure\Persistence\Seeders\MediaPermissionsSeeder;
+use Modules\Identity\Domain\Models\User;
 use Modules\Identity\Infrastructure\Persistence\Seeders\RolesAndPermissionsSeeder;
+use Modules\Inventory\Infrastructure\Persistence\Seeders\InventoryPermissionsSeeder;
+use Modules\Media\Infrastructure\Persistence\Seeders\MediaPermissionsSeeder;
 
 abstract class TestCase extends BaseTestCase
 {
@@ -24,6 +25,11 @@ abstract class TestCase extends BaseTestCase
     protected function seedMediaPermissions(): void
     {
         $this->seed(MediaPermissionsSeeder::class);
+    }
+
+    protected function seedInventoryPermissions(): void
+    {
+        $this->seed(InventoryPermissionsSeeder::class);
     }
 
     protected function actingAsCustomer(?User $user = null): User

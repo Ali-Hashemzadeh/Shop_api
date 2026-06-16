@@ -60,7 +60,7 @@ class CategoriesTest extends TestCase
         $parent = Category::create(['name' => 'Electronics', 'slug' => 'electronics', 'is_active' => true]);
 
         $this->postJson('/api/v1/catalog/categories', [
-            'name'      => 'Phones',
+            'name' => 'Phones',
             'parent_id' => $parent->id,
         ])->assertCreated()
             ->assertJsonPath('parent_id', $parent->id);
@@ -70,7 +70,7 @@ class CategoriesTest extends TestCase
     public function it_can_create_a_category_with_an_uploaded_image(): void
     {
         $response = $this->postJson('/api/v1/catalog/categories', [
-            'name'  => 'Clothing',
+            'name' => 'Clothing',
             'image' => UploadedFile::fake()->image('clothing.jpg'),
         ]);
 
@@ -102,9 +102,9 @@ class CategoriesTest extends TestCase
     public function it_rejects_providing_both_media_id_and_image_file(): void
     {
         $this->postJson('/api/v1/catalog/categories', [
-            'name'     => 'Electronics',
+            'name' => 'Electronics',
             'media_id' => 1,
-            'image'    => UploadedFile::fake()->image('electronics.jpg'),
+            'image' => UploadedFile::fake()->image('electronics.jpg'),
         ])->assertUnprocessable()
             ->assertJsonValidationErrorFor('media_id');
     }

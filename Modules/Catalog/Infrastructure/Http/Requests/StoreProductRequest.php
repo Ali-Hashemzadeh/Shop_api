@@ -17,15 +17,20 @@ class StoreProductRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'title'            => ['required', 'string', 'max:255'],
-            'slug'             => ['nullable', 'string', 'max:255', 'unique:products,slug'],
-            'description'      => ['nullable', 'string'],
-            'status'           => ['nullable', 'in:draft,published'],
-            'category_id'      => ['nullable', 'integer', 'exists:categories,id'],
+            'title' => ['required', 'string', 'max:255'],
+            'slug' => ['nullable', 'string', 'max:255', 'unique:products,slug'],
+            'description' => ['nullable', 'string'],
+            'features' => ['nullable', 'array'],
+            'features.*.title' => ['required', 'string', 'max:255'],
+            'features.*.value' => ['required', 'string', 'max:255'],
+            'status' => ['nullable', 'in:draft,published'],
+            'category_id' => ['nullable', 'integer', 'exists:categories,id'],
             'primary_media_id' => ['nullable', 'integer', 'prohibits:primary_image'],
-            'primary_image'    => ['nullable', 'file', 'image', 'max:4096', 'prohibits:primary_media_id'],
-            'gallery'          => ['nullable', 'array'],
-            'gallery.*'        => ['file', 'image', 'max:4096'],
+            'primary_image' => ['nullable', 'file', 'image', 'max:4096', 'prohibits:primary_media_id'],
+            'gallery_media_ids' => ['nullable', 'array', 'prohibits:gallery'],
+            'gallery_media_ids.*' => ['integer'],
+            'gallery' => ['nullable', 'array', 'prohibits:gallery_media_ids'],
+            'gallery.*' => ['file', 'image', 'max:4096'],
         ];
     }
 }

@@ -24,8 +24,8 @@ class ProductVariantsTest extends TestCase
         $this->actingAsAdmin();
 
         $this->product = Product::create([
-            'title'  => 'Test Product',
-            'slug'   => 'test-product',
+            'title' => 'Test Product',
+            'slug' => 'test-product',
             'status' => 'published',
         ]);
     }
@@ -36,7 +36,7 @@ class ProductVariantsTest extends TestCase
     public function it_can_create_a_variant_with_integer_prices(): void
     {
         $response = $this->postJson("/api/v1/catalog/products/{$this->product->id}/variants", [
-            'sku'        => 'WATCH-BLK-M',
+            'sku' => 'WATCH-BLK-M',
             'base_price' => 4999,
             'is_default' => true,
         ]);
@@ -67,7 +67,7 @@ class ProductVariantsTest extends TestCase
     public function it_rejects_a_float_base_price_enforcing_the_cents_rule(): void
     {
         $this->postJson("/api/v1/catalog/products/{$this->product->id}/variants", [
-            'sku'        => 'SKU-FLOAT',
+            'sku' => 'SKU-FLOAT',
             'base_price' => 19.99,
         ])->assertUnprocessable()
             ->assertJsonValidationErrors(['base_price']);
@@ -97,13 +97,13 @@ class ProductVariantsTest extends TestCase
     {
         ProductVariant::create([
             'product_id' => $this->product->id,
-            'sku'        => 'EXISTING-SKU',
+            'sku' => 'EXISTING-SKU',
             'is_default' => false,
             'base_price' => 1000,
         ]);
 
         $this->postJson("/api/v1/catalog/products/{$this->product->id}/variants", [
-            'sku'        => 'EXISTING-SKU',
+            'sku' => 'EXISTING-SKU',
             'base_price' => 2000,
         ])->assertUnprocessable()
             ->assertJsonValidationErrors(['sku']);
@@ -113,8 +113,8 @@ class ProductVariantsTest extends TestCase
     public function it_stores_a_compare_at_price_alongside_the_base_price(): void
     {
         $this->postJson("/api/v1/catalog/products/{$this->product->id}/variants", [
-            'sku'              => 'SALE-ITEM',
-            'base_price'       => 1999,
+            'sku' => 'SALE-ITEM',
+            'base_price' => 1999,
             'compare_at_price' => 2999,
         ])->assertCreated()
             ->assertJsonPath('base_price', 1999)
@@ -125,7 +125,7 @@ class ProductVariantsTest extends TestCase
     public function it_can_create_a_variant_with_attributes(): void
     {
         $this->postJson("/api/v1/catalog/products/{$this->product->id}/variants", [
-            'sku'        => 'SHIRT-RED-L',
+            'sku' => 'SHIRT-RED-L',
             'base_price' => 2999,
             'attributes' => ['color' => 'red', 'size' => 'L'],
         ])->assertCreated()
@@ -137,8 +137,8 @@ class ProductVariantsTest extends TestCase
     public function it_can_create_a_variant_with_a_variant_image(): void
     {
         $response = $this->postJson("/api/v1/catalog/products/{$this->product->id}/variants", [
-            'sku'           => 'WITH-IMAGE',
-            'base_price'    => 3999,
+            'sku' => 'WITH-IMAGE',
+            'base_price' => 3999,
             'variant_image' => UploadedFile::fake()->image('variant-blue.jpg'),
         ]);
 
@@ -151,13 +151,13 @@ class ProductVariantsTest extends TestCase
     {
         ProductVariant::create([
             'product_id' => $this->product->id,
-            'sku'        => 'VARIANT-A',
+            'sku' => 'VARIANT-A',
             'is_default' => true,
             'base_price' => 1000,
         ]);
 
         $this->postJson("/api/v1/catalog/products/{$this->product->id}/variants", [
-            'sku'        => 'VARIANT-B',
+            'sku' => 'VARIANT-B',
             'base_price' => 2000,
             'is_default' => true,
         ])->assertCreated()
@@ -174,7 +174,7 @@ class ProductVariantsTest extends TestCase
     {
         $variant = ProductVariant::create([
             'product_id' => $this->product->id,
-            'sku'        => 'OLD-SKU',
+            'sku' => 'OLD-SKU',
             'is_default' => false,
             'base_price' => 1000,
         ]);
@@ -191,13 +191,13 @@ class ProductVariantsTest extends TestCase
     {
         $variant = ProductVariant::create([
             'product_id' => $this->product->id,
-            'sku'        => 'PRICE-SKU',
+            'sku' => 'PRICE-SKU',
             'is_default' => false,
             'base_price' => 1000,
         ]);
 
         $this->patchJson("/api/v1/catalog/variants/{$variant->id}", [
-            'base_price'       => 2500,
+            'base_price' => 2500,
             'compare_at_price' => 3000,
         ])->assertOk()
             ->assertJsonPath('base_price', 2500)
@@ -209,7 +209,7 @@ class ProductVariantsTest extends TestCase
     {
         $variant = ProductVariant::create([
             'product_id' => $this->product->id,
-            'sku'        => 'FLOAT-UPDATE',
+            'sku' => 'FLOAT-UPDATE',
             'is_default' => false,
             'base_price' => 1000,
         ]);
@@ -224,13 +224,13 @@ class ProductVariantsTest extends TestCase
     {
         ProductVariant::create([
             'product_id' => $this->product->id,
-            'sku'        => 'TAKEN-SKU',
+            'sku' => 'TAKEN-SKU',
             'is_default' => false,
             'base_price' => 500,
         ]);
         $variant = ProductVariant::create([
             'product_id' => $this->product->id,
-            'sku'        => 'MY-SKU',
+            'sku' => 'MY-SKU',
             'is_default' => false,
             'base_price' => 600,
         ]);
@@ -245,13 +245,13 @@ class ProductVariantsTest extends TestCase
     {
         $variant = ProductVariant::create([
             'product_id' => $this->product->id,
-            'sku'        => 'KEEP-SKU',
+            'sku' => 'KEEP-SKU',
             'is_default' => false,
             'base_price' => 1000,
         ]);
 
         $this->patchJson("/api/v1/catalog/variants/{$variant->id}", [
-            'sku'        => 'KEEP-SKU',
+            'sku' => 'KEEP-SKU',
             'base_price' => 2000,
         ])->assertOk()
             ->assertJsonPath('base_price', 2000);
@@ -262,13 +262,13 @@ class ProductVariantsTest extends TestCase
     {
         $variantA = ProductVariant::create([
             'product_id' => $this->product->id,
-            'sku'        => 'VAR-A',
+            'sku' => 'VAR-A',
             'is_default' => true,
             'base_price' => 1000,
         ]);
         $variantB = ProductVariant::create([
             'product_id' => $this->product->id,
-            'sku'        => 'VAR-B',
+            'sku' => 'VAR-B',
             'is_default' => false,
             'base_price' => 2000,
         ]);
@@ -295,7 +295,7 @@ class ProductVariantsTest extends TestCase
     {
         $variant = ProductVariant::create([
             'product_id' => $this->product->id,
-            'sku'        => 'DELETE-ME',
+            'sku' => 'DELETE-ME',
             'is_default' => false,
             'base_price' => 500,
         ]);
@@ -320,7 +320,7 @@ class ProductVariantsTest extends TestCase
     {
         $variant = ProductVariant::create([
             'product_id' => $this->product->id,
-            'sku'        => 'GET-BY-ID',
+            'sku' => 'GET-BY-ID',
             'is_default' => false,
             'base_price' => 5000,
         ]);
@@ -346,7 +346,7 @@ class ProductVariantsTest extends TestCase
     {
         ProductVariant::create([
             'product_id' => $this->product->id,
-            'sku'        => 'FIND-BY-SKU',
+            'sku' => 'FIND-BY-SKU',
             'is_default' => false,
             'base_price' => 7500,
         ]);

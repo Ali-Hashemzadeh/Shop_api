@@ -2,8 +2,8 @@
 
 namespace Modules\Catalog\Application\Actions;
 
-use InvalidArgumentException;
 use Illuminate\Http\UploadedFile;
+use InvalidArgumentException;
 use Modules\Catalog\Domain\Contracts\CatalogManagerInterface;
 use Modules\Catalog\Domain\DTOs\ProductVariantDTO;
 use Modules\Media\Domain\Contracts\MediaManagerInterface;
@@ -12,7 +12,7 @@ class UpdateProductVariantAction
 {
     public function __construct(
         private readonly CatalogManagerInterface $catalog,
-        private readonly MediaManagerInterface   $media,
+        private readonly MediaManagerInterface $media,
     ) {}
 
     public function handle(int $variantId, array $data, ?UploadedFile $image = null): ProductVariantDTO
@@ -26,7 +26,7 @@ class UpdateProductVariantAction
         }
 
         if ($image) {
-            $mediaDto        = $this->media->upload($image, 'variants');
+            $mediaDto = $this->media->upload($image, 'variants');
             $data['media_id'] = $mediaDto->id;
         }
 

@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use Modules\Catalog\Infrastructure\Http\Controllers\CategoriesController;
+use Modules\Catalog\Infrastructure\Http\Controllers\ProductGalleryController;
 use Modules\Catalog\Infrastructure\Http\Controllers\ProductsController;
 use Modules\Catalog\Infrastructure\Http\Controllers\ProductVariantsController;
 
@@ -31,6 +32,10 @@ Route::middleware('api')->prefix('api/v1/catalog')->group(function () {
         Route::post('/products', [ProductsController::class, 'store']);
         Route::patch('/products/{id}', [ProductsController::class, 'update']);
         Route::delete('/products/{id}', [ProductsController::class, 'destroy']);
+
+        // Gallery management
+        Route::post('/products/{productId}/gallery', [ProductGalleryController::class, 'store']);
+        Route::delete('/products/{productId}/gallery/{imageId}', [ProductGalleryController::class, 'destroy']);
 
         // Variants
         Route::post('/products/{productId}/variants', [ProductVariantsController::class, 'store']);

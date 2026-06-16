@@ -15,9 +15,9 @@ class ProductImageResource extends JsonResource
         $dto = $this->resource;
 
         return [
-            'id'         => $dto->id,
-            'media_id'   => $dto->mediaId,
-            'url'        => $dto->url,
+            'id' => $dto->id,
+            'media_id' => $dto->mediaId,
+            'url' => $dto->url,
             'sort_order' => $dto->sortOrder,
         ];
     }

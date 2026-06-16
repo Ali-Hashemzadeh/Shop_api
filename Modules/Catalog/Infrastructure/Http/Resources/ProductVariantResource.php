@@ -15,13 +15,13 @@ class ProductVariantResource extends JsonResource
         $dto = $this->resource;
 
         return [
-            'id'               => $dto->id,
-            'sku'              => $dto->sku,
-            'is_default'       => $dto->isDefault,
-            'base_price'       => $dto->basePrice,
+            'id' => $dto->id,
+            'sku' => $dto->sku,
+            'is_default' => $dto->isDefault,
+            'base_price' => $dto->basePrice,
             'compare_at_price' => $dto->compareAtPrice,
-            'attributes'       => $dto->attributes,
-            'image_url'        => $dto->imageUrl,
+            'attributes' => $dto->attributes,
+            'image_url' => $dto->imageUrl,
         ];
     }
 }

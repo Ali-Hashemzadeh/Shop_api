@@ -19,10 +19,11 @@ use Modules\Catalog\Infrastructure\Http\Resources\CategoryResource;
 class CategoriesController extends Controller
 {
     use AuthorizesRequests;
+
     public function __construct(
-        private readonly CreateCategoryAction    $createAction,
-        private readonly UpdateCategoryAction    $updateAction,
-        private readonly DeleteCategoryAction    $deleteAction,
+        private readonly CreateCategoryAction $createAction,
+        private readonly UpdateCategoryAction $updateAction,
+        private readonly DeleteCategoryAction $deleteAction,
         private readonly CatalogManagerInterface $catalog,
     ) {}
 

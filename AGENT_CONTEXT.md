@@ -114,17 +114,42 @@ Modules/
       * Authorization matrix tested in `CatalogAuthorizationTest`: unauthenticated → 401, customer → 403, public routes → 200/404 (never 401/403), plus two permission-not-role proof tests.
       * Dead code removed: `updateVariantPrice` eliminated from `CatalogManagerInterface` and `EloquentCatalogManager` (superseded by `updateProductVariant`).
 
+### 📦 4. Inventory Module (Status: Active & Complete)
+* **Responsibility:** Atomic stock tracking, reservation lifecycle (reserve → commit / release), and append-only audit ledger.
+  * **Tables:**
+      * `inventory_stocks`: `id`, `sku` (unique + indexed), `quantity` (int), `reserved_quantity` (int), timestamps. No FK to Catalog — sku is the natural key.
+      * `inventory_ledger_entries`: append-only audit log. `id`, `sku`, `type` (enum: `restock`, `sale`, `allocation`, `release`, `adjustment`, `return`), `quantity_change` (signed int), `reference_type` (nullable string), `reference_id` (nullable bigint), `notes` (text nullable), `created_at` only (`UPDATED_AT = null` — rows are never mutated).
+  * **Domain Models (internal):** `InventoryStock`, `InventoryLedgerEntry`.
+  * **Public Contract:** `Modules\Inventory\Domain\Contracts\InventoryManagerInterface`:
+      * `getStockBySku(string $sku): InventoryStockDTO` — throws `StockNotFoundException` for unknown SKUs.
+      * `getBatchStockBySkus(array $skus): array` — `array<string, InventoryStockDTO>` keyed by SKU; unknown SKUs silently absent.
+      * `adjustStock(sku, quantityChange, type, refType?, refId?, notes?): InventoryStockDTO` — creates record on first call, appends ledger entry.
+      * `reserveStock(sku, quantity, orderId): bool` — throws `InsufficientStockException` when available < requested.
+      * `commitReservation(sku, quantity, orderId): bool` — deducts from physical + reserved (order fulfilled).
+      * `releaseReservation(sku, quantity, orderId): bool` — decrements reserved only (order cancelled).
+  * **DTO:** `InventoryStockDTO` — `sku`, `availableQuantity` (quantity − reserved_quantity), `physicalQuantity`, `reservedQuantity`.
+  * **Exceptions:** `StockNotFoundException`, `InsufficientStockException` (both in `Domain/Exceptions/`).
+  * **CRITICAL CONCURRENCY RULE:** Every mutation in `EloquentInventoryManager` wraps in `DB::transaction()` and acquires a row-level pessimistic lock via `lockForUpdate()` to prevent concurrent checkout race conditions / oversell.
+  * **Application Actions:** `UpdateStockAction` (admin restock/adjustment), `ReserveStockAction`, `CommitReservationAction`, `ReleaseReservationAction`.
+  * **HTTP Endpoints:**
+      * PUBLIC (no auth): `GET /api/v1/inventory/sku/{sku}` — single stock DTO; 404 on unknown. `POST /api/v1/inventory/batch` — body `{skus:[...]}` (max 100); returns object keyed by SKU.
+      * ADMIN (`auth:sanctum` + policy): `POST /api/v1/inventory/adjust` — body `{sku, quantity_change (≠0), type: restock|adjustment|return, notes?}`; requires `inventory.stock.manage`. `GET /api/v1/inventory/sku/{sku}/ledger` — paginated audit log (default 15/page); requires `inventory.ledger.view`.
+  * **Authorization:** `InventoryPolicy` (typehinted `Authorizable`) — never imports Identity's `User`. `AdjustStockRequest::authorize()` returns 403-before-422. `InventoryAuthServiceProvider` registers policy against `InventoryStock::class`.
+  * **Permissions:** `inventory.stock.manage`, `inventory.ledger.view` — both granted to `admin` by `InventoryPermissionsSeeder`.
+  * **Test suite:** `InventoryTest` (14) + `InventoryAuthorizationTest` (10) = **24 tests** covering public paths, batch lookup, admin adjust + ledger, reserve/commit/release, oversell prevention, full 401/403/public matrix, and permission-not-role proofs.
+
 ---
 
-## 4. Completed & Ready
+## 5. Completed & Ready
 
 | Module | Status | Tests |
 |---|---|---|
 | Identity | ✅ Complete (passwordless OTP) | AddressTest, ProfileTest, AuthControllerTest (10), RolePermissionTest |
 | Media | ✅ Complete | 12 passing (MediaUploadTest) + existing MediaManagerTest |
 | Catalog | ✅ Complete | 95 passing across 4 test classes |
+| Inventory | ✅ Complete | 24 passing across 2 test classes |
 
-**Total test suite: 148 tests, 392 assertions — all green.**
+**Total test suite: 172 tests, 433 assertions — all green.**
 
-**Next module in queue:** Inventory, Order, or Payment — pending product roadmap review.
+**Next module in queue:** Order or Payment — pending product roadmap review.
 

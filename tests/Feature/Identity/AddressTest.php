@@ -2,12 +2,12 @@
 
 namespace Tests\Feature\Identity;
 
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Modules\Identity\Domain\Models\Address;
 use Modules\Identity\Domain\Models\City;
 use Modules\Identity\Domain\Models\Province;
 use Modules\Identity\Domain\Models\User;
 use Tests\TestCase;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 
 class AddressTest extends TestCase
 {

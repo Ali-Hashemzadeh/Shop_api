@@ -19,10 +19,11 @@ use Modules\Catalog\Infrastructure\Http\Resources\ProductResource;
 class ProductsController extends Controller
 {
     use AuthorizesRequests;
+
     public function __construct(
-        private readonly CreateProductAction     $createAction,
-        private readonly UpdateProductAction     $updateAction,
-        private readonly DeleteProductAction     $deleteAction,
+        private readonly CreateProductAction $createAction,
+        private readonly UpdateProductAction $updateAction,
+        private readonly DeleteProductAction $deleteAction,
         private readonly CatalogManagerInterface $catalog,
     ) {}
 

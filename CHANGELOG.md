@@ -2,6 +2,31 @@
 
 ## [Unreleased](https://github.com/laravel/laravel/compare/v12.12.1...12.x)
 
+### Inventory Module (v1.0.0)
+
+**Complete implementation of the stock tracking and reservation module.**
+
+#### Added
+- **Migrations:** `inventory_stocks` (sku unique+indexed, quantity, reserved_quantity) and `inventory_ledger_entries` (append-only: sku, type enum, quantity_change signed int, reference_type, reference_id, notes, created_at only).
+- **Domain Models:** `InventoryStock`, `InventoryLedgerEntry` (`UPDATED_AT = null` — immutable audit rows).
+- **DTO:** `InventoryStockDTO` with `sku`, `availableQuantity` (quantity − reserved), `physicalQuantity`, `reservedQuantity`.
+- **Custom exceptions:** `StockNotFoundException`, `InsufficientStockException` (`Domain/Exceptions/`).
+- **`InventoryManagerInterface`** (public contract): `getStockBySku`, `getBatchStockBySkus`, `adjustStock`, `reserveStock`, `commitReservation`, `releaseReservation`.
+- **`EloquentInventoryManager`**: all mutations wrapped in `DB::transaction()` + `lockForUpdate()` to eliminate concurrent-checkout oversell races.
+- **Four application actions:** `UpdateStockAction`, `ReserveStockAction`, `CommitReservationAction`, `ReleaseReservationAction`.
+- **`InventoryPolicy`** — `manage` and `viewLedger` methods, typehinted against `Authorizable` (no Identity model import). Registered by `InventoryAuthServiceProvider`.
+- **`InventoryController`** with `AdjustStockRequest` (permission-based `authorize()` — 403 before validation) and `BatchStockRequest`.
+- **`InventoryStockResource`** (wraps DTO) and **`InventoryLedgerEntryResource`** (wraps Eloquent model, within same module).
+- **Routes** (`api/v1/inventory`): public `GET /sku/{sku}` and `POST /batch`; admin `POST /adjust` and `GET /sku/{sku}/ledger`.
+- **`InventoryPermissionsSeeder`**: seeds `inventory.stock.manage` and `inventory.ledger.view`, both granted to `admin`.
+- **`InventoryServiceProvider`** registered in `bootstrap/providers.php`.
+- **`TestCase::seedInventoryPermissions()`** helper added.
+- **24 feature tests** across `InventoryTest` and `InventoryAuthorizationTest`: public 200/404, batch omit-unknowns, admin restock + ledger, reserve/commit/release lifecycle, oversell prevention, full 401/403/public auth matrix, permission-not-role proofs.
+
+**Result: test suite is 172/172 green (433 assertions).**
+
+---
+
 ### Identity Module — Passwordless OTP Authentication
 
 **Replaced password-based register/login with a unified phone OTP flow (sign-up == login).**

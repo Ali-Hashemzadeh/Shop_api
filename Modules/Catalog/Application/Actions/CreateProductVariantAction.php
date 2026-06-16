@@ -36,7 +36,7 @@ class CreateProductVariantAction
         }
 
         return DB::transaction(function () use ($productId, $data, $variantImage): ProductVariantDTO {
-            $mediaId   = $this->resolveMediaId($variantImage, $data['media_id'] ?? null);
+            $mediaId = $this->resolveMediaId($variantImage, $data['media_id'] ?? null);
             $isDefault = (bool) ($data['is_default'] ?? false);
 
             if ($isDefault) {
@@ -48,12 +48,12 @@ class CreateProductVariantAction
             }
 
             return $this->catalog->createProductVariant($productId, [
-                'sku'              => $data['sku'],
-                'is_default'       => $isDefault,
-                'base_price'       => (int) $data['base_price'],
+                'sku' => $data['sku'],
+                'is_default' => $isDefault,
+                'base_price' => (int) $data['base_price'],
                 'compare_at_price' => isset($data['compare_at_price']) ? (int) $data['compare_at_price'] : null,
-                'media_id'         => $mediaId,
-                'attributes'       => $data['attributes'] ?? null,
+                'media_id' => $mediaId,
+                'attributes' => $data['attributes'] ?? null,
             ]);
         });
     }
@@ -71,7 +71,7 @@ class CreateProductVariantAction
     {
         if (! is_int($value)) {
             throw new \InvalidArgumentException(
-                "Cents Rule violation: {$field} must be a raw integer (cents). Received type: " . gettype($value)
+                "Cents Rule violation: {$field} must be a raw integer (cents). Received type: ".gettype($value)
             );
         }
     }

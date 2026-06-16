@@ -15,10 +15,10 @@ class MediaResource extends JsonResource
         $dto = $this->resource;
 
         return [
-            'id'            => $dto->id,
-            'url'           => $dto->url,
-            'mime_type'     => $dto->mimeType,
-            'file_size'     => $dto->fileSize,
+            'id' => $dto->id,
+            'url' => $dto->url,
+            'mime_type' => $dto->mimeType,
+            'file_size' => $dto->fileSize,
             'original_name' => $dto->originalName,
         ];
     }

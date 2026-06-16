@@ -34,13 +34,13 @@ class StoreProductVariantRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'sku'              => ['required', 'string', 'max:255', 'unique:product_variants,sku'],
-            'base_price'       => ['required', 'integer', 'min:0'],
+            'sku' => ['required', 'string', 'max:255', 'unique:product_variants,sku'],
+            'base_price' => ['required', 'integer', 'min:0'],
             'compare_at_price' => ['nullable', 'integer', 'min:0'],
-            'is_default'       => ['nullable', 'boolean'],
-            'media_id'         => ['nullable', 'integer', 'prohibits:variant_image'],
-            'variant_image'    => ['nullable', 'file', 'image', 'max:4096', 'prohibits:media_id'],
-            'attributes'       => ['nullable', 'array'],
+            'is_default' => ['nullable', 'boolean'],
+            'media_id' => ['nullable', 'integer', 'prohibits:variant_image'],
+            'variant_image' => ['nullable', 'file', 'image', 'max:4096', 'prohibits:media_id'],
+            'attributes' => ['nullable', 'array'],
         ];
     }
 }

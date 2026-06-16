@@ -32,6 +32,7 @@ class MakeModule extends Command
 
         if (File::isDirectory($basePath)) {
             $this->error("Module '{$moduleName}' already exists at {$basePath}!");
+
             return;
         }
 
@@ -65,10 +66,10 @@ class MakeModule extends Command
         $this->createServiceProviderFile($basePath, $moduleName);
 
         $this->components->info("Module '{$moduleName}' generated successfully!");
-        $this->line("");
-        $this->comment("Next steps:");
+        $this->line('');
+        $this->comment('Next steps:');
         $this->line("1. Register Modules\\{$moduleName}\\Infrastructure\\Providers\\{$moduleName}ServiceProvider::class in your application providers list.");
-        $this->line("2. Start defining your isolated contracts and domain models!");
+        $this->line('2. Start defining your isolated contracts and domain models!');
     }
 
     /**

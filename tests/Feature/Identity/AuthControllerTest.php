@@ -25,7 +25,8 @@ class AuthControllerTest extends TestCase
 
         $this->seedIdentityRolesAndPermissions();
 
-        $this->sender = new class implements OtpSenderInterface {
+        $this->sender = new class implements OtpSenderInterface
+        {
             /** @var array<int, array{phone: string, code: string}> */
             public array $sent = [];
 

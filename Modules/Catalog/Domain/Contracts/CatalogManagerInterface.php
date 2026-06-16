@@ -3,9 +3,9 @@
 namespace Modules\Catalog\Domain\Contracts;
 
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
-use Illuminate\Support\Collection;
 use Modules\Catalog\Domain\DTOs\CategoryDTO;
 use Modules\Catalog\Domain\DTOs\ProductDTO;
+use Modules\Catalog\Domain\DTOs\ProductImageDTO;
 use Modules\Catalog\Domain\DTOs\ProductVariantDTO;
 
 interface CatalogManagerInterface
@@ -38,7 +38,9 @@ interface CatalogManagerInterface
 
     public function createProduct(array $data): ProductDTO;
 
-    public function addProductImage(int $productId, int $mediaId, int $sortOrder = 0): void;
+    public function addProductImage(int $productId, int $mediaId, int $sortOrder = 0): ProductImageDTO;
+
+    public function removeProductImage(int $imageId): void;
 
     public function updateProduct(int $id, array $data): ProductDTO;
 

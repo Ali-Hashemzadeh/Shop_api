@@ -132,13 +132,20 @@ class EloquentCatalogManager implements CatalogManagerInterface
         return ProductDTO::fromModel($product, $primaryImageUrl, [], []);
     }
 
-    public function addProductImage(int $productId, int $mediaId, int $sortOrder = 0): void
+    public function addProductImage(int $productId, int $mediaId, int $sortOrder = 0): ProductImageDTO
     {
-        ProductImage::query()->create([
+        $image = ProductImage::query()->create([
             'product_id' => $productId,
             'media_id' => $mediaId,
             'sort_order' => $sortOrder,
         ]);
+
+        return ProductImageDTO::fromModel($image, $this->resolveUrl($mediaId) ?? '');
+    }
+
+    public function removeProductImage(int $imageId): void
+    {
+        ProductImage::query()->findOrFail($imageId)->delete();
     }
 
     public function updateProduct(int $id, array $data): ProductDTO

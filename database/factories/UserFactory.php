@@ -4,6 +4,7 @@ namespace Database\Factories;
 
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Modules\Identity\Domain\Models\User;
 
 class UserFactory extends Factory
@@ -18,7 +19,7 @@ class UserFactory extends Factory
             'phone' => fake()->unique()->numerify('09#########'),
             'email_verified_at' => now(),
             'password' => Hash::make('password123'),
-            'remember_token' => \Illuminate\Support\Str::random(10),
+            'remember_token' => Str::random(10),
         ];
     }
 }

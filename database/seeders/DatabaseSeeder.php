@@ -6,6 +6,7 @@ use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Modules\Catalog\Infrastructure\Persistence\Seeders\CatalogModuleSeeder;
 use Modules\Identity\Infrastructure\Persistence\Seeders\IdentityModuleSeeder;
+use Modules\Inventory\Infrastructure\Persistence\Seeders\InventoryPermissionsSeeder;
 use Modules\Media\Infrastructure\Persistence\Seeders\MediaModuleSeeder;
 
 class DatabaseSeeder extends Seeder
@@ -20,7 +21,8 @@ class DatabaseSeeder extends Seeder
         $this->call([
             IdentityModuleSeeder::class,
             CatalogModuleSeeder::class,
-            MediaModuleSeeder::class
+            MediaModuleSeeder::class,
+            InventoryPermissionsSeeder::class,
         ]);
     }
 }

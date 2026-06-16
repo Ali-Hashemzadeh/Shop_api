@@ -87,7 +87,7 @@ class MediaUploadTest extends TestCase
         $user->givePermissionTo('media.upload');
 
         $response = $this->postJson('/api/v1/media', [
-            'file'   => UploadedFile::fake()->image('photo.jpg'),
+            'file' => UploadedFile::fake()->image('photo.jpg'),
             'folder' => 'banners',
         ]);
 
@@ -130,7 +130,7 @@ class MediaUploadTest extends TestCase
         $user->givePermissionTo('media.upload');
 
         $this->postJson('/api/v1/media', [
-            'file'   => UploadedFile::fake()->image('photo.jpg'),
+            'file' => UploadedFile::fake()->image('photo.jpg'),
             'folder' => '../etc',
         ])
             ->assertUnprocessable()

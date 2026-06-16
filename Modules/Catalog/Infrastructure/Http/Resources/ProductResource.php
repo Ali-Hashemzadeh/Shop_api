@@ -15,15 +15,16 @@ class ProductResource extends JsonResource
         $dto = $this->resource;
 
         return [
-            'id'                => $dto->id,
-            'title'             => $dto->title,
-            'slug'              => $dto->slug,
-            'description'       => $dto->description,
-            'status'            => $dto->status,
-            'category_id'       => $dto->categoryId,
+            'id' => $dto->id,
+            'title' => $dto->title,
+            'slug' => $dto->slug,
+            'description' => $dto->description,
+            'features' => $dto->features,
+            'status' => $dto->status,
+            'category_id' => $dto->categoryId,
             'primary_image_url' => $dto->primaryImageUrl,
-            'images'            => ProductImageResource::collection($dto->images),
-            'variants'          => ProductVariantResource::collection($dto->variants),
+            'images' => ProductImageResource::collection($dto->images),
+            'variants' => ProductVariantResource::collection($dto->variants),
         ];
     }
 }

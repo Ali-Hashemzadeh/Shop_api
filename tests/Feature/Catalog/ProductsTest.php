@@ -65,9 +65,9 @@ class ProductsTest extends TestCase
     public function it_can_create_a_product_with_a_primary_image_and_gallery(): void
     {
         $response = $this->postJson('/api/v1/catalog/products', [
-            'title'         => 'Camera',
+            'title' => 'Camera',
             'primary_image' => UploadedFile::fake()->image('camera-main.jpg'),
-            'gallery'       => [
+            'gallery' => [
                 UploadedFile::fake()->image('camera-angle-1.jpg'),
                 UploadedFile::fake()->image('camera-angle-2.jpg'),
             ],
@@ -84,7 +84,7 @@ class ProductsTest extends TestCase
         $category = Category::create(['name' => 'Cameras', 'slug' => 'cameras', 'is_active' => true]);
 
         $this->postJson('/api/v1/catalog/products', [
-            'title'       => 'DSLR Camera',
+            'title' => 'DSLR Camera',
             'category_id' => $category->id,
         ])->assertCreated()
             ->assertJsonPath('category_id', $category->id);
@@ -110,9 +110,9 @@ class ProductsTest extends TestCase
     public function it_rejects_providing_both_primary_media_id_and_image_file(): void
     {
         $this->postJson('/api/v1/catalog/products', [
-            'title'            => 'Product',
+            'title' => 'Product',
             'primary_media_id' => 1,
-            'primary_image'    => UploadedFile::fake()->image('photo.jpg'),
+            'primary_image' => UploadedFile::fake()->image('photo.jpg'),
         ])->assertUnprocessable()
             ->assertJsonValidationErrorFor('primary_media_id');
     }

@@ -2,6 +2,8 @@
 
 namespace Modules\Media\Domain\DTOs;
 
+use Modules\Media\Domain\Models\Media;
+
 class MediaDTO
 {
     /**
@@ -19,7 +21,7 @@ class MediaDTO
      * A helpful factory method to transform an Eloquent Media model
      * seamlessly into a clean, decoupled DTO.
      */
-    public static function fromModel(\Modules\Media\Domain\Models\Media $media): self
+    public static function fromModel(Media $media): self
     {
         return new self(
             id: $media->id,

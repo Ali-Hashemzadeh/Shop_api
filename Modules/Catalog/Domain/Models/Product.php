@@ -13,9 +13,15 @@ class Product extends Model
         'title',
         'slug',
         'description',
+        'features',
         'status',
         'primary_media_id',
     ];
+
+    protected function casts(): array
+    {
+        return ['features' => 'array'];
+    }
 
     public function category(): BelongsTo
     {

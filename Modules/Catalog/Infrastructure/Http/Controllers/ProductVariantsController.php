@@ -17,11 +17,12 @@ use Modules\Catalog\Infrastructure\Http\Resources\ProductVariantResource;
 class ProductVariantsController extends Controller
 {
     use AuthorizesRequests;
+
     public function __construct(
         private readonly CreateProductVariantAction $createAction,
         private readonly UpdateProductVariantAction $updateAction,
         private readonly DeleteProductVariantAction $deleteAction,
-        private readonly CatalogManagerInterface    $catalog,
+        private readonly CatalogManagerInterface $catalog,
     ) {}
 
     public function store(StoreProductVariantRequest $request, int $productId): JsonResponse

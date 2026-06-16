@@ -4,6 +4,8 @@ namespace Modules\Media\Infrastructure\Http\Controllers;
 
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Routing\Controller;
 use Modules\Media\Domain\Contracts\MediaManagerInterface;
 use Modules\Media\Domain\Models\Media;
@@ -17,6 +19,13 @@ class MediaController extends Controller
     public function __construct(
         private readonly MediaManagerInterface $media,
     ) {}
+
+    public function index(Request $request): AnonymousResourceCollection
+    {
+        $perPage = min(max($request->integer('per_page', 15), 1), 100);
+
+        return MediaResource::collection($this->media->listMedia($perPage));
+    }
 
     public function store(StoreMediaRequest $request): JsonResponse
     {
