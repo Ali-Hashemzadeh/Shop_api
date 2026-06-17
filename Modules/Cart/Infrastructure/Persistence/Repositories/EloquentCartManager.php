@@ -157,7 +157,7 @@ class EloquentCartManager implements CartManagerInterface
 
             return CartItemDTO::fromModel(
                 $item,
-                productName: null,
+                productName: $variant?->productName,
                 basePrice: $variant?->basePrice,
                 compareAtPrice: $variant?->compareAtPrice,
                 imageUrl: $variant?->imageUrl,

@@ -4,6 +4,8 @@ namespace Tests\Feature\Cart;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Modules\Cart\Domain\Models\Cart;
+use Modules\Catalog\Domain\Models\Product;
+use Modules\Catalog\Domain\Models\ProductVariant;
 use Modules\Inventory\Domain\Models\InventoryStock;
 use Tests\TestCase;
 
@@ -18,6 +20,21 @@ class CartTest extends TestCase
         parent::setUp();
         $this->seedIdentityRolesAndPermissions();
         $this->seedInventoryPermissions();
+    }
+
+    // ── Product name enrichment ───────────────────────────────────────────────
+
+    /** @test */
+    public function cart_item_includes_product_name_when_catalog_variant_exists(): void
+    {
+        $product = Product::create(['title' => 'Samsung Galaxy S25', 'slug' => 's25', 'status' => 'published']);
+        ProductVariant::create(['product_id' => $product->id, 'sku' => 'S25-BLK', 'base_price' => 89000000, 'is_default' => true, 'attributes' => []]);
+        InventoryStock::create(['sku' => 'S25-BLK', 'quantity' => 10, 'reserved_quantity' => 0]);
+
+        $this->withHeaders(['X-Session-Id' => self::SESSION])
+            ->postJson('/api/v1/cart/items', ['sku' => 'S25-BLK', 'quantity' => 1])
+            ->assertCreated()
+            ->assertJsonPath('items.0.product_name', 'Samsung Galaxy S25');
     }
 
     // ── Guest: GET /api/v1/cart ───────────────────────────────────────────────

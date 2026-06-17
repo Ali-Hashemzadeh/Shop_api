@@ -14,10 +14,14 @@ class ProductVariantDTO
         public readonly ?int $compareAtPrice,
         public readonly array $attributes,
         public readonly ?string $imageUrl,
+        public readonly ?string $productName = null,
     ) {}
 
-    public static function fromModel(ProductVariant $variant, ?string $imageUrl = null): self
-    {
+    public static function fromModel(
+        ProductVariant $variant,
+        ?string $imageUrl = null,
+        ?string $productName = null,
+    ): self {
         return new self(
             id: $variant->id,
             sku: $variant->sku,
@@ -26,6 +30,7 @@ class ProductVariantDTO
             compareAtPrice: $variant->compare_at_price,
             attributes: $variant->attributes ?? [],
             imageUrl: $imageUrl,
+            productName: $productName,
         );
     }
 }

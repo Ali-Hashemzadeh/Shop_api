@@ -194,19 +194,19 @@ class EloquentCatalogManager implements CatalogManagerInterface
 
     public function findVariant(int $variantId): ?ProductVariantDTO
     {
-        $variant = ProductVariant::query()->find($variantId);
+        $variant = ProductVariant::with('product')->find($variantId);
 
         return $variant
-            ? ProductVariantDTO::fromModel($variant, $this->resolveUrl($variant->media_id))
+            ? ProductVariantDTO::fromModel($variant, $this->resolveUrl($variant->media_id), $variant->product?->title)
             : null;
     }
 
     public function findVariantBySku(string $sku): ?ProductVariantDTO
     {
-        $variant = ProductVariant::query()->where('sku', $sku)->first();
+        $variant = ProductVariant::with('product')->where('sku', $sku)->first();
 
         return $variant
-            ? ProductVariantDTO::fromModel($variant, $this->resolveUrl($variant->media_id))
+            ? ProductVariantDTO::fromModel($variant, $this->resolveUrl($variant->media_id), $variant->product?->title)
             : null;
     }
 
@@ -216,7 +216,9 @@ class EloquentCatalogManager implements CatalogManagerInterface
             array_merge($data, ['product_id' => $productId])
         );
 
-        return ProductVariantDTO::fromModel($variant, $this->resolveUrl($variant->media_id));
+        $variant->load('product');
+
+        return ProductVariantDTO::fromModel($variant, $this->resolveUrl($variant->media_id), $variant->product?->title);
     }
 
     public function updateProductVariant(int $variantId, array $data): ProductVariantDTO
@@ -233,8 +235,9 @@ class EloquentCatalogManager implements CatalogManagerInterface
 
             $variant->update($data);
             $variant->refresh();
+            $variant->load('product');
 
-            return ProductVariantDTO::fromModel($variant, $this->resolveUrl($variant->media_id));
+            return ProductVariantDTO::fromModel($variant, $this->resolveUrl($variant->media_id), $variant->product?->title);
         });
     }
 
@@ -265,7 +268,8 @@ class EloquentCatalogManager implements CatalogManagerInterface
         $variants = $product->variants
             ->map(fn ($v) => ProductVariantDTO::fromModel(
                 $v,
-                $mediaMap->get($v->media_id)?->url
+                $mediaMap->get($v->media_id)?->url,
+                $product->title,
             ))
             ->all();
 
