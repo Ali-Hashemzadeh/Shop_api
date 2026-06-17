@@ -53,7 +53,8 @@ class AuthControllerTest extends TestCase
 
         $response
             ->assertOk()
-            ->assertJsonStructure(['message', 'expires_in']);
+            ->assertJsonStructure(['message', 'expires_in', 'is_new_user'])
+            ->assertJsonPath('is_new_user', true);
 
         $this->assertCount(1, $this->sender->sent);
         $this->assertSame('09123456789', $this->sender->sent[0]['phone']);
@@ -75,6 +76,15 @@ class AuthControllerTest extends TestCase
 
         $this->assertSame(1, User::where('phone', '09123456789')->count());
         $this->assertSame($user->id, User::where('phone', '09123456789')->first()->id);
+    }
+
+    public function test_requesting_otp_for_an_existing_user_returns_is_new_user_false(): void
+    {
+        User::factory()->create(['phone' => '09123456789']);
+
+        $this->postJson('/api/v1/otp/request', ['phone' => '09123456789'])
+            ->assertOk()
+            ->assertJsonPath('is_new_user', false);
     }
 
     public function test_requesting_otp_rejects_an_invalid_phone(): void

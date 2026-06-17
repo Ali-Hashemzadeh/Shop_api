@@ -23,8 +23,9 @@ class RequestOtp
     {
         $phone = $data['phone'];
 
-        $user = $this->users->findByPhone($phone)
-            ?? $this->createUser($phone, $data['name'] ?? null);
+        $existing = $this->users->findByPhone($phone);
+        $isNewUser = $existing === null;
+        $user = $existing ?? $this->createUser($phone, $data['name'] ?? null);
 
         $code = $this->generateCode();
 
@@ -38,6 +39,7 @@ class RequestOtp
         return [
             'message' => 'Verification code sent.',
             'expires_in' => $this->ttlMinutes() * 60,
+            'is_new_user' => $isNewUser,
         ];
     }
 

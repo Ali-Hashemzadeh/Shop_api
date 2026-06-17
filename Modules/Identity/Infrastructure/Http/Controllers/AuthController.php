@@ -21,6 +21,7 @@ class AuthController extends Controller
         return response()->json([
             'message' => $result['message'],
             'expires_in' => $result['expires_in'],
+            'is_new_user' => $result['is_new_user'],
         ]);
     }
 
