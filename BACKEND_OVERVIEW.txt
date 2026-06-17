@@ -1,0 +1,382 @@
+================================================================================
+  SHOP API — BACKEND SYSTEM OVERVIEW
+================================================================================
+
+This document explains how the backend is structured, how its pieces connect,
+and how a request moves through the system from HTTP to database and back.
+
+--------------------------------------------------------------------------------
+1. THE BIG PICTURE: MODULAR MONOLITH
+--------------------------------------------------------------------------------
+
+The application is a single deployable Laravel 12 app, but internally it is
+divided into self-contained modules under Modules/. Each module owns its own
+database tables, Eloquent models, business logic, HTTP layer, and tests — with
+hard boundaries between them.
+
+The goal: all the simplicity of a monolith today (one deployment, one DB, no
+network calls between services), but the architecture of microservices. When
+the business grows, any single module can be extracted into its own service
+without rewriting anything — the boundaries are already there.
+
+    Modules/
+    ├── Identity/     — users, auth, roles, addresses
+    ├── Media/        — file uploads and storage
+    ├── Catalog/      — categories, products, variants
+    ├── Inventory/    — stock levels and audit ledger
+    └── Cart/         — guest + auth carts
+
+Each module follows the same internal structure (DDD / Hexagonal Architecture):
+
+    Domain/
+      Models/         Eloquent models — PRIVATE, never imported by other modules
+      Contracts/      PHP interfaces — the module's PUBLIC API
+      DTOs/           Immutable data objects that cross module boundaries
+      Exceptions/     Domain-specific exceptions
+      Policies/       Laravel authorization policies
+
+    Application/
+      Actions/        Single-responsibility business logic handlers
+
+    Infrastructure/
+      Http/           Controllers, Form Requests, API Resources, Middleware
+      Persistence/    Migrations, Repositories (concrete implementations)
+      Providers/      Service provider that wires everything into Laravel
+      Routes/         Route file for this module
+
+
+--------------------------------------------------------------------------------
+2. THE CARDINAL RULES
+--------------------------------------------------------------------------------
+
+These rules make the modular architecture work. Breaking one is a bug even if
+tests pass.
+
+  A. NO MODEL SHARING
+     Module A never imports Module B's Eloquent model. If Cart needs to know
+     something about a Product, it asks CatalogManagerInterface — not the
+     Product model directly.
+
+  B. CONTRACTS + DTOs ONLY AT THE BOUNDARY
+     All cross-module communication goes through interfaces (Contracts) that
+     return immutable DTOs (Data Transfer Objects). No raw Eloquent models
+     cross a module wall.
+
+  C. NO CROSS-MODULE DATABASE JOINS
+     Each module queries only its own tables. If you need data from two modules,
+     you make two separate queries and combine them in the calling layer.
+
+  D. THE CENTS RULE (financial integrity)
+     All monetary values — prices, totals — are stored and processed as raw
+     integers in the smallest currency unit (rials). Floats are completely
+     forbidden for financial fields. 89000000 means 89,000,000 rials. The HTTP
+     layer casts string numbers to integers before validation so form-encoded
+     requests work correctly.
+
+  E. LOOSE MEDIA COUPLING
+     Tables outside the Media module store a media_id as a plain nullable
+     integer column with no foreign key constraint. This lets Media be replaced
+     or extracted without touching other modules' schemas.
+
+
+--------------------------------------------------------------------------------
+3. HOW A REQUEST TRAVELS THROUGH THE SYSTEM
+--------------------------------------------------------------------------------
+
+Example: POST /api/v1/cart/items (guest adds a product to cart)
+
+  1. REQUEST ARRIVES AT LARAVEL
+     Laravel's router matches the URL to the CartController route group.
+
+  2. MIDDLEWARE RUNS
+     The route has ['api', 'cart.identify'] middleware.
+     - 'api' applies rate limiting, JSON headers, etc.
+     - 'cart.identify' (CartIdentificationMiddleware) runs before the controller:
+         a. Tries auth('sanctum') silently — no 401 if it fails.
+         b. If the user is authenticated: use their user_id as the cart key.
+         c. If not: read X-Session-Id header for the guest session key.
+         d. If that header is absent too: auto-generate a UUID session key.
+         e. Calls CartManagerInterface::findOrCreateCart() to get or create the
+            cart row in the database.
+         f. Stores the cart ID in $request->attributes so the controller can
+            read it without re-querying.
+         g. After the response is built: adds X-Cart-Session-Id to the response
+            headers so the frontend knows which session was assigned.
+
+  3. FORM REQUEST VALIDATES AND AUTHORIZES
+     Laravel resolves AddCartItemRequest. Before running validation rules:
+     - authorize() is called. For cart endpoints this returns true (self-service).
+       For admin endpoints it runs a permission check and returns 403 early if
+       the user lacks the required permission — before any validation runs.
+     - prepareForValidation() casts the 'quantity' field from string to integer
+       so 'integer' validation works on form-encoded requests.
+     - Rules run: sku (required string), quantity (required integer min:1).
+     A 422 response is returned automatically if validation fails.
+
+  4. CONTROLLER DELEGATES TO AN ACTION
+     CartController::addItem() is a thin orchestrator:
+     - Reads the validated data from the request.
+     - Reads the cart_id from $request->attributes (set by the middleware).
+     - Calls AddToCartAction::handle().
+     - Maps exceptions to HTTP status codes (404, 422).
+     - Wraps the returned DTO in a CartResource and returns JSON.
+
+  5. ACTION RUNS THE BUSINESS LOGIC
+     AddToCartAction does the real work:
+     - Calls InventoryManagerInterface::getStockBySku($sku).
+       If the SKU doesn't exist in Inventory: catches StockNotFoundException,
+       re-throws as Cart's own ProductSkuNotFoundException (keeps the controller
+       isolated from Inventory's exception types).
+     - Checks $stock->availableQuantity >= $quantity.
+       If not: throws Cart's own InsufficientStockException.
+     - Calls CartManagerInterface::addItem() to persist the change.
+     - Returns a CartDTO.
+
+  6. MANAGER WRITES TO THE DATABASE
+     EloquentCartManager::addItem():
+     - Loads the Cart model with its items.
+     - If the SKU already exists in the cart: increments quantity.
+     - If it doesn't: creates a new cart_items row.
+     - Calls buildDTO() which:
+         a. Loops over cart items.
+         b. Calls CatalogManagerInterface::findVariantBySku() for each SKU to
+            enrich the item with price, compare_at_price, and image_url.
+         c. Builds CartItemDTOs (lineTotal = quantity x basePrice).
+         d. Builds and returns CartDTO (totalPrice = sum of all lineTotals).
+
+  7. RESOURCE SHAPES THE RESPONSE
+     CartResource accepts the CartDTO (never an Eloquent model) and serializes
+     it to JSON. The response goes back through the middleware stack (where
+     X-Cart-Session-Id is added to the headers) and is sent to the client.
+
+
+--------------------------------------------------------------------------------
+4. MODULE-BY-MODULE BREAKDOWN
+--------------------------------------------------------------------------------
+
+IDENTITY MODULE
+  Responsibility: Who you are.
+  - Passwordless OTP authentication. POST /otp/request sends a hashed
+    short-lived code; POST /otp/verify consumes it and mints a Sanctum token.
+  - User profiles, delivery addresses, provinces, and cities.
+  - RBAC: roles (admin, customer) are just named bundles of permissions.
+    Spatie laravel-permission handles role and permission assignment.
+  - OtpSenderInterface is a swappable boundary — currently logs to file,
+    ready to swap for a real SMS gateway without touching the flow.
+  Public contract: IdentityManagerInterface::isAdmin(int $userId): bool
+
+MEDIA MODULE
+  Responsibility: Files.
+  - The only module that performs file I/O. Every other module delegates to
+    MediaManagerInterface when they need to store or retrieve files.
+  - Stores file metadata in the media table; files go to the local public disk.
+  - Two usage flows:
+      Pre-upload: POST /media -> receive media_id -> pass id to a Catalog write.
+      Inline: attach file directly to a Catalog write endpoint.
+  Public contract: MediaManagerInterface::upload(), getMedia(), delete()
+
+CATALOG MODULE
+  Responsibility: What you sell.
+  - Categories (infinite nesting via parent_id).
+  - Products (draft/published, primary image, SEO slug).
+  - Product galleries (sorted images per product).
+  - Product variants (SKU, integer prices, JSON attributes, is_default invariant).
+  - The is_default invariant: exactly one variant per product may be default.
+    When you set a new default, all others are unset in the same DB transaction.
+  Public contract: CatalogManagerInterface — full read/write surface
+
+INVENTORY MODULE
+  Responsibility: How many you have.
+  - Tracks quantity and reserved_quantity per SKU.
+  - available_quantity = quantity - reserved_quantity. This is what customers
+    can actually buy.
+  - Reservation lifecycle: reserveStock (checkout) -> commitReservation (paid)
+    or releaseReservation (abandoned/cancelled).
+  - All mutations use DB::transaction() + lockForUpdate() to prevent two
+    simultaneous checkouts from both seeing "10 in stock" and both succeeding
+    when only 10 units exist.
+  - An append-only ledger (inventory_ledger_entries) records every stock
+    movement with a type, quantity change, and optional reference (order ID).
+    Rows are never updated or deleted — it is an audit trail.
+  Public contract: InventoryManagerInterface — getStockBySku, adjustStock,
+    reserveStock, commitReservation, releaseReservation
+
+CART MODULE
+  Responsibility: What the user intends to buy.
+  - Dual identity: authenticated users are identified by user_id;
+    guests are identified by a session_id (UUID stored in localStorage).
+  - CartIdentificationMiddleware resolves which cart to use on every request.
+    It never returns 401 — guest requests are always accepted.
+  - Cart does NOT reserve stock. Items in a cart are wishes, not commitments.
+    Stock is only reserved when the user proceeds to checkout (Orders module,
+    not yet built).
+  - Every add/update validates current stock via InventoryManagerInterface.
+  - Every getCart() enriches items with current prices via
+    CatalogManagerInterface. Prices in the cart are always live — if a product
+    price changes, the cart reflects it immediately.
+  - Merge endpoint: after login, the frontend sends the guest session_id and
+    the server folds the guest cart into the user cart (quantities summed,
+    clamped to available stock, guest cart deleted).
+  Public contract: CartManagerInterface
+
+
+--------------------------------------------------------------------------------
+5. AUTHENTICATION AND AUTHORIZATION
+--------------------------------------------------------------------------------
+
+AUTHENTICATION (who are you?)
+  Laravel Sanctum issues API tokens. The flow:
+    POST /otp/request  — validates phone, finds-or-creates user, sends OTP
+    POST /otp/verify   — validates OTP, calls Sanctum to create a token
+    Subsequent requests — send "Authorization: Bearer <token>"
+
+  Routes marked with auth:sanctum middleware return 401 if no valid token
+  is present. Public routes never return 401.
+
+AUTHORIZATION (are you allowed?)
+  Spatie laravel-permission manages roles and permissions.
+  Rules:
+    - Authorization is PERMISSION-based, not role-based.
+    - Roles are just bundles of permissions. admin gets all permissions.
+      customer gets none by default (cart is self-service, no permission needed).
+    - Policies (e.g. CatalogPolicy) check $user->can('catalog.product.create').
+    - Form Requests run authorize() before validation — unauthorized requests
+      get 403 before Laravel even looks at the request body.
+
+  Permission naming convention: module.entity.action
+    catalog.product.create
+    catalog.variant.update
+    inventory.stock.manage
+    inventory.ledger.view
+    media.upload
+    media.delete
+
+
+--------------------------------------------------------------------------------
+6. DATABASE DESIGN NOTES
+--------------------------------------------------------------------------------
+
+  - Local development and tests use SQLite (in-memory for tests).
+  - Production target: MySQL or PostgreSQL.
+
+  Key design choices:
+
+  carts.user_id has NO foreign key constraint. It stores the user's ID as a
+  plain integer. This is intentional — the Cart module cannot reference the
+  Identity module's users table in a migration (that would create a hard
+  coupling at the DB layer). Same reason media_id columns across the codebase
+  are plain integers with no FK to the media table.
+
+  inventory_ledger_entries has no updated_at column (UPDATED_AT = null on the
+  model). Ledger rows are written once and never changed. This is enforced at
+  the Eloquent layer so you can't accidentally update a ledger entry.
+
+  cart_items has a UNIQUE(cart_id, sku) constraint enforced at the DB level.
+  The application layer relies on this to safely increment quantity when the
+  same SKU is added twice rather than creating duplicate rows.
+
+  All money columns (base_price, compare_at_price) are INTEGER, never DECIMAL
+  or FLOAT. This eliminates floating point rounding errors in financial math.
+
+
+--------------------------------------------------------------------------------
+7. THE SERVICE PROVIDER: HOW A MODULE WIRES INTO LARAVEL
+--------------------------------------------------------------------------------
+
+Each module has a ServiceProvider (e.g. CartServiceProvider) that does three
+things:
+
+  register()
+    Binds the Contract interface to the concrete implementation:
+      $this->app->bind(CartManagerInterface::class, EloquentCartManager::class);
+    This means whenever Laravel sees CartManagerInterface in a constructor, it
+    automatically injects EloquentCartManager. You can swap the implementation
+    (e.g. for testing or migration to a different DB) in one line.
+
+  boot()
+    Loads routes and migrations, registers middleware aliases:
+      $this->loadRoutesFrom(__DIR__.'/../Routes/api.php');
+      $this->loadMigrationsFrom(__DIR__.'/../Persistence/Migrations');
+      $this->app['router']->aliasMiddleware('cart.identify', ...);
+
+  bootstrap/providers.php
+    This file lists every service provider that Laravel loads at startup.
+    Adding a new module means adding its provider here — one line.
+
+
+--------------------------------------------------------------------------------
+8. TESTING APPROACH
+--------------------------------------------------------------------------------
+
+  All tests are Feature tests (tests/Feature/<Module>/) that hit the real HTTP
+  stack — middleware, validation, controllers, actions, and the database all
+  run. There are no mock-heavy unit tests; real integration is what matters.
+
+  The test database is SQLite in-memory: fast, isolated, wiped after each test
+  via the RefreshDatabase trait.
+
+  The base TestCase provides helpers so tests stay readable:
+    actingAsAdmin()        — creates user, assigns admin role, acts as them
+    actingAsCustomer()     — creates user, assigns customer role, acts as them
+    seedIdentityRolesAndPermissions()
+    seedCatalogPermissions()
+    seedInventoryPermissions()
+
+  Every state-changing endpoint has tests for:
+    happy path (2xx)
+    validation failure (422)
+    not found (404)
+    unauthenticated (401)
+    unauthorized (403)
+    domain invariant enforcement (stock cap, is_default single-true, etc.)
+
+  Current baseline: 205 tests / 540 assertions — all green.
+
+  Run the full suite:      composer test
+  Run a single module:     php artisan test --filter=CartTest
+
+
+--------------------------------------------------------------------------------
+9. KEY FILES TO KNOW
+--------------------------------------------------------------------------------
+
+  bootstrap/providers.php               — registers all module service providers
+  AGENT_CONTEXT.md                      — authoritative, always-current module ledger
+  CLAUDE.md                             — engineering rules and conventions
+  CHANGELOG.md                          — what changed and why, in detail
+
+  Per module (example: Cart):
+    Domain/Contracts/CartManagerInterface.php          the public API
+    Domain/DTOs/CartDTO.php                            what crosses the boundary
+    Infrastructure/Persistence/Repositories/
+      EloquentCartManager.php                          the implementation
+    Application/Actions/AddToCartAction.php            business logic
+    Infrastructure/Http/Controllers/CartController.php thin HTTP adapter
+    Infrastructure/Providers/CartServiceProvider.php   wires it all together
+    Infrastructure/Routes/api.php                      route definitions
+    tests/Feature/Cart/CartTest.php                    all tests
+
+
+--------------------------------------------------------------------------------
+10. WHAT'S NEXT
+--------------------------------------------------------------------------------
+
+  The next modules in the roadmap are Orders and Payment.
+
+  Orders will:
+    - Accept a cart ID and user address
+    - Validate all items still have sufficient stock
+    - Call InventoryManagerInterface::reserveStock() for each SKU
+    - Create an order record with a snapshot of prices at purchase time
+    - Clear the cart
+    - Return an order ID and total for the Payment module
+
+  Payment will:
+    - Accept payment for an order ID
+    - On success: call InventoryManagerInterface::commitReservation()
+    - On failure or timeout: call InventoryManagerInterface::releaseReservation()
+
+  The reservation lifecycle (reserve -> commit/release) is already fully built
+  in the Inventory module. It is sitting there waiting for Orders to use it.
+
+================================================================================

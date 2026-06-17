@@ -127,6 +127,8 @@
   <a href="#cart-update">Update Quantity</a>
   <a href="#cart-remove">Remove Item</a>
   <a href="#cart-clear">Clear Cart</a>
+  <a href="#cart-merge">Merge (Post-Login)</a>
+  <a href="#cart-frontend-guide">Frontend Guide</a>
 </nav>
 
 <main>
@@ -1818,6 +1820,138 @@ GET /api/v1/catalog/products?category_id=5&amp;min_price=10000000&amp;max_price=
       <pre><span class="comment">// Empty body</span></pre>
     </div>
   </div>
+
+  <!-- POST /cart/merge -->
+  <h3 id="cart-merge">Merge Guest Cart (Post-Login)</h3>
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/cart/merge</span>
+      <span class="badge auth">Requires auth:sanctum</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Merges a guest session cart into the authenticated user's permanent cart. Call this immediately after a successful login if the user had a guest cart.</p>
+      <div class="note">
+        <strong>Merge behaviour:</strong><br>
+        • SKUs that exist in <strong>both</strong> carts have their quantities summed, then clamped to available stock.<br>
+        • SKUs only in the guest cart are moved to the user cart (quantity clamped to stock).<br>
+        • SKUs with no inventory record are silently skipped — they don't block the merge.<br>
+        • The guest cart is <strong>deleted</strong> after a successful merge regardless of outcome.
+      </div>
+      <div class="block-label">Request Body</div>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr><td>session_id</td><td class="req">required</td><td>The guest session ID stored in <code>localStorage</code> after browsing as a guest.</td></tr>
+      </table>
+      <pre>{
+  <span class="key">"session_id"</span>: <span class="str">"a3f8c1e2b4d69f..."</span>
+}</pre>
+      <div class="block-label">Response — 200 OK</div>
+      <p>Returns the merged user cart (same shape as <code>GET /cart</code>). If no guest cart existed for that session ID, the user's existing cart is returned unchanged — this endpoint is always safe to call.</p>
+      <div class="block-label">Error Responses</div>
+      <table>
+        <tr><th>Status</th><th>Condition</th></tr>
+        <tr><td>401</td><td class="opt">No Bearer token — user is not authenticated.</td></tr>
+        <tr><td>422</td><td class="opt">Validation failure — <code>session_id</code> missing or not a string.</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- Frontend Implementation Guide -->
+  <h2 id="cart-frontend-guide">Cart — Frontend Implementation Guide</h2>
+  <p>This section walks through the complete frontend cart lifecycle from first visit to post-login merge. All examples use the native <code>fetch</code> API; adapt to Axios or any HTTP client as needed.</p>
+
+  <h3>Step 1 — Guest browsing: create and persist a session</h3>
+  <p>On a guest's first cart action, the server auto-generates a session ID and returns it as the <code>X-Cart-Session-Id</code> response header. Save it immediately — this is the guest's cart key for the entire browsing session.</p>
+  <pre>async function guestCartRequest(method, path, body = null) {
+  const sessionId = localStorage.getItem('cart_session_id');
+
+  const headers = { 'Content-Type': 'application/json' };
+  if (sessionId) headers['X-Session-Id'] = sessionId;
+
+  const res = await fetch(`/api/v1/cart${path}`, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  // Persist the session ID the server assigned (first request only)
+  const returnedSession = res.headers.get('X-Cart-Session-Id');
+  if (returnedSession) {
+    localStorage.setItem('cart_session_id', returnedSession);
+  }
+
+  return res.json();
+}
+
+// Usage
+await guestCartRequest('POST', '/items', { sku: 'S25U-TBK-256', quantity: 1 });
+await guestCartRequest('GET',  '/');
+</pre>
+
+  <h3>Step 2 — Authenticated requests: use the Bearer token</h3>
+  <p>Once the user is logged in, switch to sending the <code>Authorization</code> header instead of <code>X-Session-Id</code>. The server will always resolve the cart by <code>user_id</code> when a valid token is present.</p>
+  <pre>async function authCartRequest(method, path, token, body = null) {
+  const res = await fetch(`/api/v1/cart${path}`, {
+    method,
+    headers: {
+      'Content-Type':  'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  return res.json();
+}
+</pre>
+
+  <h3>Step 3 — Post-login merge: combine the guest cart into the user cart</h3>
+  <p>After a successful login, check whether a guest session existed. If it did, call the merge endpoint once, then clear the stored session ID. This is a fire-and-forget operation — if the guest cart is empty or the session ID is stale, the server handles it gracefully without error.</p>
+  <pre>async function onLoginSuccess(token) {
+  // Store the token however your app manages auth state
+  localStorage.setItem('auth_token', token);
+
+  const sessionId = localStorage.getItem('cart_session_id');
+
+  if (sessionId) {
+    await fetch('/api/v1/cart/merge', {
+      method: 'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ session_id: sessionId }),
+    });
+
+    // Guest session is no longer needed — the server deleted the guest cart
+    localStorage.removeItem('cart_session_id');
+  }
+
+  // Reload the cart to reflect merged state
+  return authCartRequest('GET', '/', token);
+}
+</pre>
+
+  <div class="warn">
+    <strong>Do not merge on every page load.</strong> Only call <code>/cart/merge</code> once, immediately after the login response. Calling it later (e.g., on refresh) is harmless but wasteful — the guest cart will already be gone.
+  </div>
+
+  <h3>Step 4 — Logout: clear the auth token</h3>
+  <p>On logout, remove the token from storage. Do <strong>not</strong> create a new guest session proactively — let the next cart action trigger it naturally via the <code>X-Cart-Session-Id</code> response header.</p>
+  <pre>function onLogout() {
+  localStorage.removeItem('auth_token');
+  // Do NOT remove cart_session_id here — there is none yet for the new guest session.
+  // The next cart action will create one automatically.
+}
+</pre>
+
+  <h3>Complete session state reference</h3>
+  <table>
+    <tr><th>User state</th><th>Header to send</th><th>localStorage key used</th></tr>
+    <tr><td>Guest, first visit</td><td class="opt">None</td><td class="opt">Written after first response: <code>cart_session_id</code></td></tr>
+    <tr><td>Guest, returning</td><td><code>X-Session-Id: &lt;value&gt;</code></td><td class="opt">Read: <code>cart_session_id</code></td></tr>
+    <tr><td>Logged in</td><td><code>Authorization: Bearer &lt;token&gt;</code></td><td class="opt">Read: <code>auth_token</code></td></tr>
+    <tr><td>Just logged in (merge)</td><td><code>Authorization: Bearer &lt;token&gt;</code></td><td class="opt">Read + delete: <code>cart_session_id</code></td></tr>
+  </table>
 
 </main>
 
