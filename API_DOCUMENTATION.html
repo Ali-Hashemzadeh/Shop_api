@@ -88,7 +88,7 @@
 <body>
 
 <nav>
-  <div class="logo">Shop API <span>Frontend Reference v1</span></div>
+  <div class="logo">Shop API <span>Frontend Reference v2</span></div>
 
   <div class="section-label">General</div>
   <a href="#overview">Overview</a>
@@ -146,16 +146,48 @@
 
   <!-- OVERVIEW -->
   <h2 id="overview">Overview</h2>
+  <h3>Quick Test (curl)</h3>
+  <p>Copy-paste these to test the API locally while the server is running (<code>php artisan serve</code>):</p>
+  <pre><span class="comment"># 1. Request OTP (creates user on first call)</span>
+curl -s -X POST http://localhost:8000/api/v1/otp/request \
+  -H "Content-Type: application/json" \
+  -d '{"phone":"09123456789","name":"Sara Ahmadi"}'
+
+<span class="comment"># 2. Verify OTP — replace CODE with the value logged by LogOtpSender</span>
+curl -s -X POST http://localhost:8000/api/v1/otp/verify \
+  -H "Content-Type: application/json" \
+  -d '{"phone":"09123456789","code":"CODE","device_name":"curl test"}'
+
+<span class="comment"># 3. Use the token from step 2</span>
+TOKEN="1|your_token_here"
+
+<span class="comment"># 4. Browse published products</span>
+curl -s http://localhost:8000/api/v1/catalog/products
+
+<span class="comment"># 5. Search with price ceiling</span>
+curl -s "http://localhost:8000/api/v1/catalog/products?search=گوشی&max_price=50000000"
+
+<span class="comment"># 6. Check stock for a SKU</span>
+curl -s http://localhost:8000/api/v1/inventory/sku/S25U-TBK-256
+
+<span class="comment"># 7. Upload an image (admin token required)</span>
+curl -s -X POST http://localhost:8000/api/v1/media \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "file=@/path/to/image.webp" \
+  -F "folder=products"</pre>
+  <div class="note"><strong>Finding the OTP in development:</strong> The app uses <code>LogOtpSender</code> which writes the code to the Laravel log. Run <code>php artisan pail</code> (or check <code>storage/logs/laravel.log</code>) and look for a line containing <code>OTP</code> and the phone number.</div>
 
   <h3 id="auth-flow">Authentication Flow</h3>
   <p>This API uses <strong>passwordless OTP authentication</strong>. There are no passwords. The flow is always:</p>
   <ol>
-    <li>Call <strong>POST /otp/request</strong> with the user's phone number — the server sends an OTP code (SMS in production, logged in development).</li>
-    <li>Call <strong>POST /otp/verify</strong> with the phone, the code, and a device name — the server returns a <strong>Bearer token</strong>.</li>
+    <li>Call <strong>POST /otp/request</strong> with the user's phone number — the server sends an OTP code (SMS in production, logged in development). Check <code>is_new_user</code> in the response to know if this is a first-time registration.</li>
+    <li>Call <strong>POST /otp/verify</strong> with the phone, the code, and a device name — the server returns a <strong>Bearer token</strong> and the user object.</li>
     <li>Store the token and include it as <code>Authorization: Bearer {token}</code> on every subsequent protected request.</li>
     <li>The first time a phone number is used, an account is created automatically — register and login are the same endpoint.</li>
+    <li>After verifying, check <code>user.name === null</code> in the response. If null, show a profile completion screen and call <strong>PATCH /profile</strong> before continuing into the app.</li>
   </ol>
-  <div class="note"><strong>Note:</strong> OTP codes are single-use and expire after 5 minutes. Calling /otp/request again invalidates the previous code.</div>
+  <div class="note"><strong>is_new_user flag:</strong> <code>POST /otp/request</code> returns <code>is_new_user: true</code> when the phone was not previously registered. Use this to show different UI before the OTP step — e.g. "Create account" vs "Welcome back" — or to decide whether to show a profile completion screen after verification.</div>
+  <div class="note"><strong>OTP codes</strong> are single-use and expire in 2 minutes. Calling /otp/request again generates a fresh code and invalidates the previous one. A wrong guess does <em>not</em> burn the valid code — it remains usable until expiry.</div>
 
   <h3 id="errors">Errors &amp; Validation</h3>
   <p>The API uses standard HTTP status codes:</p>
@@ -231,9 +263,11 @@
 }</pre>
       <div class="block-label">Response — 200 OK</div>
       <pre>{
-  <span class="key">"message"</span>:    <span class="str">"OTP sent successfully."</span>,
-  <span class="key">"expires_in"</span>: <span class="num">5</span>
+  <span class="key">"message"</span>:     <span class="str">"Verification code sent."</span>,
+  <span class="key">"expires_in"</span>:  <span class="num">120</span>,   <span class="comment">// seconds until the code expires (2 minutes)</span>
+  <span class="key">"is_new_user"</span>: <span class="bool">true</span>    <span class="comment">// false if the phone already had an account</span>
 }</pre>
+      <div class="note"><strong>What to do with is_new_user:</strong> If <code>true</code>, the user was just created with only a phone number. After they verify the OTP, check <code>user.name === null</code> in the verify response and redirect to a profile completion screen.</div>
     </div>
   </div>
 
@@ -259,15 +293,21 @@
 }</pre>
       <div class="block-label">Response — 200 OK</div>
       <pre>{
-  <span class="key">"message"</span>: <span class="str">"Login successful."</span>,
+  <span class="key">"message"</span>: <span class="str">"Logged in successfully."</span>,
   <span class="key">"token"</span>:   <span class="str">"1|AbCdEfGhIjKlMnOpQrStUvWxYz1234567890abcdef"</span>,
   <span class="key">"user"</span>: {
     <span class="key">"id"</span>:         <span class="num">42</span>,
-    <span class="key">"name"</span>:       <span class="str">"Sara Ahmadi"</span>,
+    <span class="key">"name"</span>:       <span class="null-val">null</span>,        <span class="comment">// null on first login — show profile completion screen</span>
     <span class="key">"email"</span>:      <span class="null-val">null</span>,
     <span class="key">"phone"</span>:      <span class="str">"09123456789"</span>,
-    <span class="key">"created_at"</span>: <span class="str">"2026-06-16T10:30:00.000000Z"</span>
+    <span class="key">"created_at"</span>: <span class="str">"2026-06-17T10:30:00.000000Z"</span>
   }
+}</pre>
+      <div class="note"><strong>New user flow:</strong> When <code>user.name</code> is <code>null</code>, the user has no display name yet. Redirect to a profile screen and call <code>PATCH /profile</code> to set name and email before they proceed to checkout.</div>
+      <div class="block-label">Error — 422 Unprocessable</div>
+      <pre>{
+  <span class="key">"message"</span>: <span class="str">"The verification code is invalid or has expired."</span>,
+  <span class="key">"errors"</span>:  { <span class="key">"code"</span>: [<span class="str">"The verification code is invalid or has expired."</span>] }
 }</pre>
     </div>
   </div>
@@ -564,7 +604,21 @@
     <div class="endpoint-body">
       <p>Returns a single address. Only accessible by the owning user.</p>
       <div class="block-label">Response — 200 OK</div>
-      <pre>{ <span class="key">"data"</span>: { <span class="comment">/* same shape as the address object above */</span> } }</pre>
+      <pre>{
+  <span class="key">"data"</span>: {
+    <span class="key">"id"</span>:                   <span class="num">7</span>,
+    <span class="key">"title"</span>:               <span class="str">"خانه"</span>,
+    <span class="key">"province_id"</span>:         <span class="num">8</span>,
+    <span class="key">"city_id"</span>:             <span class="num">153</span>,
+    <span class="key">"postal_code"</span>:         <span class="str">"1456893201"</span>,
+    <span class="key">"address"</span>:             <span class="str">"تهران، خیابان ولیعصر، کوچه بهار، پلاک ۱۲، واحد ۳"</span>,
+    <span class="key">"is_default_shipping"</span>: <span class="bool">true</span>,
+    <span class="key">"province"</span>:            { <span class="key">"id"</span>: <span class="num">8</span>, <span class="key">"name"</span>: <span class="str">"تهران"</span> },
+    <span class="key">"city"</span>:               { <span class="key">"id"</span>: <span class="num">153</span>, <span class="key">"name"</span>: <span class="str">"تهران"</span> },
+    <span class="key">"created_at"</span>:          <span class="str">"2026-06-10T09:00:00.000000Z"</span>,
+    <span class="key">"updated_at"</span>:          <span class="str">"2026-06-10T09:00:00.000000Z"</span>
+  }
+}</pre>
     </div>
   </div>
 
@@ -581,7 +635,22 @@
   <span class="key">"address"</span>: <span class="str">"تهران، میدان آزادی، خیابان آزادی، پلاک ۵"</span>
 }</pre>
       <div class="block-label">Response — 200 OK</div>
-      <pre>{ <span class="key">"message"</span>: <span class="str">"Address updated successfully."</span>, <span class="key">"data"</span>: { <span class="comment">/* AddressResource */</span> } }</pre>
+      <pre>{
+  <span class="key">"message"</span>: <span class="str">"Address updated successfully."</span>,
+  <span class="key">"data"</span>: {
+    <span class="key">"id"</span>:                   <span class="num">7</span>,
+    <span class="key">"title"</span>:               <span class="str">"محل کار"</span>,
+    <span class="key">"province_id"</span>:         <span class="num">8</span>,
+    <span class="key">"city_id"</span>:             <span class="num">153</span>,
+    <span class="key">"postal_code"</span>:         <span class="str">"1456893201"</span>,
+    <span class="key">"address"</span>:             <span class="str">"تهران، میدان آزادی، خیابان آزادی، پلاک ۵"</span>,
+    <span class="key">"is_default_shipping"</span>: <span class="bool">false</span>,
+    <span class="key">"province"</span>:            { <span class="key">"id"</span>: <span class="num">8</span>, <span class="key">"name"</span>: <span class="str">"تهران"</span> },
+    <span class="key">"city"</span>:               { <span class="key">"id"</span>: <span class="num">153</span>, <span class="key">"name"</span>: <span class="str">"تهران"</span> },
+    <span class="key">"created_at"</span>:          <span class="str">"2026-06-10T09:00:00.000000Z"</span>,
+    <span class="key">"updated_at"</span>:          <span class="str">"2026-06-17T11:00:00.000000Z"</span>
+  }
+}</pre>
     </div>
   </div>
 
@@ -700,7 +769,21 @@
     <div class="endpoint-body">
       <p>Returns any address by ID regardless of which user owns it.</p>
       <div class="block-label">Response — 200 OK</div>
-      <pre>{ <span class="key">"data"</span>: { <span class="comment">/* AddressResource */</span> } }</pre>
+      <pre>{
+  <span class="key">"data"</span>: {
+    <span class="key">"id"</span>:                   <span class="num">7</span>,
+    <span class="key">"title"</span>:               <span class="str">"خانه"</span>,
+    <span class="key">"province_id"</span>:         <span class="num">8</span>,
+    <span class="key">"city_id"</span>:             <span class="num">153</span>,
+    <span class="key">"postal_code"</span>:         <span class="str">"1456893201"</span>,
+    <span class="key">"address"</span>:             <span class="str">"تهران، خیابان ولیعصر، کوچه بهار، پلاک ۱۲، واحد ۳"</span>,
+    <span class="key">"is_default_shipping"</span>: <span class="bool">true</span>,
+    <span class="key">"province"</span>:            { <span class="key">"id"</span>: <span class="num">8</span>, <span class="key">"name"</span>: <span class="str">"تهران"</span> },
+    <span class="key">"city"</span>:               { <span class="key">"id"</span>: <span class="num">153</span>, <span class="key">"name"</span>: <span class="str">"تهران"</span> },
+    <span class="key">"created_at"</span>:          <span class="str">"2026-06-10T09:00:00.000000Z"</span>,
+    <span class="key">"updated_at"</span>:          <span class="str">"2026-06-10T09:00:00.000000Z"</span>
+  }
+}</pre>
     </div>
   </div>
 
@@ -719,7 +802,22 @@
   <span class="key">"address"</span>:     <span class="str">"اصفهان، خیابان چهارباغ، پلاک ۷"</span>
 }</pre>
       <div class="block-label">Response — 201 Created</div>
-      <pre>{ <span class="key">"message"</span>: <span class="str">"Address created successfully."</span>, <span class="key">"data"</span>: { <span class="comment">/* AddressResource */</span> } }</pre>
+      <pre>{
+  <span class="key">"message"</span>: <span class="str">"Address created successfully."</span>,
+  <span class="key">"data"</span>: {
+    <span class="key">"id"</span>:                   <span class="num">14</span>,
+    <span class="key">"title"</span>:               <span class="str">"آدرس انبار"</span>,
+    <span class="key">"province_id"</span>:         <span class="num">10</span>,
+    <span class="key">"city_id"</span>:             <span class="num">212</span>,
+    <span class="key">"postal_code"</span>:         <span class="null-val">null</span>,
+    <span class="key">"address"</span>:             <span class="str">"اصفهان، خیابان چهارباغ، پلاک ۷"</span>,
+    <span class="key">"is_default_shipping"</span>: <span class="bool">false</span>,
+    <span class="key">"province"</span>:            { <span class="key">"id"</span>: <span class="num">10</span>, <span class="key">"name"</span>: <span class="str">"اصفهان"</span> },
+    <span class="key">"city"</span>:               { <span class="key">"id"</span>: <span class="num">212</span>, <span class="key">"name"</span>: <span class="str">"اصفهان"</span> },
+    <span class="key">"created_at"</span>:          <span class="str">"2026-06-17T12:00:00.000000Z"</span>,
+    <span class="key">"updated_at"</span>:          <span class="str">"2026-06-17T12:00:00.000000Z"</span>
+  }
+}</pre>
     </div>
   </div>
 
@@ -730,7 +828,10 @@
       <span class="badge admin">Admin Only</span>
     </div>
     <div class="endpoint-body">
-      <p>Update any address. Same fields as <code>PATCH /addresses/{id}</code>.</p>
+      <p>Update any address. Same fields as <code>PATCH /addresses/{id}</code>. Returns same response shape as that endpoint.</p>
+      <pre>{ <span class="key">"title"</span>: <span class="str">"انبار مرکزی"</span> }</pre>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{ <span class="key">"message"</span>: <span class="str">"Address updated successfully."</span>, <span class="key">"data"</span>: { <span class="comment">/* same AddressResource shape */</span> } }</pre>
     </div>
   </div>
 
@@ -946,7 +1047,16 @@ const res = await fetch(<span class="str">'/api/v1/media'</span>, {
       <p>Partial update. Only fields you send are changed.</p>
       <pre>{ <span class="key">"is_active"</span>: <span class="bool">false</span> }</pre>
       <div class="block-label">Response — 200 OK</div>
-      <pre>{ <span class="key">"data"</span>: { <span class="comment">/* CategoryResource */</span> } }</pre>
+      <pre>{
+  <span class="key">"data"</span>: {
+    <span class="key">"id"</span>:        <span class="num">5</span>,
+    <span class="key">"name"</span>:      <span class="str">"گوشی هوشمند"</span>,
+    <span class="key">"slug"</span>:      <span class="str">"smartphones"</span>,
+    <span class="key">"is_active"</span>: <span class="bool">false</span>,
+    <span class="key">"parent_id"</span>: <span class="num">2</span>,
+    <span class="key">"image_url"</span>: <span class="str">"http://localhost:8000/storage/categories/phones.webp"</span>
+  }
+}</pre>
     </div>
   </div>
 
@@ -1111,7 +1221,22 @@ GET /api/v1/catalog/products?category_id=5&amp;min_price=10000000&amp;max_price=
       <span class="badge admin">Requires catalog.product.view-admin</span>
     </div>
     <div class="endpoint-body">
-      <p>Returns a product regardless of status (<code>draft</code> or <code>published</code>). Use in the admin panel to preview or edit unpublished products.</p>
+      <p>Returns a product regardless of status (<code>draft</code> or <code>published</code>). Use in the admin panel to preview or edit unpublished products. Response shape is identical to the public product endpoint including full <code>images</code> and <code>variants</code> arrays.</p>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{
+  <span class="key">"data"</span>: {
+    <span class="key">"id"</span>:                <span class="num">101</span>,
+    <span class="key">"title"</span>:             <span class="str">"Samsung Galaxy S25 Ultra"</span>,
+    <span class="key">"slug"</span>:              <span class="str">"samsung-galaxy-s25-ultra"</span>,
+    <span class="key">"description"</span>:      <span class="str">"پیشرفته‌ترین گوشی سامسونگ..."</span>,
+    <span class="key">"features"</span>:         [<span class="comment">/* array of {title, value} */</span>],
+    <span class="key">"status"</span>:            <span class="str">"draft"</span>,   <span class="comment">// may be draft — this is the admin view</span>
+    <span class="key">"category_id"</span>:       <span class="num">5</span>,
+    <span class="key">"primary_image_url"</span>: <span class="str">"http://localhost:8000/storage/products/s25-hero.webp"</span>,
+    <span class="key">"images"</span>:            [<span class="comment">/* gallery images */</span>],
+    <span class="key">"variants"</span>:          [<span class="comment">/* variants */</span>]
+  }
+}</pre>
     </div>
   </div>
 
@@ -1173,7 +1298,26 @@ GET /api/v1/catalog/products?category_id=5&amp;min_price=10000000&amp;max_price=
   ]
 }</pre>
       <div class="block-label">Response — 200 OK</div>
-      <pre>{ <span class="key">"data"</span>: { <span class="comment">/* full ProductResource */</span> } }</pre>
+      <pre>{
+  <span class="key">"data"</span>: {
+    <span class="key">"id"</span>:                <span class="num">101</span>,
+    <span class="key">"title"</span>:             <span class="str">"Samsung Galaxy S25 Ultra"</span>,
+    <span class="key">"slug"</span>:              <span class="str">"samsung-galaxy-s25-ultra"</span>,
+    <span class="key">"description"</span>:      <span class="str">"پیشرفته‌ترین گوشی سامسونگ با دوربین ۲۰۰ مگاپیکسلی و قلم S Pen."</span>,
+    <span class="key">"features"</span>: [
+      { <span class="key">"title"</span>: <span class="str">"پردازنده"</span>, <span class="key">"value"</span>: <span class="str">"Snapdragon 8 Elite for Galaxy"</span> }
+    ],
+    <span class="key">"status"</span>:            <span class="str">"published"</span>,
+    <span class="key">"category_id"</span>:       <span class="num">5</span>,
+    <span class="key">"primary_image_url"</span>: <span class="str">"http://localhost:8000/storage/products/s25-hero.webp"</span>,
+    <span class="key">"images"</span>: [
+      { <span class="key">"id"</span>: <span class="num">34</span>, <span class="key">"media_id"</span>: <span class="num">22</span>, <span class="key">"url"</span>: <span class="str">"http://localhost:8000/storage/products/gallery/s25-front.webp"</span>, <span class="key">"sort_order"</span>: <span class="num">0</span> }
+    ],
+    <span class="key">"variants"</span>: [
+      { <span class="key">"id"</span>: <span class="num">201</span>, <span class="key">"sku"</span>: <span class="str">"S25U-TBK-256"</span>, <span class="key">"is_default"</span>: <span class="bool">true</span>, <span class="key">"base_price"</span>: <span class="num">89000000</span>, <span class="key">"compare_at_price"</span>: <span class="num">95000000</span>, <span class="key">"attributes"</span>: { <span class="key">"رنگ"</span>: <span class="str">"مشکی تیتانیومی"</span>, <span class="key">"حافظه"</span>: <span class="str">"۲۵۶ گیگابایت"</span> }, <span class="key">"image_url"</span>: <span class="null-val">null</span> }
+    ]
+  }
+}</pre>
     </div>
   </div>
 
@@ -1315,7 +1459,17 @@ GET /api/v1/catalog/products?category_id=5&amp;min_price=10000000&amp;max_price=
   <span class="key">"media_id"</span>: <span class="num">30</span>
 }</pre>
       <div class="block-label">Response — 201 Created</div>
-      <pre>{ <span class="key">"data"</span>: { <span class="comment">/* ProductVariantResource */</span> } }</pre>
+      <pre>{
+  <span class="key">"data"</span>: {
+    <span class="key">"id"</span>:               <span class="num">201</span>,
+    <span class="key">"sku"</span>:             <span class="str">"S25U-TBK-256"</span>,
+    <span class="key">"is_default"</span>:     <span class="bool">true</span>,
+    <span class="key">"base_price"</span>:     <span class="num">89000000</span>,
+    <span class="key">"compare_at_price"</span>: <span class="num">95000000</span>,
+    <span class="key">"attributes"</span>: { <span class="key">"رنگ"</span>: <span class="str">"مشکی تیتانیومی"</span>, <span class="key">"حافظه"</span>: <span class="str">"۲۵۶ گیگابایت"</span> },
+    <span class="key">"image_url"</span>:     <span class="str">"http://localhost:8000/storage/variants/s25-black.webp"</span>
+  }
+}</pre>
     </div>
   </div>
 
@@ -1326,13 +1480,23 @@ GET /api/v1/catalog/products?category_id=5&amp;min_price=10000000&amp;max_price=
       <span class="badge admin">Requires catalog.variant.update</span>
     </div>
     <div class="endpoint-body">
-      <p>Partial update. Only fields you send are changed.</p>
+      <p>Partial update. Only fields you send are changed. Setting <code>is_default: true</code> automatically unsets the previous default variant for this product.</p>
       <pre>{
   <span class="key">"base_price"</span>: <span class="num">85000000</span>,
   <span class="key">"is_default"</span>: <span class="bool">true</span>
 }</pre>
       <div class="block-label">Response — 200 OK</div>
-      <pre>{ <span class="key">"data"</span>: { <span class="comment">/* ProductVariantResource */</span> } }</pre>
+      <pre>{
+  <span class="key">"data"</span>: {
+    <span class="key">"id"</span>:               <span class="num">201</span>,
+    <span class="key">"sku"</span>:             <span class="str">"S25U-TBK-256"</span>,
+    <span class="key">"is_default"</span>:     <span class="bool">true</span>,
+    <span class="key">"base_price"</span>:     <span class="num">85000000</span>,
+    <span class="key">"compare_at_price"</span>: <span class="num">95000000</span>,
+    <span class="key">"attributes"</span>: { <span class="key">"رنگ"</span>: <span class="str">"مشکی تیتانیومی"</span>, <span class="key">"حافظه"</span>: <span class="str">"۲۵۶ گیگابایت"</span> },
+    <span class="key">"image_url"</span>:     <span class="null-val">null</span>
+  }
+}</pre>
     </div>
   </div>
 
