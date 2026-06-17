@@ -165,10 +165,12 @@ Match the surrounding code. Concrete patterns used throughout:
 | **Identity** | ✅ Complete | Passwordless OTP auth, profiles, RBAC, provinces/cities, addresses |
 | **Media** | ✅ Complete | File upload ledger + standalone upload/delete endpoints |
 | **Catalog** | ✅ Complete | Categories, products, galleries, variants — 95 tests |
+| **Inventory** | ✅ Complete | Stock tracking, reservation lifecycle, append-only ledger — 24 tests |
+| **Cart** | ✅ Complete | Guest + auth carts, stock-validated add/update, Catalog price enrichment — 15 tests |
 | **Orders** | 🚧 Scaffolded | Directory skeleton exists under `Modules/Orders/`; provider **not yet** in `bootstrap/providers.php` and not documented in README/AGENT_CONTEXT — confirm scope before building |
-| Inventory / Payment | 📋 Planned | Pending roadmap review |
+| Payment | 📋 Planned | Pending roadmap review |
 
-**Test suite baseline: 148 tests / 392 assertions, all green.**
+**Test suite baseline: 199 tests / 522 assertions, all green.**
 
 ### Identity — key facts
 - **Passwordless OTP, phone-based, unified register+login** (sign-up == login).
@@ -201,6 +203,21 @@ Match the surrounding code. Concrete patterns used throughout:
 - **Contract:** `CatalogManagerInterface` — full read/write surface for higher modules.
 - Permissions: `catalog.category.{create,update,delete}`,
   `catalog.product.{view-admin,create,update,delete}`, `catalog.variant.{create,update,delete}`.
+
+### Inventory — key facts
+- Tracks `quantity` and `reserved_quantity` per SKU. Available stock = `quantity − reserved_quantity`.
+- All mutations use `DB::transaction()` + `lockForUpdate()` to prevent oversell race conditions.
+- **Contract:** `InventoryManagerInterface` — `getStockBySku`, `getBatchStockBySkus`, `adjustStock`, `reserveStock`, `commitReservation`, `releaseReservation`.
+- Exceptions: `StockNotFoundException` (unknown SKU), `InsufficientStockException` (available < requested).
+- Permissions: `inventory.stock.manage`, `inventory.ledger.view`.
+
+### Cart — key facts
+- **Dual identity:** authenticated users get a `user_id`-keyed cart; guests use a `session_id` (sent as `X-Session-Id` request header — auto-generated UUID if absent, echoed back as `X-Cart-Session-Id` response header).
+- **Cart identification middleware** (`cart.identify`) runs on all cart routes. It calls `auth('sanctum')` without requiring it — no 401 for guests.
+- **Stock validation** on every add/update via `InventoryManagerInterface::getStockBySku()`. The action re-throws Inventory exceptions as Cart-domain exceptions so the controller stays isolated.
+- **Price enrichment** on every `getCart()` via `CatalogManagerInterface::findVariantBySku()` — all prices are integers (rials, Cents Rule). `lineTotal` = `quantity × basePrice`.
+- **No permissions required** — cart operations are self-service; ownership is enforced by the middleware.
+- **Contract:** `CartManagerInterface` — `findOrCreateCart`, `getCart`, `addItem`, `removeItem`, `updateQuantity`, `clearCart`.
 
 ---
 

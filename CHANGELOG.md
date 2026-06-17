@@ -2,6 +2,30 @@
 
 ## [Unreleased](https://github.com/laravel/laravel/compare/v12.12.1...12.x)
 
+### Cart Module (v1.0.0)
+
+**Complete implementation of guest + authenticated cart with real-time stock validation and Catalog price enrichment.**
+
+#### Added
+- **Migrations:** `carts` (user_id nullable loose bigint, session_id nullable indexed) and `cart_items` (cart_id FK→carts cascade, sku indexed, quantity uint, unique constraint on cart_id+sku).
+- **Domain Models:** `Cart`, `CartItem` with `items()` / `cart()` relations.
+- **DTOs:** `CartItemDTO` (id, cartId, sku, quantity, productName, basePrice, compareAtPrice, imageUrl, lineTotal — all prices as integers) and `CartDTO` (id, userId, sessionId, items array, itemCount, totalQuantity, totalPrice).
+- **Custom exceptions:** `CartItemNotFoundException`, `InsufficientStockException`, `ProductSkuNotFoundException` (`Domain/Exceptions/`).
+- **`CartManagerInterface`** (public contract): `findOrCreateCart`, `getCart`, `addItem`, `removeItem`, `updateQuantity`, `clearCart`.
+- **`EloquentCartManager`**: injects `CatalogManagerInterface` (price enrichment) and `InventoryManagerInterface` (stock queries); unique-SKU addItem increments existing quantity.
+- **Five application actions:** `AddToCartAction` (stock-validates via Inventory, re-throws as Cart-domain exception), `GetCartAction`, `UpdateCartItemAction`, `RemoveFromCartAction`, `ClearCartAction`.
+- **`CartIdentificationMiddleware`** (`cart.identify`): tries `auth('sanctum')` without requiring it; falls back to `X-Session-Id` header; auto-generates UUID session if neither present; echoes session back as `X-Cart-Session-Id` response header.
+- **`CartController`** with structured exception→HTTP mapping (ProductSkuNotFoundException/InsufficientStockException → 422, CartItemNotFoundException → 404).
+- **`AddCartItemRequest`** / **`UpdateCartItemRequest`** — `authorize()` returns `true` (self-service), Cents-Rule `prepareForValidation()` casts quantity.
+- **`CartResource`** / **`CartItemResource`** (accept DTOs, never Eloquent models).
+- **Routes** (`api/v1/cart`) under `cart.identify` middleware: `GET /` show, `POST /items` add, `PATCH /items/{itemId}` update, `DELETE /items/{itemId}` remove, `DELETE /` clear.
+- **`CartServiceProvider`** registered in `bootstrap/providers.php`; registers `cart.identify` middleware alias.
+- **15 feature tests** in `CartTest`: guest empty cart, add item, same-SKU increment, zero-stock 422, missing-SKU 422, validation errors, auth user isolation, guest/auth cart isolation, update quantity, update-exceeds-stock 422, remove item, remove-nonexistent 404, clear cart 204.
+
+**Result: test suite is 199/199 green (522 assertions).**
+
+---
+
 ### Inventory Module (v1.0.0)
 
 **Complete implementation of the stock tracking and reservation module.**

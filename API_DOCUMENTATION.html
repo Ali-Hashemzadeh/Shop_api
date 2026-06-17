@@ -23,6 +23,7 @@
       --delete-bg: rgba(239,68,68,.1);
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); display: flex; min-height: 100vh; }
 
     nav { width: 260px; min-width: 260px; background: var(--surface); border-right: 1px solid var(--border); height: 100vh; overflow-y: auto; position: sticky; top: 0; padding: 24px 0; }
@@ -30,6 +31,7 @@
     nav .logo span { color: var(--muted); font-weight: 400; font-size: 12px; display: block; margin-top: 3px; }
     nav a { display: block; padding: 6px 20px; font-size: 13px; color: var(--muted); text-decoration: none; border-left: 2px solid transparent; transition: all .15s; }
     nav a:hover { color: var(--text); background: var(--surface2); }
+    nav a.active { color: var(--text); background: var(--surface2); border-left-color: var(--accent); }
     nav .section-label { padding: 16px 20px 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: #4a4d65; }
 
     main { flex: 1; padding: 48px 56px; max-width: 960px; }
@@ -117,6 +119,14 @@
 
   <div class="section-label">Inventory</div>
   <a href="#inventory">Stock</a>
+
+  <div class="section-label">Cart</div>
+  <a href="#cart-overview">Overview &amp; Session</a>
+  <a href="#cart-show">Get Cart</a>
+  <a href="#cart-add">Add Item</a>
+  <a href="#cart-update">Update Quantity</a>
+  <a href="#cart-remove">Remove Item</a>
+  <a href="#cart-clear">Clear Cart</a>
 </nav>
 
 <main>
@@ -1659,6 +1669,178 @@ GET /api/v1/catalog/products?category_id=5&amp;min_price=10000000&amp;max_price=
     </div>
   </div>
 
+
+  <!-- ═══ CART ═══ -->
+  <h2 id="cart-overview">Cart</h2>
+  <p>The Cart module supports both <strong>guest</strong> and <strong>authenticated</strong> shoppers. All five endpoints use the <code>cart.identify</code> middleware — no 401 is ever returned for unauthenticated requests.</p>
+
+  <div class="note">
+    <strong>Session identity:</strong><br>
+    <strong>Authenticated users</strong> — send a <code>Authorization: Bearer &lt;token&gt;</code> header. The cart is permanently tied to your user ID.<br>
+    <strong>Guests</strong> — send an <code>X-Session-Id: &lt;uuid&gt;</code> request header. If you omit it, a UUID is auto-generated and returned as <code>X-Cart-Session-Id</code> in the response. Store it and resend it on every subsequent request to keep the same cart.
+  </div>
+
+  <div class="note">
+    <strong>All prices are integers (rials).</strong> <code>base_price</code>, <code>compare_at_price</code>, and <code>line_total</code> are raw integer rials. Divide by 10 for tomans. <code>total_price</code> on the cart object is the sum of all line totals.
+  </div>
+
+  <!-- GET /cart -->
+  <h3 id="cart-show">Get Cart</h3>
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/cart</span>
+      <span class="badge">Guest or Auth</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Returns the current cart with all items enriched with live Catalog prices. An empty cart is returned (not 404) if no cart exists yet.</p>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{
+  <span class="key">"id"</span>:             <span class="num">12</span>,
+  <span class="key">"user_id"</span>:        <span class="null-val">null</span>,           <span class="comment">// null for guests</span>
+  <span class="key">"session_id"</span>:     <span class="str">"a3f8c1e2b4d6..."</span>,  <span class="comment">// null for auth users</span>
+  <span class="key">"item_count"</span>:     <span class="num">2</span>,
+  <span class="key">"total_quantity"</span>: <span class="num">3</span>,
+  <span class="key">"total_price"</span>:    <span class="num">267000000</span>,
+  <span class="key">"items"</span>: [
+    {
+      <span class="key">"id"</span>:               <span class="num">55</span>,
+      <span class="key">"sku"</span>:              <span class="str">"S25U-TBK-256"</span>,
+      <span class="key">"quantity"</span>:         <span class="num">2</span>,
+      <span class="key">"product_name"</span>:     <span class="null-val">null</span>,          <span class="comment">// reserved for future enrichment</span>
+      <span class="key">"base_price"</span>:       <span class="num">89000000</span>,
+      <span class="key">"compare_at_price"</span>: <span class="num">95000000</span>,
+      <span class="key">"image_url"</span>:        <span class="str">"http://localhost:8000/storage/variants/s25-black.webp"</span>,
+      <span class="key">"line_total"</span>:       <span class="num">178000000</span>
+    },
+    {
+      <span class="key">"id"</span>:               <span class="num">56</span>,
+      <span class="key">"sku"</span>:              <span class="str">"AIRPODS-PRO2"</span>,
+      <span class="key">"quantity"</span>:         <span class="num">1</span>,
+      <span class="key">"product_name"</span>:     <span class="null-val">null</span>,
+      <span class="key">"base_price"</span>:       <span class="num">89000000</span>,
+      <span class="key">"compare_at_price"</span>: <span class="null-val">null</span>,
+      <span class="key">"image_url"</span>:        <span class="null-val">null</span>,
+      <span class="key">"line_total"</span>:       <span class="num">89000000</span>
+    }
+  ]
+}</pre>
+    </div>
+  </div>
+
+  <!-- POST /cart/items -->
+  <h3 id="cart-add">Add Item</h3>
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/cart/items</span>
+      <span class="badge">Guest or Auth</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Adds a variant to the cart by SKU. If the SKU already exists in the cart, its quantity is incremented. Stock is checked against live Inventory before adding.</p>
+      <div class="block-label">Request Body</div>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr><td>sku</td><td class="req">required</td><td>Exact variant SKU string from Catalog.</td></tr>
+        <tr><td>quantity</td><td class="req">required</td><td>Integer ≥ 1. How many units to add.</td></tr>
+      </table>
+      <pre>{
+  <span class="key">"sku"</span>:      <span class="str">"S25U-TBK-256"</span>,
+  <span class="key">"quantity"</span>: <span class="num">2</span>
+}</pre>
+      <div class="block-label">Response — 201 Created</div>
+      <p>Returns the full updated cart object (same shape as GET /cart).</p>
+      <div class="block-label">Error Responses</div>
+      <table>
+        <tr><th>Status</th><th>Condition</th><th>message</th></tr>
+        <tr><td>422</td><td class="opt">SKU has no inventory record</td><td>No inventory record found for SKU '…'.</td></tr>
+        <tr><td>422</td><td class="opt">Not enough stock available</td><td>Insufficient stock for SKU '…': requested N, available M.</td></tr>
+        <tr><td>422</td><td class="opt">Validation failure</td><td>Standard Laravel validation error bag.</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- PATCH /cart/items/{itemId} -->
+  <h3 id="cart-update">Update Item Quantity</h3>
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method patch">PATCH</span>
+      <span class="endpoint-path">/cart/items/{itemId}</span>
+      <span class="badge">Guest or Auth</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Sets the quantity of an existing cart item to an exact value (not a delta). Stock is re-validated against the new quantity.</p>
+      <div class="block-label">Request Body</div>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr><td>quantity</td><td class="req">required</td><td>Integer ≥ 1. The desired new quantity.</td></tr>
+      </table>
+      <pre>{
+  <span class="key">"quantity"</span>: <span class="num">5</span>
+}</pre>
+      <div class="block-label">Response — 200 OK</div>
+      <p>Returns the full updated cart object.</p>
+      <div class="block-label">Error Responses</div>
+      <table>
+        <tr><th>Status</th><th>Condition</th><th>Notes</th></tr>
+        <tr><td>404</td><td class="opt">Item ID not found in this cart</td><td></td></tr>
+        <tr><td>422</td><td class="opt">Requested quantity exceeds available stock</td><td></td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- DELETE /cart/items/{itemId} -->
+  <h3 id="cart-remove">Remove Item</h3>
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method delete">DELETE</span>
+      <span class="endpoint-path">/cart/items/{itemId}</span>
+      <span class="badge">Guest or Auth</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Removes a single item from the cart. Returns <strong>404</strong> if the item ID does not belong to the current cart.</p>
+      <div class="block-label">Response — 200 OK</div>
+      <p>Returns the full updated cart object (with the item removed).</p>
+    </div>
+  </div>
+
+  <!-- DELETE /cart -->
+  <h3 id="cart-clear">Clear Cart</h3>
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method delete">DELETE</span>
+      <span class="endpoint-path">/cart</span>
+      <span class="badge">Guest or Auth</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Removes all items from the cart. The cart record itself is kept (same ID, same session), so subsequent requests continue to use the same cart.</p>
+      <div class="block-label">Response — 204 No Content</div>
+      <pre><span class="comment">// Empty body</span></pre>
+    </div>
+  </div>
+
 </main>
+
+<script>
+  const headings = document.querySelectorAll('h1[id], h2[id], h3[id]');
+  const navLinks = document.querySelectorAll('nav a[href^="#"]');
+
+  const activate = (id) => {
+    navLinks.forEach(link => {
+      link.classList.toggle('active', link.getAttribute('href') === '#' + id);
+    });
+  };
+
+  // Highlight the first heading immediately on load
+  if (headings.length) activate(headings[0].id);
+
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) activate(entry.target.id);
+    });
+  }, { rootMargin: '0px 0px -85% 0px', threshold: 0 });
+
+  headings.forEach(h => observer.observe(h));
+</script>
 </body>
 </html>

@@ -89,6 +89,24 @@ Controls the storefront presentation layer: hierarchical categories, products wi
 - **Pagination:** List endpoints return `LengthAwarePaginator` with a `{data, links, meta}` envelope. `per_page` (1–100) and `page` are documented automatically by Scramble.
 - **Image input:** Write endpoints accept images two ways — either send a `media_id` (pre-uploaded via the Media endpoint) or attach the file inline as `multipart/form-data`. The two are mutually exclusive per field. Inline fields: `image` on category create, `primary_image` + `gallery[]` (index sets sort order) on product create/update, and `variant_image` on variant create/update. These multipart fields are documented in Scramble via `#[BodyParameter]` attributes.
 
+### Inventory (Complete)
+Tracks physical and reserved stock per SKU with an append-only audit ledger and full reservation lifecycle support.
+
+- **Key entities:** `InventoryStock` (sku, quantity, reserved_quantity), `InventoryLedgerEntry` (immutable audit rows — no `updated_at`)
+- **Key contract:** `InventoryManagerInterface` — `getStockBySku`, `getBatchStockBySkus`, `adjustStock`, `reserveStock`, `commitReservation`, `releaseReservation`. Available stock = `quantity − reserved_quantity`.
+- **Concurrency safety:** All mutations use `DB::transaction()` + `lockForUpdate()` to eliminate oversell races.
+- **Authorization:** Public stock reads require no auth. `POST /adjust` and `GET /sku/{sku}/ledger` require `auth:sanctum` + `inventory.stock.manage` / `inventory.ledger.view` respectively.
+
+### Cart (Complete)
+Provides guest and authenticated shopping carts with real-time stock validation and Catalog-enriched item pricing.
+
+- **Key entities:** `Cart` (user_id or session_id keyed), `CartItem` (cart_id, sku, quantity — unique per cart)
+- **Key contract:** `CartManagerInterface` — `findOrCreateCart`, `getCart`, `addItem`, `removeItem`, `updateQuantity`, `clearCart`.
+- **Session identity:** Authenticated users are identified by `user_id`; guests use an `X-Session-Id` request header. If the header is absent, the middleware auto-generates a UUID and echoes it back as `X-Cart-Session-Id` in the response.
+- **Stock validation:** Every `addItem` / `updateQuantity` call checks live inventory via `InventoryManagerInterface`. Insufficient stock or unknown SKU returns 422.
+- **Price enrichment:** `getCart()` calls `CatalogManagerInterface::findVariantBySku()` for each item and populates `base_price`, `compare_at_price`, `image_url`, and `line_total` (all integers, Cents Rule).
+- **Authorization:** No permissions required — cart operations are self-service.
+
 ---
 
 ## API Overview
@@ -128,6 +146,32 @@ Base prefix: `/api/v1`
 | `POST` | `/catalog/products/{productId}/variants` | Add variant to product |
 | `PATCH` | `/catalog/variants/{variantId}` | Update variant |
 | `DELETE` | `/catalog/variants/{variantId}` | Delete variant |
+
+### Inventory — Public (no auth)
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/inventory/sku/{sku}` | Single SKU stock summary |
+| `POST` | `/inventory/batch` | Batch stock lookup by SKU array |
+
+### Inventory — Protected (`auth:sanctum` + permission required)
+
+| Method | Endpoint | Permission | Description |
+|---|---|---|---|
+| `POST` | `/inventory/adjust` | `inventory.stock.manage` | Adjust stock (restock, manual correction, etc.) |
+| `GET` | `/inventory/sku/{sku}/ledger` | `inventory.ledger.view` | Paginated audit ledger for a SKU |
+
+### Cart (guest or `auth:sanctum` — `cart.identify` middleware)
+
+Send `X-Session-Id: <uuid>` for guest carts. Authenticated users use their Bearer token. If neither is present, a session UUID is auto-generated and returned as `X-Cart-Session-Id`.
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/cart` | Get current cart (with enriched item prices) |
+| `POST` | `/cart/items` | Add item to cart (stock-validated) |
+| `PATCH` | `/cart/items/{itemId}` | Update item quantity (stock-validated) |
+| `DELETE` | `/cart/items/{itemId}` | Remove item from cart |
+| `DELETE` | `/cart` | Clear entire cart |
 
 Auto-generated interactive API docs are available at `/docs/api` when running locally (powered by Scramble).
 
@@ -219,9 +263,14 @@ tests/
     │   ├── ProfileTest.php             # Profile self-service + admin user management
     │   ├── AuthControllerTest.php       # OTP request/verify, token issuance, single-use replay
     │   └── RolePermissionTest.php       # Role and permission assignment
-    └── Media/
-        ├── MediaManagerTest.php         # MediaManagerInterface contract tests
-        └── MediaUploadTest.php          # Upload/delete endpoints + auth boundaries
+    ├── Media/
+    │   ├── MediaManagerTest.php         # MediaManagerInterface contract tests
+    │   └── MediaUploadTest.php          # Upload/delete endpoints + auth boundaries
+    ├── Inventory/
+    │   ├── InventoryTest.php            # Stock CRUD, reservation lifecycle, batch lookup
+    │   └── InventoryAuthorizationTest.php # Auth matrix: 401 / 403 / public access
+    └── Cart/
+        └── CartTest.php                 # Guest + auth carts, stock validation, isolation
 ```
 
 ---
@@ -234,6 +283,7 @@ tests/
 | Media | Complete |
 | Catalog | Complete |
 | Inventory | Complete |
+| Cart | Complete |
 | Order | Planned |
 | Payment | Planned |
 

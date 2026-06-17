@@ -138,9 +138,32 @@ Modules/
   * **Permissions:** `inventory.stock.manage`, `inventory.ledger.view` — both granted to `admin` by `InventoryPermissionsSeeder`.
   * **Test suite:** `InventoryTest` (14) + `InventoryAuthorizationTest` (10) = **24 tests** covering public paths, batch lookup, admin adjust + ledger, reserve/commit/release, oversell prevention, full 401/403/public matrix, and permission-not-role proofs.
 
+### 🛒 5. Cart Module (Status: Active & Complete)
+* **Responsibility:** Guest and authenticated shopping cart — add/update/remove items with real-time stock validation, Catalog price enrichment, and session-based guest persistence.
+  * **Tables:**
+      * `carts`: `id`, `user_id` (nullable bigint, no FK — loose coupling rule), `session_id` (nullable string), timestamps.
+      * `cart_items`: `id`, `cart_id` (FK→carts, cascade delete), `sku` (indexed), `quantity` (uint), timestamps. Unique constraint on `(cart_id, sku)`.
+  * **Domain Models (internal):** `Cart`, `CartItem`.
+  * **DTOs:** `CartItemDTO` (id, cartId, sku, quantity, productName, `basePrice`/`compareAtPrice` as **integers — Cents Rule**, imageUrl, `lineTotal` as integer), `CartDTO` (id, userId, sessionId, items[], itemCount, totalQuantity, `totalPrice` as integer).
+  * **Public Contract:** `CartManagerInterface` — `findOrCreateCart(?int, ?string): CartDTO`, `getCart(int): CartDTO`, `addItem(int, string, int): CartDTO`, `removeItem(int, int): CartDTO`, `updateQuantity(int, int, int): CartDTO`, `clearCart(int): void`.
+  * **Domain Exceptions:** `CartItemNotFoundException`, `InsufficientStockException`, `ProductSkuNotFoundException`.
+  * **Cross-module dependencies (contracts only, zero model imports):**
+      * `InventoryManagerInterface::getStockBySku()` — stock validation in `AddToCartAction` and `UpdateCartItemAction`.
+      * `CatalogManagerInterface::findVariantBySku()` — price/image enrichment in `EloquentCartManager::buildDTO()`.
+  * **Application Actions:** `AddToCartAction` (validates stock first, re-throws Inventory exceptions as Cart-domain exceptions), `GetCartAction`, `UpdateCartItemAction` (validates new quantity against stock), `RemoveFromCartAction`, `ClearCartAction`.
+  * **HTTP Endpoints (all behind `cart.identify` middleware):**
+      * Middleware: authenticates via `auth('sanctum')` guard (optional) or `X-Session-Id` request header; auto-generates UUID session if neither present. Stores `cart_id` in `$request->attributes`. Returns `X-Cart-Session-Id` response header for guests.
+      * `GET /api/v1/cart` — view cart enriched with Catalog pricing.
+      * `POST /api/v1/cart/items` — add item `{sku, quantity}`; 422 on zero/missing stock; 201 on success.
+      * `PATCH /api/v1/cart/items/{itemId}` — update quantity (stock-validated); 404 on unknown item.
+      * `DELETE /api/v1/cart/items/{itemId}` — remove one item; 404 on unknown.
+      * `DELETE /api/v1/cart` — clear all items; 204.
+  * **Authorization:** No permission gates — cart is self-service; ownership enforced by `CartIdentificationMiddleware`.
+  * **Test suite:** `CartTest` — **15 tests, 53 assertions**: guest add/view/clear, authenticated user, guest-vs-auth isolation, stock validation (zero stock → 422, missing inventory → 422), update/remove/404 matrix.
+
 ---
 
-## 5. Completed & Ready
+## 6. Completed & Ready
 
 | Module | Status | Tests |
 |---|---|---|
@@ -148,8 +171,9 @@ Modules/
 | Media | ✅ Complete | 12 passing (MediaUploadTest) + existing MediaManagerTest |
 | Catalog | ✅ Complete | 95 passing across 4 test classes |
 | Inventory | ✅ Complete | 24 passing across 2 test classes |
+| Cart | ✅ Complete | 15 passing (CartTest) |
 
-**Total test suite: 172 tests, 433 assertions — all green.**
+**Total test suite: 199 tests, 522 assertions — all green.**
 
 **Next module in queue:** Order or Payment — pending product roadmap review.
 
