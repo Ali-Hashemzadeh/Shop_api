@@ -10,12 +10,14 @@ use Illuminate\Routing\Controller;
 use Modules\Cart\Application\Actions\AddToCartAction;
 use Modules\Cart\Application\Actions\ClearCartAction;
 use Modules\Cart\Application\Actions\GetCartAction;
+use Modules\Cart\Application\Actions\MergeCartAction;
 use Modules\Cart\Application\Actions\RemoveFromCartAction;
 use Modules\Cart\Application\Actions\UpdateCartItemAction;
 use Modules\Cart\Domain\Exceptions\CartItemNotFoundException;
 use Modules\Cart\Domain\Exceptions\InsufficientStockException;
 use Modules\Cart\Domain\Exceptions\ProductSkuNotFoundException;
 use Modules\Cart\Infrastructure\Http\Requests\AddCartItemRequest;
+use Modules\Cart\Infrastructure\Http\Requests\MergeCartRequest;
 use Modules\Cart\Infrastructure\Http\Requests\UpdateCartItemRequest;
 use Modules\Cart\Infrastructure\Http\Resources\CartResource;
 
@@ -27,6 +29,7 @@ class CartController extends Controller
         private readonly UpdateCartItemAction $updateItem,
         private readonly RemoveFromCartAction $removeItem,
         private readonly ClearCartAction $clearCart,
+        private readonly MergeCartAction $mergeCart,
     ) {}
 
     public function show(Request $request): JsonResponse
@@ -91,5 +94,15 @@ class CartController extends Controller
         $this->clearCart->handle((int) $request->attributes->get('cart_id'));
 
         return response()->json(null, 204);
+    }
+
+    public function merge(MergeCartRequest $request): JsonResponse
+    {
+        $dto = $this->mergeCart->handle(
+            $request->user()->id,
+            $request->validated('session_id'),
+        );
+
+        return response()->json(new CartResource($dto));
     }
 }

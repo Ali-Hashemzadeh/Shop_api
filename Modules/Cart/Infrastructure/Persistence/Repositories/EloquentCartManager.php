@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Modules\Cart\Infrastructure\Persistence\Repositories;
 
+use Illuminate\Support\Facades\DB;
 use Modules\Cart\Domain\Contracts\CartManagerInterface;
 use Modules\Cart\Domain\DTOs\CartDTO;
 use Modules\Cart\Domain\DTOs\CartItemDTO;
@@ -12,6 +13,7 @@ use Modules\Cart\Domain\Models\Cart;
 use Modules\Cart\Domain\Models\CartItem;
 use Modules\Catalog\Domain\Contracts\CatalogManagerInterface;
 use Modules\Inventory\Domain\Contracts\InventoryManagerInterface;
+use Modules\Inventory\Domain\Exceptions\StockNotFoundException;
 
 class EloquentCartManager implements CartManagerInterface
 {
@@ -96,6 +98,56 @@ class EloquentCartManager implements CartManagerInterface
     {
         $cart = Cart::findOrFail($cartId);
         $cart->items()->delete();
+    }
+
+    public function mergeGuestCart(int $userId, string $sessionId): CartDTO
+    {
+        return DB::transaction(function () use ($userId, $sessionId) {
+            $guestCart = Cart::with('items')->where('session_id', $sessionId)->first();
+            $userCart = Cart::firstOrCreate(['user_id' => $userId]);
+
+            if ($guestCart === null || $guestCart->items->isEmpty()) {
+                $userCart->load('items');
+
+                return $this->buildDTO($userCart);
+            }
+
+            $userCart->load('items');
+
+            foreach ($guestCart->items as $guestItem) {
+                try {
+                    $stock = $this->inventory->getStockBySku($guestItem->sku);
+                } catch (StockNotFoundException) {
+                    continue;
+                }
+
+                $available = $stock->availableQuantity;
+
+                if ($available <= 0) {
+                    continue;
+                }
+
+                $existing = $userCart->items->firstWhere('sku', $guestItem->sku);
+
+                if ($existing !== null) {
+                    $newQty = min($existing->quantity + $guestItem->quantity, $available);
+                    if ($newQty > $existing->quantity) {
+                        $existing->update(['quantity' => $newQty]);
+                    }
+                } else {
+                    $userCart->items()->create([
+                        'sku' => $guestItem->sku,
+                        'quantity' => min($guestItem->quantity, $available),
+                    ]);
+                }
+            }
+
+            $guestCart->delete();
+
+            $userCart->load('items');
+
+            return $this->buildDTO($userCart);
+        });
     }
 
     private function buildDTO(Cart $cart): CartDTO

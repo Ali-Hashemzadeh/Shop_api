@@ -3,6 +3,7 @@
 namespace Tests\Feature\Cart;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Modules\Cart\Domain\Models\Cart;
 use Modules\Inventory\Domain\Models\InventoryStock;
 use Tests\TestCase;
 
@@ -215,6 +216,100 @@ class CartTest extends TestCase
     }
 
     // ── DELETE /api/v1/cart ───────────────────────────────────────────────────
+
+    // ── POST /api/v1/cart/merge ───────────────────────────────────────────────
+
+    /** @test */
+    public function authenticated_user_can_merge_guest_cart(): void
+    {
+        InventoryStock::create(['sku' => 'SHIRT-M', 'quantity' => 10, 'reserved_quantity' => 0]);
+
+        $this->withHeaders(['X-Session-Id' => self::SESSION])
+            ->postJson('/api/v1/cart/items', ['sku' => 'SHIRT-M', 'quantity' => 2]);
+
+        $user = $this->actingAsCustomer();
+
+        $this->postJson('/api/v1/cart/merge', ['session_id' => self::SESSION])
+            ->assertOk()
+            ->assertJsonPath('user_id', $user->id)
+            ->assertJsonPath('item_count', 1)
+            ->assertJsonPath('items.0.sku', 'SHIRT-M')
+            ->assertJsonPath('items.0.quantity', 2);
+
+        $this->assertDatabaseMissing('carts', ['session_id' => self::SESSION]);
+    }
+
+    /** @test */
+    public function merge_increments_quantity_for_overlapping_skus(): void
+    {
+        InventoryStock::create(['sku' => 'SHIRT-M', 'quantity' => 10, 'reserved_quantity' => 0]);
+
+        $this->withHeaders(['X-Session-Id' => self::SESSION])
+            ->postJson('/api/v1/cart/items', ['sku' => 'SHIRT-M', 'quantity' => 2]);
+
+        $this->actingAsCustomer();
+        $this->postJson('/api/v1/cart/items', ['sku' => 'SHIRT-M', 'quantity' => 3]);
+
+        $this->postJson('/api/v1/cart/merge', ['session_id' => self::SESSION])
+            ->assertOk()
+            ->assertJsonPath('items.0.quantity', 5);
+    }
+
+    /** @test */
+    public function merge_caps_combined_quantity_at_available_stock(): void
+    {
+        // Stock = 3. Cart doesn't reserve, so both guest (2) and user (2) can add independently.
+        // At merge time, 2+2=4 exceeds available=3, so result is clamped to 3.
+        InventoryStock::create(['sku' => 'SHIRT-M', 'quantity' => 3, 'reserved_quantity' => 0]);
+
+        $this->withHeaders(['X-Session-Id' => self::SESSION])
+            ->postJson('/api/v1/cart/items', ['sku' => 'SHIRT-M', 'quantity' => 2]);
+
+        $this->actingAsCustomer();
+        $this->postJson('/api/v1/cart/items', ['sku' => 'SHIRT-M', 'quantity' => 2]);
+
+        $this->postJson('/api/v1/cart/merge', ['session_id' => self::SESSION])
+            ->assertOk()
+            ->assertJsonPath('items.0.quantity', 3);
+    }
+
+    /** @test */
+    public function merge_with_unknown_session_id_returns_user_cart(): void
+    {
+        $user = $this->actingAsCustomer();
+
+        $this->postJson('/api/v1/cart/merge', ['session_id' => 'nonexistent-session'])
+            ->assertOk()
+            ->assertJsonPath('user_id', $user->id)
+            ->assertJsonPath('item_count', 0);
+    }
+
+    /** @test */
+    public function merge_requires_authentication(): void
+    {
+        $this->postJson('/api/v1/cart/merge', ['session_id' => self::SESSION])
+            ->assertUnauthorized();
+    }
+
+    /** @test */
+    public function merge_skips_items_with_no_inventory_record(): void
+    {
+        // Create the guest cart via the API, then manually insert a SKU that has no stock record.
+        $this->withHeaders(['X-Session-Id' => self::SESSION])
+            ->getJson('/api/v1/cart');
+
+        $guestCart = Cart::where('session_id', self::SESSION)->first();
+        $guestCart->items()->create(['sku' => 'GHOST-SKU', 'quantity' => 1]);
+
+        $user = $this->actingAsCustomer();
+
+        $this->postJson('/api/v1/cart/merge', ['session_id' => self::SESSION])
+            ->assertOk()
+            ->assertJsonPath('user_id', $user->id)
+            ->assertJsonPath('item_count', 0);
+
+        $this->assertDatabaseMissing('carts', ['session_id' => self::SESSION]);
+    }
 
     /** @test */
     public function can_clear_the_entire_cart(): void
