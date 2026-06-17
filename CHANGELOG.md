@@ -2,6 +2,44 @@
 
 ## [Unreleased](https://github.com/laravel/laravel/compare/v12.12.1...12.x)
 
+### Fix — Cart item product_name enrichment
+
+**`product_name` was always `null` in cart item responses even when a Catalog variant existed.**
+
+#### Root cause
+`ProductVariantDTO` had no `productName` field. `EloquentCartManager::buildDTO()` had it
+hardcoded to `null` because the DTO it received from `CatalogManagerInterface::findVariantBySku()`
+never carried the parent product's title.
+
+#### Fixed
+- Added nullable `productName` field to `ProductVariantDTO` (backwards-compatible default `null`).
+- Updated all 5 `EloquentCatalogManager::fromModel()` call sites to pass the product title:
+  `findVariant` and `findVariantBySku` eager-load the `product` relation with `->with('product')`;
+  `createProductVariant` and `updateProductVariant` call `$variant->load('product')` after persistence;
+  `hydrateProduct` reads `$product->title` from the already-loaded model (zero extra queries).
+- `EloquentCartManager::buildDTO()` now passes `$variant?->productName` instead of `null`.
+- Added `CartTest::cart_item_includes_product_name_when_catalog_variant_exists()`.
+
+**Result: test suite is 206/206 green (542 assertions).**
+
+---
+
+### Feat — Cart merge endpoint
+
+**`POST /api/v1/cart/merge` — merges a guest session cart into an authenticated user's cart post-login.**
+
+#### Added
+- `CartManagerInterface::mergeGuestCart(int $userId, string $sessionId): CartDTO`.
+- `EloquentCartManager::mergeGuestCart()` — wrapped in `DB::transaction()`; quantities summed and
+  clamped to `availableQuantity`; SKUs with no inventory record skipped silently; guest cart deleted.
+- `MergeCartAction`, `MergeCartRequest` (`session_id` required string).
+- `CartController::merge()` + route `POST /api/v1/cart/merge` under `auth:sanctum` middleware.
+- 6 feature tests: happy path, overlapping SKUs, stock cap, unknown session, 401 unauthenticated,
+  missing inventory skip.
+- Full frontend implementation guide added to `API_DOCUMENTATION.html`.
+
+---
+
 ### Cart Module (v1.0.0)
 
 **Complete implementation of guest + authenticated cart with real-time stock validation and Catalog price enrichment.**

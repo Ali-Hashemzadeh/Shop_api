@@ -171,9 +171,9 @@ Modules/
 | Media | ✅ Complete | 12 passing (MediaUploadTest) + existing MediaManagerTest |
 | Catalog | ✅ Complete | 95 passing across 4 test classes |
 | Inventory | ✅ Complete | 24 passing across 2 test classes |
-| Cart | ✅ Complete | 15 passing (CartTest) |
+| Cart | ✅ Complete | 22 passing (CartTest) |
 
-**Total test suite: 199 tests, 522 assertions — all green.**
+**Total test suite: 206 tests, 542 assertions — all green.**
 
 **Next module in queue:** Order or Payment — pending product roadmap review.
 
