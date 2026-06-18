@@ -30,7 +30,7 @@ class EloquentCatalogManager implements CatalogManagerInterface
         $category = Category::query()->find($id);
 
         return $category
-            ? CategoryDTO::fromModel($category, $this->resolveUrl($category->media_id))
+            ? CategoryDTO::fromModel($category, $this->resolveUrl((int)$category->media_id))
             : null;
     }
 
@@ -52,7 +52,7 @@ class EloquentCatalogManager implements CatalogManagerInterface
     {
         $category = Category::query()->create($data);
 
-        return CategoryDTO::fromModel($category, $this->resolveUrl($category->media_id));
+        return CategoryDTO::fromModel($category, $this->resolveUrl((int)$category->media_id));
     }
 
     public function updateCategory(int $id, array $data): CategoryDTO
@@ -155,7 +155,7 @@ class EloquentCatalogManager implements CatalogManagerInterface
     {
         $product = Product::query()->create($data);
         $primaryImageUrl = $product->primary_media_id
-            ? $this->resolveUrl($product->primary_media_id)
+            ? $this->resolveUrl((int)$product->primary_media_id)
             : null;
 
         return ProductDTO::fromModel($product, $primaryImageUrl, [], []);
@@ -169,7 +169,7 @@ class EloquentCatalogManager implements CatalogManagerInterface
             'sort_order' => $sortOrder,
         ]);
 
-        return ProductImageDTO::fromModel($image, $this->resolveUrl($mediaId) ?? '');
+        return ProductImageDTO::fromModel($image, $this->resolveUrl((int)$mediaId) ?? '');
     }
 
     public function removeProductImage(int $imageId): void
@@ -197,7 +197,7 @@ class EloquentCatalogManager implements CatalogManagerInterface
         $variant = ProductVariant::with('product')->find($variantId);
 
         return $variant
-            ? ProductVariantDTO::fromModel($variant, $this->resolveUrl($variant->media_id), $variant->product?->title)
+            ? ProductVariantDTO::fromModel($variant, $this->resolveUrl((int)$variant->media_id), $variant->product?->title)
             : null;
     }
 
@@ -206,7 +206,7 @@ class EloquentCatalogManager implements CatalogManagerInterface
         $variant = ProductVariant::with('product')->where('sku', $sku)->first();
 
         return $variant
-            ? ProductVariantDTO::fromModel($variant, $this->resolveUrl($variant->media_id), $variant->product?->title)
+            ? ProductVariantDTO::fromModel($variant, $this->resolveUrl((int)$variant->media_id), $variant->product?->title)
             : null;
     }
 
@@ -218,7 +218,7 @@ class EloquentCatalogManager implements CatalogManagerInterface
 
         $variant->load('product');
 
-        return ProductVariantDTO::fromModel($variant, $this->resolveUrl($variant->media_id), $variant->product?->title);
+        return ProductVariantDTO::fromModel($variant, $this->resolveUrl((int)$variant->media_id), $variant->product?->title);
     }
 
     public function updateProductVariant(int $variantId, array $data): ProductVariantDTO
@@ -237,7 +237,7 @@ class EloquentCatalogManager implements CatalogManagerInterface
             $variant->refresh();
             $variant->load('product');
 
-            return ProductVariantDTO::fromModel($variant, $this->resolveUrl($variant->media_id), $variant->product?->title);
+            return ProductVariantDTO::fromModel($variant, $this->resolveUrl((int)$variant->media_id), $variant->product?->title);
         });
     }
 
