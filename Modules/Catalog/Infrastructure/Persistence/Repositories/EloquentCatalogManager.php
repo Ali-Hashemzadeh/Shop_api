@@ -61,7 +61,7 @@ class EloquentCatalogManager implements CatalogManagerInterface
         $category->update($data);
         $category->refresh();
 
-        return CategoryDTO::fromModel($category, $this->resolveUrl($category->media_id));
+        return CategoryDTO::fromModel($category, $this->resolveUrl((int)$category->media_id));
     }
 
     public function deleteCategory(int $id): void
@@ -301,6 +301,8 @@ class EloquentCatalogManager implements CatalogManagerInterface
 
     private function resolveUrl(?int $mediaId): ?string
     {
+        print_r($mediaId);
+        die();
         return $mediaId ? $this->media->getMedia($mediaId)?->url : null;
     }
 }
