@@ -301,8 +301,6 @@ class EloquentCatalogManager implements CatalogManagerInterface
 
     private function resolveUrl(?int $mediaId): ?string
     {
-        print_r($mediaId);
-        die();
         return $mediaId ? $this->media->getMedia($mediaId)?->url : null;
     }
 }
