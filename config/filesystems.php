@@ -43,6 +43,17 @@ return [
             'root' => storage_path('app/public'),
             'url' => rtrim(env('APP_URL', 'http://localhost'), '/').'/storage',
             'visibility' => 'public',
+            // Added explicit permissions to bypass cPanel's restrictive umask
+            'permissions' => [
+                'file' => [
+                    'public' => 0664,
+                    'private' => 0600,
+                ],
+                'dir' => [
+                    'public' => 0775,
+                    'private' => 0700,
+                ],
+            ],
             'throw' => false,
             'report' => false,
         ],
@@ -74,7 +85,9 @@ return [
     */
 
     'links' => [
-        public_path('storage') => storage_path('app/public'),
+        // Updated to explicitly map to the absolute cPanel public_html directory
+        // Make sure 'elemano' matches your actual cPanel username
+        '/home2/elemano/public_html/storage' => storage_path('app/public'),
     ],
 
 ];
