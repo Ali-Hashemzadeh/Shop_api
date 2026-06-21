@@ -3,8 +3,6 @@
 namespace Tests\Feature\Catalog;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Storage;
 use Modules\Catalog\Domain\Models\Category;
 use Modules\Catalog\Domain\Models\Product;
 use Modules\Catalog\Domain\Models\ProductVariant;
@@ -17,7 +15,6 @@ class ProductsTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        Storage::fake('public');
         $this->seedIdentityRolesAndPermissions();
         $this->seedCatalogPermissions();
         $this->actingAsAdmin();
@@ -63,23 +60,6 @@ class ProductsTest extends TestCase
     }
 
     /** @test */
-    public function it_can_create_a_product_with_a_primary_image_and_gallery(): void
-    {
-        $response = $this->postJson('/api/v1/catalog/products', [
-            'title' => 'Camera',
-            'primary_image' => UploadedFile::fake()->image('camera-main.jpg'),
-            'gallery' => [
-                UploadedFile::fake()->image('camera-angle-1.jpg'),
-                UploadedFile::fake()->image('camera-angle-2.jpg'),
-            ],
-        ]);
-
-        $response->assertCreated();
-        $this->assertNotNull($response->json('primary_image_url'));
-        $this->assertCount(2, $response->json('images'));
-    }
-
-    /** @test */
     public function it_can_link_a_product_to_a_category(): void
     {
         $category = Category::create(['name' => 'Cameras', 'slug' => 'cameras', 'is_active' => true]);
@@ -105,17 +85,6 @@ class ProductsTest extends TestCase
         $this->postJson('/api/v1/catalog/products', ['title' => 'Product', 'status' => 'archived'])
             ->assertUnprocessable()
             ->assertJsonValidationErrors(['status']);
-    }
-
-    /** @test */
-    public function it_rejects_providing_both_primary_media_id_and_image_file(): void
-    {
-        $this->postJson('/api/v1/catalog/products', [
-            'title' => 'Product',
-            'primary_media_id' => 1,
-            'primary_image' => UploadedFile::fake()->image('photo.jpg'),
-        ])->assertUnprocessable()
-            ->assertJsonValidationErrorFor('primary_media_id');
     }
 
     /** @test */
@@ -244,6 +213,57 @@ class ProductsTest extends TestCase
     {
         $this->patchJson('/api/v1/catalog/products/99999', ['title' => 'Ghost'])
             ->assertNotFound();
+    }
+
+    /** @test */
+    public function test_can_update_product_variants_with_upsert_by_sku(): void
+    {
+        $product = Product::create(['title' => 'Phone', 'slug' => 'phone', 'status' => 'draft']);
+        ProductVariant::create(['product_id' => $product->id, 'sku' => 'PH-BLK', 'is_default' => true, 'base_price' => 10000000]);
+
+        $response = $this->patchJson("/api/v1/catalog/products/{$product->id}", [
+            'variants' => [
+                // existing SKU — should be updated
+                ['sku' => 'PH-BLK', 'base_price' => 12000000, 'is_default' => true, 'attributes' => []],
+                // new SKU — should be created
+                ['sku' => 'PH-WHT', 'base_price' => 11000000, 'is_default' => false, 'attributes' => ['color' => 'White']],
+            ],
+        ]);
+
+        $response->assertOk()->assertJsonCount(2, 'variants');
+
+        $this->assertDatabaseHas('product_variants', ['sku' => 'PH-BLK', 'base_price' => 12000000, 'is_default' => 1]);
+        $this->assertDatabaseHas('product_variants', ['sku' => 'PH-WHT', 'base_price' => 11000000, 'is_default' => 0]);
+    }
+
+    /** @test */
+    public function test_omitting_variants_on_update_leaves_existing_variants_untouched(): void
+    {
+        $product = Product::create(['title' => 'Tablet', 'slug' => 'tablet', 'status' => 'draft']);
+        ProductVariant::create(['product_id' => $product->id, 'sku' => 'TAB-01', 'is_default' => true, 'base_price' => 5000000]);
+
+        $this->patchJson("/api/v1/catalog/products/{$product->id}", ['title' => 'Tablet Pro'])
+            ->assertOk()
+            ->assertJsonPath('title', 'Tablet Pro')
+            ->assertJsonCount(1, 'variants');
+
+        $this->assertDatabaseHas('product_variants', ['sku' => 'TAB-01', 'base_price' => 5000000]);
+    }
+
+    /** @test */
+    public function it_rejects_update_variants_when_multiple_are_marked_default(): void
+    {
+        $product = Product::create(['title' => 'Watch', 'slug' => 'watch', 'status' => 'draft']);
+
+        $this->patchJson("/api/v1/catalog/products/{$product->id}", [
+            'variants' => [
+                ['sku' => 'W-BLK', 'base_price' => 5000000, 'is_default' => true, 'attributes' => []],
+                ['sku' => 'W-WHT', 'base_price' => 5000000, 'is_default' => true, 'attributes' => []],
+            ],
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['variants']);
+
+        $this->assertDatabaseMissing('product_variants', ['sku' => 'W-BLK']);
     }
 
     // ── DELETE /api/v1/catalog/products/{id} ─────────────────────────────────

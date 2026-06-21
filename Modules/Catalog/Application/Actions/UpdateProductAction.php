@@ -1,26 +1,43 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Modules\Catalog\Application\Actions;
 
-use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Modules\Catalog\Domain\Contracts\CatalogManagerInterface;
 use Modules\Catalog\Domain\DTOs\ProductDTO;
-use Modules\Media\Domain\Contracts\MediaManagerInterface;
 
 class UpdateProductAction
 {
     public function __construct(
         private readonly CatalogManagerInterface $catalog,
-        private readonly MediaManagerInterface $media,
     ) {}
 
-    public function handle(int $id, array $data, ?UploadedFile $primaryImage = null): ProductDTO
+    public function handle(int $id, array $data): ProductDTO
     {
-        if ($primaryImage) {
-            $mediaDto = $this->media->upload($primaryImage, 'products');
-            $data['primary_media_id'] = $mediaDto->id;
-        }
+        return DB::transaction(function () use ($id, $data): ProductDTO {
+            $variantsData = $data['variants'] ?? null;
+            $productData = collect($data)->except(['variants'])->all();
 
-        return $this->catalog->updateProduct($id, $data);
+            $productDto = $this->catalog->updateProduct($id, $productData);
+
+            if ($variantsData !== null) {
+                $existingBySku = collect($productDto->variants)->keyBy('sku');
+
+                foreach ($variantsData as $variantData) {
+                    $existing = $existingBySku->get($variantData['sku']);
+
+                    if ($existing !== null) {
+                        $this->catalog->updateProductVariant($existing->id, $variantData);
+                    } else {
+                        $this->catalog->createProductVariant($id, $variantData);
+                    }
+                }
+            }
+
+            return $this->catalog->findProductAdmin($id)
+                ?? throw new \RuntimeException("Product #{$id} could not be loaded after update.");
+        });
     }
 }

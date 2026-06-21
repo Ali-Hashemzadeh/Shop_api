@@ -29,11 +29,7 @@ class ProductsController extends Controller
 
     public function store(StoreProductRequest $request): JsonResponse
     {
-        $dto = $this->createAction->handle(
-            $request->safe()->except(['primary_image', 'gallery']),
-            $request->file('primary_image'),
-            $request->file('gallery') ?? [],
-        );
+        $dto = $this->createAction->handle($request->validated());
 
         return response()->json(new ProductResource($dto), 201);
     }
@@ -75,11 +71,7 @@ class ProductsController extends Controller
 
     public function update(UpdateProductRequest $request, int $id): JsonResponse
     {
-        $dto = $this->updateAction->handle(
-            $id,
-            $request->safe()->except(['primary_image']),
-            $request->file('primary_image'),
-        );
+        $dto = $this->updateAction->handle($id, $request->validated());
 
         return response()->json(new ProductResource($dto));
     }

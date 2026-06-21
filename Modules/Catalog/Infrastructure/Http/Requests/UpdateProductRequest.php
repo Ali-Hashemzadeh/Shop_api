@@ -2,16 +2,24 @@
 
 namespace Modules\Catalog\Infrastructure\Http\Requests;
 
-use Dedoc\Scramble\Attributes\BodyParameter;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
-#[BodyParameter('primary_image', description: 'Replace the hero image (JPEG/PNG/WebP, max 4 MB). Send as multipart/form-data. Mutually exclusive with primary_media_id.', type: 'string', format: 'binary', required: false, infer: false)]
 class UpdateProductRequest extends FormRequest
 {
     public function authorize(): bool
     {
         return (bool) $this->user()?->can('catalog.product.update');
+    }
+
+    protected function prepareForValidation(): void
+    {
+        if (is_string($this->input('variants'))) {
+            $decoded = json_decode($this->input('variants'), true);
+            if (is_array($decoded)) {
+                $this->merge(['variants' => $decoded]);
+            }
+        }
     }
 
     public function rules(): array
@@ -25,8 +33,36 @@ class UpdateProductRequest extends FormRequest
             'features.*.value' => ['required', 'string', 'max:255'],
             'status' => ['sometimes', 'in:draft,published'],
             'category_id' => ['nullable', 'integer', 'exists:categories,id'],
-            'primary_media_id' => ['nullable', 'integer', 'prohibits:primary_image'],
-            'primary_image' => ['nullable', 'file', 'image', 'max:4096', 'prohibits:primary_media_id'],
+            'primary_media_id' => ['nullable', 'integer'],
+            'variants' => ['nullable', 'array', 'min:1'],
+            'variants.*.sku' => ['required', 'string', 'max:255', 'distinct'],
+            'variants.*.base_price' => ['required', 'integer', 'min:0'],
+            'variants.*.compare_at_price' => ['nullable', 'integer', 'min:0'],
+            'variants.*.is_default' => ['required', 'boolean'],
+            'variants.*.media_id' => ['nullable', 'integer'],
+            'variants.*.attributes' => ['nullable', 'array'],
         ];
+    }
+
+    public function withValidator(\Illuminate\Contracts\Validation\Validator $validator): void
+    {
+        $validator->after(function (\Illuminate\Contracts\Validation\Validator $v) {
+            $variants = $this->input('variants');
+
+            if (! is_array($variants) || count($variants) === 0) {
+                return;
+            }
+
+            $defaultCount = collect($variants)
+                ->filter(fn ($variant) => ! empty($variant['is_default']))
+                ->count();
+
+            if ($defaultCount > 1) {
+                $v->errors()->add(
+                    'variants',
+                    'At most one variant may be marked as is_default.'
+                );
+            }
+        });
     }
 }
