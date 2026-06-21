@@ -134,9 +134,7 @@ Match the surrounding code. Concrete patterns used throughout:
 - **Form Requests** own validation **and** authorization for store/update.
   `authorize()` returns a **permission** check —
   `(bool) $this->user()?->can('catalog.product.create')` — so unauthorized users get
-  **403 before validation** (never a 422 bleed-through). Inline file fields are documented
-  for Scramble with `#[BodyParameter(...)]` attributes and validated with
-  `prohibits:` for mutually-exclusive `media_id` vs inline-file inputs.
+  **403 before validation** (never a 422 bleed-through).
 - **API Resources** accept **DTOs**, never Eloquent models.
 - **Authorization is permission-based, not role-based.** Policies delegate to
   `$user->can('module.entity.action')`. Any user granted a permission can act,
@@ -164,13 +162,13 @@ Match the surrounding code. Concrete patterns used throughout:
 |---|---|---|
 | **Identity** | ✅ Complete | Passwordless OTP auth, profiles, RBAC, provinces/cities, addresses |
 | **Media** | ✅ Complete | File upload ledger + standalone upload/delete endpoints |
-| **Catalog** | ✅ Complete | Categories, products, galleries, variants, atomic nested create — 98 tests |
+| **Catalog** | ✅ Complete | Categories, products, galleries, variants, atomic nested create, variant upsert on update — 101 tests |
 | **Inventory** | ✅ Complete | Stock tracking, reservation lifecycle, append-only ledger — 24 tests |
 | **Cart** | ✅ Complete | Guest + auth carts, stock-validated add/update, Catalog price enrichment — 15 tests |
 | **Orders** | 🚧 Scaffolded | Directory skeleton exists under `Modules/Orders/`; provider **not yet** in `bootstrap/providers.php` and not documented in README/AGENT_CONTEXT — confirm scope before building |
 | Payment | 📋 Planned | Pending roadmap review |
 
-**Test suite baseline: 209 tests / 560 assertions, all green.**
+**Test suite baseline: 210 tests / 567 assertions, all green.**
 
 ### Identity — key facts
 - **Passwordless OTP, phone-based, unified register+login** (sign-up == login).
@@ -191,9 +189,7 @@ Match the surrounding code. Concrete patterns used throughout:
   `upload(UploadedFile, string $folder): MediaDTO`, `getMedia`, `getMediaCollection`,
   `delete`. No other module performs raw file I/O.
 - `MediaDTO` carries the public URL via `Storage::url()`.
-- Two usage flows: **pre-upload** (`POST /api/v1/media` → get `media_id` → pass to a
-  Catalog write endpoint) and **inline** (attach the file directly to a Catalog write
-  endpoint, which calls `upload()` internally). The two are mutually exclusive per field.
+- **One usage flow:** pre-upload (`POST /api/v1/media` → get `media_id` → pass `primary_media_id` / `gallery_media_ids` / `variants.*.media_id` to a Catalog write endpoint). Catalog product endpoints no longer accept inline file uploads directly.
 
 ### Catalog — key facts
 - Entities: `Category` (infinite nesting via `parent_id`), `Product` (`draft`/`published`,
@@ -205,6 +201,13 @@ Match the surrounding code. Concrete patterns used throughout:
   array. When provided, the product and all variants are created together inside a single
   `DB::transaction`. Validation enforces that exactly one variant has `is_default: true`.
   Omitting `variants` is valid — the standalone variant routes are unchanged.
+- **Variant upsert on update:** `PATCH /api/v1/catalog/products/{id}` also accepts an
+  optional `variants` array with upsert-by-SKU semantics — SKU already on this product →
+  `updateProductVariant`; new SKU → `createProductVariant`; variants absent from the array
+  are untouched. Invariant: at most one submitted variant may have `is_default: true`.
+  All variant mutations are wrapped in the same `DB::transaction` as the product update.
+- **No inline file uploads on product endpoints.** Pass `primary_media_id`,
+  `gallery_media_ids`, or `variants.*.media_id` (pre-uploaded via `POST /api/v1/media`).
 - Permissions: `catalog.category.{create,update,delete}`,
   `catalog.product.{view-admin,create,update,delete}`, `catalog.variant.{create,update,delete}`.
 

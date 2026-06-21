@@ -2,6 +2,22 @@
 
 ## [Unreleased](https://github.com/laravel/laravel/compare/v12.12.1...12.x)
 
+### Feat — Variant upsert on PATCH /products/{id} + remove inline file uploads
+
+**`PATCH /api/v1/catalog/products/{id}` now accepts an optional `variants` array with upsert-by-SKU semantics.**
+
+#### Changed
+- `UpdateProductRequest` — added `variants.*` rules (same fields as `StoreProductRequest`). `withValidator` enforces **at-most-one** `is_default: true` (zero is valid when not changing the default). `prepareForValidation` JSON-decodes a string `variants` field so Scramble's multipart Try-it panel works. Removed `primary_image` file field and `#[BodyParameter]` annotation.
+- `UpdateProductAction` — rewritten: wraps the whole operation in `DB::transaction`; strips `variants` before calling `updateProduct`; then iterates submitted variants — SKU already on this product → `updateProductVariant`, new SKU → `createProductVariant`. Dropped `MediaManagerInterface` dependency.
+- `StoreProductRequest` — removed `primary_image` / `gallery` file rules and `#[BodyParameter]` annotations. `prohibits:` cross-field constraints removed. File upload must now go through `POST /api/v1/media` first.
+- `CreateProductAction` — dropped `MediaManagerInterface` + `UploadedFile` params; media-ID path only.
+- `ProductsController` — `store()` and `update()` now pass `$request->validated()` directly; no file extraction.
+- `ProductsTest` — removed 2 inline-file tests (feature removed); added 3 update-variant tests (upsert happy path, untouched-variants-when-key-omitted, multiple-defaults 422).
+
+**Result: test suite is 210/210 green (567 assertions).**
+
+---
+
 ### Feat — Atomic nested product + variant creation
 
 **`POST /api/v1/catalog/products` now accepts an optional `variants` array to create the product shell and all its variants in a single atomic database transaction.**
