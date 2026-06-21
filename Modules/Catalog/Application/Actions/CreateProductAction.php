@@ -50,6 +50,10 @@ class CreateProductAction
                 $this->catalog->addProductImage($product->id, $galleryMediaId, $sortOrder);
             }
 
+            foreach ($data['variants'] ?? [] as $variantData) {
+                $this->catalog->createProductVariant($product->id, $variantData);
+            }
+
             return $this->catalog->findProductAdmin($product->id)
                 ?? throw new \RuntimeException("Product #{$product->id} could not be loaded after creation.");
         });

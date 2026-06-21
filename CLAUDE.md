@@ -164,13 +164,13 @@ Match the surrounding code. Concrete patterns used throughout:
 |---|---|---|
 | **Identity** | ✅ Complete | Passwordless OTP auth, profiles, RBAC, provinces/cities, addresses |
 | **Media** | ✅ Complete | File upload ledger + standalone upload/delete endpoints |
-| **Catalog** | ✅ Complete | Categories, products, galleries, variants — 95 tests |
+| **Catalog** | ✅ Complete | Categories, products, galleries, variants, atomic nested create — 98 tests |
 | **Inventory** | ✅ Complete | Stock tracking, reservation lifecycle, append-only ledger — 24 tests |
 | **Cart** | ✅ Complete | Guest + auth carts, stock-validated add/update, Catalog price enrichment — 15 tests |
 | **Orders** | 🚧 Scaffolded | Directory skeleton exists under `Modules/Orders/`; provider **not yet** in `bootstrap/providers.php` and not documented in README/AGENT_CONTEXT — confirm scope before building |
 | Payment | 📋 Planned | Pending roadmap review |
 
-**Test suite baseline: 206 tests / 542 assertions, all green.**
+**Test suite baseline: 209 tests / 560 assertions, all green.**
 
 ### Identity — key facts
 - **Passwordless OTP, phone-based, unified register+login** (sign-up == login).
@@ -201,6 +201,10 @@ Match the surrounding code. Concrete patterns used throughout:
   `sku`, integer `base_price`/`compare_at_price`, JSON `attributes`, per-variant
   `media_id`, `is_default` **single-true invariant enforced at the application layer**).
 - **Contract:** `CatalogManagerInterface` — full read/write surface for higher modules.
+- **Atomic nested create:** `POST /api/v1/catalog/products` accepts an optional `variants`
+  array. When provided, the product and all variants are created together inside a single
+  `DB::transaction`. Validation enforces that exactly one variant has `is_default: true`.
+  Omitting `variants` is valid — the standalone variant routes are unchanged.
 - Permissions: `catalog.category.{create,update,delete}`,
   `catalog.product.{view-admin,create,update,delete}`, `catalog.variant.{create,update,delete}`.
 

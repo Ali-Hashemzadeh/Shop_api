@@ -118,6 +118,71 @@ class ProductsTest extends TestCase
             ->assertJsonValidationErrorFor('primary_media_id');
     }
 
+    /** @test */
+    public function test_can_create_product_with_nested_variants_atomically(): void
+    {
+        $response = $this->postJson('/api/v1/catalog/products', [
+            'title' => 'Laptop Pro',
+            'status' => 'published',
+            'variants' => [
+                [
+                    'sku' => 'LP-BLK-256',
+                    'base_price' => 50000000,
+                    'compare_at_price' => 55000000,
+                    'is_default' => true,
+                    'attributes' => ['color' => 'Black', 'storage' => '256GB'],
+                ],
+                [
+                    'sku' => 'LP-SLV-512',
+                    'base_price' => 65000000,
+                    'compare_at_price' => null,
+                    'is_default' => false,
+                    'attributes' => ['color' => 'Silver', 'storage' => '512GB'],
+                ],
+            ],
+        ]);
+
+        $response->assertCreated()
+            ->assertJsonStructure(['id', 'title', 'variants'])
+            ->assertJsonCount(2, 'variants');
+
+        $this->assertDatabaseHas('products', ['title' => 'Laptop Pro']);
+        $this->assertDatabaseHas('product_variants', ['sku' => 'LP-BLK-256', 'is_default' => 1]);
+        $this->assertDatabaseHas('product_variants', ['sku' => 'LP-SLV-512', 'is_default' => 0]);
+    }
+
+    /** @test */
+    public function it_rejects_nested_variants_when_none_is_marked_default(): void
+    {
+        $this->postJson('/api/v1/catalog/products', [
+            'title' => 'Bad Product',
+            'variants' => [
+                ['sku' => 'SKU-A', 'base_price' => 10000, 'is_default' => false, 'attributes' => []],
+                ['sku' => 'SKU-B', 'base_price' => 20000, 'is_default' => false, 'attributes' => []],
+            ],
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['variants']);
+
+        $this->assertDatabaseMissing('products', ['title' => 'Bad Product']);
+        $this->assertDatabaseMissing('product_variants', ['sku' => 'SKU-A']);
+    }
+
+    /** @test */
+    public function it_rejects_nested_variants_when_multiple_are_marked_default(): void
+    {
+        $this->postJson('/api/v1/catalog/products', [
+            'title' => 'Bad Product',
+            'variants' => [
+                ['sku' => 'SKU-C', 'base_price' => 10000, 'is_default' => true, 'attributes' => []],
+                ['sku' => 'SKU-D', 'base_price' => 20000, 'is_default' => true, 'attributes' => []],
+            ],
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['variants']);
+
+        $this->assertDatabaseMissing('products', ['title' => 'Bad Product']);
+        $this->assertDatabaseMissing('product_variants', ['sku' => 'SKU-C']);
+    }
+
     // ── PATCH /api/v1/catalog/products/{id} ──────────────────────────────────
 
     /** @test */

@@ -2,6 +2,19 @@
 
 ## [Unreleased](https://github.com/laravel/laravel/compare/v12.12.1...12.x)
 
+### Feat — Atomic nested product + variant creation
+
+**`POST /api/v1/catalog/products` now accepts an optional `variants` array to create the product shell and all its variants in a single atomic database transaction.**
+
+#### Changed
+- `StoreProductRequest` — added 7 new nested validation rules (`variants.*.sku`, `variants.*.base_price`, `variants.*.compare_at_price`, `variants.*.is_default`, `variants.*.media_id`, `variants.*.attributes`). A `withValidator` hook enforces the single-default invariant: exactly one entry in `variants` must have `is_default: true`. The `variants` field is `nullable` — all existing product creation calls without variants remain valid and unchanged.
+- `CreateProductAction` — after images are processed, iterates `$data['variants'] ?? []` inside the existing `DB::transaction`, calling `CatalogManagerInterface::createProductVariant()` for each item. If any variant creation fails the entire operation rolls back, including the product record.
+- `ProductsTest` — 3 new feature tests: happy path (2 variants created atomically, both tables asserted), zero-default rejection (422 + transaction rollback verified), multiple-default rejection (422 + rollback verified).
+
+**Result: test suite is 209/209 green (560 assertions).**
+
+---
+
 ### Fix — Cart item product_name enrichment
 
 **`product_name` was always `null` in cart item responses even when a Catalog variant existed.**

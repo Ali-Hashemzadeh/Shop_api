@@ -1260,6 +1260,7 @@ GET /api/v1/catalog/products?category_id=5&amp;min_price=10000000&amp;max_price=
     </div>
     <div class="endpoint-body">
       <p>Creates a new product. Send as <code>application/json</code> when using <code>media_id</code>/<code>gallery_media_ids</code>. Send as <code>multipart/form-data</code> when attaching image files directly.</p>
+      <p>Optionally include a <code>variants</code> array to create the product and all its variants <strong>atomically in a single request</strong>. If variant creation fails for any reason the entire operation rolls back — no partial product is left in the database.</p>
       <div class="block-label">Request Body Fields</div>
       <table>
         <tr><th>Field</th><th>Type</th><th>Description</th></tr>
@@ -1273,24 +1274,67 @@ GET /api/v1/catalog/products?category_id=5&amp;min_price=10000000&amp;max_price=
         <tr><td>primary_image</td><td class="opt">optional file</td><td>Hero image file (inline upload). JPEG/PNG/WebP, max 4 MB. Mutually exclusive with <code>primary_media_id</code>.</td></tr>
         <tr><td>gallery_media_ids</td><td class="opt">optional integer[]</td><td>Array of pre-uploaded media IDs to add to the gallery. Array index sets sort order. Mutually exclusive with <code>gallery</code>.</td></tr>
         <tr><td>gallery</td><td class="opt">optional file[]</td><td>Gallery image files for inline upload (<code>gallery[0]</code>, <code>gallery[1]</code>, …). Mutually exclusive with <code>gallery_media_ids</code>.</td></tr>
+        <tr><td>variants</td><td class="opt">optional array</td><td>Array of variant objects to create atomically alongside the product. If omitted the product is created with no variants (add them later via the standalone variant routes). Must contain ≥ 1 item when provided.</td></tr>
+        <tr><td>variants.*.sku</td><td class="opt">required per item</td><td>Globally unique SKU string. Max 255 chars. Duplicate SKUs within the array are rejected.</td></tr>
+        <tr><td>variants.*.base_price</td><td class="opt">required per item</td><td>Selling price in rials (integer ≥ 0). No floats.</td></tr>
+        <tr><td>variants.*.compare_at_price</td><td class="opt">optional per item</td><td>Struck-through original price in rials. Must be ≥ 0 if provided.</td></tr>
+        <tr><td>variants.*.is_default</td><td class="opt">required per item</td><td>Boolean. Exactly one variant in the array must be <code>true</code> — zero or multiple defaults returns 422.</td></tr>
+        <tr><td>variants.*.media_id</td><td class="opt">optional per item</td><td>Pre-uploaded media ID for a variant-specific image.</td></tr>
+        <tr><td>variants.*.attributes</td><td class="opt">optional per item</td><td>Free-form key-value object, e.g. <code>{"رنگ": "مشکی", "حافظه": "256GB"}</code>.</td></tr>
       </table>
-      <div class="block-label">Example — JSON with pre-uploaded images</div>
+      <div class="note"><strong>Single-default invariant:</strong> When <code>variants</code> is provided, exactly one item must have <code>"is_default": true</code>. Sending zero or multiple defaults returns <strong>422</strong> with a validation error on the <code>variants</code> key. The individual variant routes handle this the same way.</div>
+      <div class="block-label">Example A — Product shell only (add variants separately later)</div>
       <pre>{
-  <span class="key">"title"</span>:           <span class="str">"Samsung Galaxy S25 Ultra"</span>,
-  <span class="key">"slug"</span>:            <span class="str">"samsung-galaxy-s25-ultra"</span>,
-  <span class="key">"description"</span>:    <span class="str">"پیشرفته‌ترین گوشی سامسونگ با دوربین ۲۰۰ مگاپیکسلی و قلم S Pen."</span>,
-  <span class="key">"features"</span>: [
-    { <span class="key">"title"</span>: <span class="str">"پردازنده"</span>,   <span class="key">"value"</span>: <span class="str">"Snapdragon 8 Elite"</span> },
-    { <span class="key">"title"</span>: <span class="str">"باتری"</span>,      <span class="key">"value"</span>: <span class="str">"۵۰۰۰ mAh"</span> },
-    { <span class="key">"title"</span>: <span class="str">"صفحه‌نمایش"</span>, <span class="key">"value"</span>: <span class="str">"۶.۹ اینچ Dynamic AMOLED 2X"</span> }
-  ],
-  <span class="key">"status"</span>:          <span class="str">"draft"</span>,
-  <span class="key">"category_id"</span>:     <span class="num">5</span>,
-  <span class="key">"primary_media_id"</span>: <span class="num">18</span>,
+  <span class="key">"title"</span>:            <span class="str">"Samsung Galaxy S25 Ultra"</span>,
+  <span class="key">"slug"</span>:             <span class="str">"samsung-galaxy-s25-ultra"</span>,
+  <span class="key">"status"</span>:           <span class="str">"draft"</span>,
+  <span class="key">"category_id"</span>:      <span class="num">5</span>,
+  <span class="key">"primary_media_id"</span>:  <span class="num">18</span>,
   <span class="key">"gallery_media_ids"</span>: [<span class="num">22</span>, <span class="num">23</span>, <span class="num">24</span>]
 }</pre>
+      <div class="block-label">Example B — Product + variants atomically in one request</div>
+      <pre>{
+  <span class="key">"title"</span>:       <span class="str">"Samsung Galaxy S25 Ultra"</span>,
+  <span class="key">"status"</span>:      <span class="str">"published"</span>,
+  <span class="key">"category_id"</span>: <span class="num">5</span>,
+  <span class="key">"variants"</span>: [
+    {
+      <span class="key">"sku"</span>:              <span class="str">"S25U-TBK-256"</span>,
+      <span class="key">"base_price"</span>:      <span class="num">89000000</span>,
+      <span class="key">"compare_at_price"</span>: <span class="num">95000000</span>,
+      <span class="key">"is_default"</span>:      <span class="bool">true</span>,
+      <span class="key">"attributes"</span>: { <span class="key">"رنگ"</span>: <span class="str">"مشکی تیتانیومی"</span>, <span class="key">"حافظه"</span>: <span class="str">"۲۵۶ گیگابایت"</span> }
+    },
+    {
+      <span class="key">"sku"</span>:              <span class="str">"S25U-TBK-512"</span>,
+      <span class="key">"base_price"</span>:      <span class="num">99000000</span>,
+      <span class="key">"compare_at_price"</span>: <span class="null-val">null</span>,
+      <span class="key">"is_default"</span>:      <span class="bool">false</span>,
+      <span class="key">"attributes"</span>: { <span class="key">"رنگ"</span>: <span class="str">"مشکی تیتانیومی"</span>, <span class="key">"حافظه"</span>: <span class="str">"۵۱۲ گیگابایت"</span> }
+    }
+  ]
+}</pre>
       <div class="block-label">Response — 201 Created</div>
-      <pre>{ <span class="key">"data"</span>: { <span class="comment">/* full ProductResource — same shape as GET /catalog/products/{id} */</span> } }</pre>
+      <pre>{
+  <span class="key">"data"</span>: {
+    <span class="key">"id"</span>:                <span class="num">101</span>,
+    <span class="key">"title"</span>:             <span class="str">"Samsung Galaxy S25 Ultra"</span>,
+    <span class="key">"slug"</span>:              <span class="str">"samsung-galaxy-s25-ultra"</span>,
+    <span class="key">"status"</span>:            <span class="str">"published"</span>,
+    <span class="key">"category_id"</span>:       <span class="num">5</span>,
+    <span class="key">"primary_image_url"</span>: <span class="null-val">null</span>,
+    <span class="key">"images"</span>:            [],
+    <span class="key">"variants"</span>: [
+      { <span class="key">"id"</span>: <span class="num">201</span>, <span class="key">"sku"</span>: <span class="str">"S25U-TBK-256"</span>, <span class="key">"is_default"</span>: <span class="bool">true</span>,  <span class="key">"base_price"</span>: <span class="num">89000000</span>, <span class="key">"compare_at_price"</span>: <span class="num">95000000</span>, <span class="key">"attributes"</span>: { <span class="comment">/* … */</span> }, <span class="key">"image_url"</span>: <span class="null-val">null</span> },
+      { <span class="key">"id"</span>: <span class="num">202</span>, <span class="key">"sku"</span>: <span class="str">"S25U-TBK-512"</span>, <span class="key">"is_default"</span>: <span class="bool">false</span>, <span class="key">"base_price"</span>: <span class="num">99000000</span>, <span class="key">"compare_at_price"</span>: <span class="null-val">null</span>,     <span class="key">"attributes"</span>: { <span class="comment">/* … */</span> }, <span class="key">"image_url"</span>: <span class="null-val">null</span> }
+    ]
+  }
+}</pre>
+      <div class="block-label">Validation error — zero or multiple defaults</div>
+      <pre>{
+  <span class="key">"message"</span>: <span class="str">"Exactly one variant must be marked as is_default."</span>,
+  <span class="key">"errors"</span>:  { <span class="key">"variants"</span>: [<span class="str">"Exactly one variant must be marked as is_default."</span>] }
+}</pre>
     </div>
   </div>
 
