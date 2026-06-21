@@ -2,6 +2,7 @@
 
 namespace Modules\Catalog\Infrastructure\Http\Requests;
 
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 
 class StoreProductRequest extends FormRequest
@@ -37,6 +38,7 @@ class StoreProductRequest extends FormRequest
             'gallery_media_ids.*' => ['integer'],
             'variants' => ['nullable', 'array', 'min:1'],
             'variants.*.sku' => ['required', 'string', 'max:255', 'distinct', 'unique:product_variants,sku'],
+            'variants.*.type' => ['required', 'in:image,color'],
             'variants.*.base_price' => ['required', 'integer', 'min:0'],
             'variants.*.compare_at_price' => ['nullable', 'integer', 'min:0'],
             'variants.*.is_default' => ['required', 'boolean'],
@@ -45,9 +47,9 @@ class StoreProductRequest extends FormRequest
         ];
     }
 
-    public function withValidator(\Illuminate\Contracts\Validation\Validator $validator): void
+    public function withValidator(Validator $validator): void
     {
-        $validator->after(function (\Illuminate\Contracts\Validation\Validator $v) {
+        $validator->after(function (Validator $v) {
             $variants = $this->input('variants');
 
             if (! is_array($variants) || count($variants) === 0) {

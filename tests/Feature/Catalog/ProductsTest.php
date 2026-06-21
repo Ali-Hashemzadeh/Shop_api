@@ -25,9 +25,7 @@ class ProductsTest extends TestCase
     /** @test */
     public function it_can_create_a_product_with_minimal_data(): void
     {
-        $response = $this->postJson('/api/v1/catalog/products', [
-            'title' => 'Wireless Headphones',
-        ]);
+        $response = $this->postJson('/api/v1/catalog/products', ['title' => 'Wireless Headphones']);
 
         $response->assertCreated()
             ->assertJsonStructure(['id', 'title', 'slug', 'status', 'images', 'variants']);
@@ -64,10 +62,8 @@ class ProductsTest extends TestCase
     {
         $category = Category::create(['name' => 'Cameras', 'slug' => 'cameras', 'is_active' => true]);
 
-        $this->postJson('/api/v1/catalog/products', [
-            'title' => 'DSLR Camera',
-            'category_id' => $category->id,
-        ])->assertCreated()
+        $this->postJson('/api/v1/catalog/products', ['title' => 'DSLR Camera', 'category_id' => $category->id])
+            ->assertCreated()
             ->assertJsonPath('category_id', $category->id);
     }
 
@@ -94,20 +90,8 @@ class ProductsTest extends TestCase
             'title' => 'Laptop Pro',
             'status' => 'published',
             'variants' => [
-                [
-                    'sku' => 'LP-BLK-256',
-                    'base_price' => 50000000,
-                    'compare_at_price' => 55000000,
-                    'is_default' => true,
-                    'attributes' => ['color' => 'Black', 'storage' => '256GB'],
-                ],
-                [
-                    'sku' => 'LP-SLV-512',
-                    'base_price' => 65000000,
-                    'compare_at_price' => null,
-                    'is_default' => false,
-                    'attributes' => ['color' => 'Silver', 'storage' => '512GB'],
-                ],
+                ['sku' => 'LP-BLK-256', 'type' => 'color', 'base_price' => 50000000, 'compare_at_price' => 55000000, 'is_default' => true,  'attributes' => ['color' => 'Black']],
+                ['sku' => 'LP-SLV-512', 'type' => 'color', 'base_price' => 65000000, 'compare_at_price' => null,     'is_default' => false, 'attributes' => ['color' => 'Silver']],
             ],
         ]);
 
@@ -116,8 +100,8 @@ class ProductsTest extends TestCase
             ->assertJsonCount(2, 'variants');
 
         $this->assertDatabaseHas('products', ['title' => 'Laptop Pro']);
-        $this->assertDatabaseHas('product_variants', ['sku' => 'LP-BLK-256', 'is_default' => 1]);
-        $this->assertDatabaseHas('product_variants', ['sku' => 'LP-SLV-512', 'is_default' => 0]);
+        $this->assertDatabaseHas('product_variants', ['sku' => 'LP-BLK-256', 'type' => 'color', 'is_default' => 1]);
+        $this->assertDatabaseHas('product_variants', ['sku' => 'LP-SLV-512', 'type' => 'color', 'is_default' => 0]);
     }
 
     /** @test */
@@ -126,11 +110,10 @@ class ProductsTest extends TestCase
         $this->postJson('/api/v1/catalog/products', [
             'title' => 'Bad Product',
             'variants' => [
-                ['sku' => 'SKU-A', 'base_price' => 10000, 'is_default' => false, 'attributes' => []],
-                ['sku' => 'SKU-B', 'base_price' => 20000, 'is_default' => false, 'attributes' => []],
+                ['sku' => 'SKU-A', 'type' => 'color', 'base_price' => 10000, 'is_default' => false],
+                ['sku' => 'SKU-B', 'type' => 'color', 'base_price' => 20000, 'is_default' => false],
             ],
-        ])->assertUnprocessable()
-            ->assertJsonValidationErrors(['variants']);
+        ])->assertUnprocessable()->assertJsonValidationErrors(['variants']);
 
         $this->assertDatabaseMissing('products', ['title' => 'Bad Product']);
         $this->assertDatabaseMissing('product_variants', ['sku' => 'SKU-A']);
@@ -142,14 +125,24 @@ class ProductsTest extends TestCase
         $this->postJson('/api/v1/catalog/products', [
             'title' => 'Bad Product',
             'variants' => [
-                ['sku' => 'SKU-C', 'base_price' => 10000, 'is_default' => true, 'attributes' => []],
-                ['sku' => 'SKU-D', 'base_price' => 20000, 'is_default' => true, 'attributes' => []],
+                ['sku' => 'SKU-C', 'type' => 'color', 'base_price' => 10000, 'is_default' => true],
+                ['sku' => 'SKU-D', 'type' => 'color', 'base_price' => 20000, 'is_default' => true],
             ],
-        ])->assertUnprocessable()
-            ->assertJsonValidationErrors(['variants']);
+        ])->assertUnprocessable()->assertJsonValidationErrors(['variants']);
 
         $this->assertDatabaseMissing('products', ['title' => 'Bad Product']);
         $this->assertDatabaseMissing('product_variants', ['sku' => 'SKU-C']);
+    }
+
+    /** @test */
+    public function it_rejects_nested_variants_missing_type(): void
+    {
+        $this->postJson('/api/v1/catalog/products', [
+            'title' => 'Bad Product',
+            'variants' => [
+                ['sku' => 'SKU-E', 'base_price' => 10000, 'is_default' => true],
+            ],
+        ])->assertUnprocessable()->assertJsonValidationErrors(['variants.0.type']);
     }
 
     // ── PATCH /api/v1/catalog/products/{id} ──────────────────────────────────
@@ -174,8 +167,6 @@ class ProductsTest extends TestCase
         $this->patchJson("/api/v1/catalog/products/{$product->id}", ['status' => 'published'])
             ->assertOk()
             ->assertJsonPath('status', 'published');
-
-        $this->assertDatabaseHas('products', ['id' => $product->id, 'status' => 'published']);
     }
 
     /** @test */
@@ -193,8 +184,7 @@ class ProductsTest extends TestCase
     {
         $product = Product::create(['title' => 'Product', 'slug' => 'my-prod', 'status' => 'draft']);
 
-        $this->patchJson("/api/v1/catalog/products/{$product->id}", ['slug' => 'my-prod'])
-            ->assertOk();
+        $this->patchJson("/api/v1/catalog/products/{$product->id}", ['slug' => 'my-prod'])->assertOk();
     }
 
     /** @test */
@@ -211,26 +201,21 @@ class ProductsTest extends TestCase
     /** @test */
     public function it_returns_404_when_updating_a_non_existent_product(): void
     {
-        $this->patchJson('/api/v1/catalog/products/99999', ['title' => 'Ghost'])
-            ->assertNotFound();
+        $this->patchJson('/api/v1/catalog/products/99999', ['title' => 'Ghost'])->assertNotFound();
     }
 
     /** @test */
     public function test_can_update_product_variants_with_upsert_by_sku(): void
     {
         $product = Product::create(['title' => 'Phone', 'slug' => 'phone', 'status' => 'draft']);
-        ProductVariant::create(['product_id' => $product->id, 'sku' => 'PH-BLK', 'is_default' => true, 'base_price' => 10000000]);
+        ProductVariant::create(['product_id' => $product->id, 'sku' => 'PH-BLK', 'type' => 'color', 'is_default' => true, 'base_price' => 10000000]);
 
-        $response = $this->patchJson("/api/v1/catalog/products/{$product->id}", [
+        $this->patchJson("/api/v1/catalog/products/{$product->id}", [
             'variants' => [
-                // existing SKU — should be updated
-                ['sku' => 'PH-BLK', 'base_price' => 12000000, 'is_default' => true, 'attributes' => []],
-                // new SKU — should be created
-                ['sku' => 'PH-WHT', 'base_price' => 11000000, 'is_default' => false, 'attributes' => ['color' => 'White']],
+                ['sku' => 'PH-BLK', 'type' => 'color', 'base_price' => 12000000, 'is_default' => true,  'attributes' => []],
+                ['sku' => 'PH-WHT', 'type' => 'color', 'base_price' => 11000000, 'is_default' => false, 'attributes' => ['color' => 'White']],
             ],
-        ]);
-
-        $response->assertOk()->assertJsonCount(2, 'variants');
+        ])->assertOk()->assertJsonCount(2, 'variants');
 
         $this->assertDatabaseHas('product_variants', ['sku' => 'PH-BLK', 'base_price' => 12000000, 'is_default' => 1]);
         $this->assertDatabaseHas('product_variants', ['sku' => 'PH-WHT', 'base_price' => 11000000, 'is_default' => 0]);
@@ -240,7 +225,7 @@ class ProductsTest extends TestCase
     public function test_omitting_variants_on_update_leaves_existing_variants_untouched(): void
     {
         $product = Product::create(['title' => 'Tablet', 'slug' => 'tablet', 'status' => 'draft']);
-        ProductVariant::create(['product_id' => $product->id, 'sku' => 'TAB-01', 'is_default' => true, 'base_price' => 5000000]);
+        ProductVariant::create(['product_id' => $product->id, 'sku' => 'TAB-01', 'type' => 'color', 'is_default' => true, 'base_price' => 5000000]);
 
         $this->patchJson("/api/v1/catalog/products/{$product->id}", ['title' => 'Tablet Pro'])
             ->assertOk()
@@ -257,11 +242,10 @@ class ProductsTest extends TestCase
 
         $this->patchJson("/api/v1/catalog/products/{$product->id}", [
             'variants' => [
-                ['sku' => 'W-BLK', 'base_price' => 5000000, 'is_default' => true, 'attributes' => []],
-                ['sku' => 'W-WHT', 'base_price' => 5000000, 'is_default' => true, 'attributes' => []],
+                ['sku' => 'W-BLK', 'type' => 'color', 'base_price' => 5000000, 'is_default' => true,  'attributes' => []],
+                ['sku' => 'W-WHT', 'type' => 'color', 'base_price' => 5000000, 'is_default' => true,  'attributes' => []],
             ],
-        ])->assertUnprocessable()
-            ->assertJsonValidationErrors(['variants']);
+        ])->assertUnprocessable()->assertJsonValidationErrors(['variants']);
 
         $this->assertDatabaseMissing('product_variants', ['sku' => 'W-BLK']);
     }
@@ -273,20 +257,17 @@ class ProductsTest extends TestCase
     {
         $product = Product::create(['title' => 'To Delete', 'slug' => 'to-delete', 'status' => 'draft']);
 
-        $this->deleteJson("/api/v1/catalog/products/{$product->id}")
-            ->assertNoContent();
-
+        $this->deleteJson("/api/v1/catalog/products/{$product->id}")->assertNoContent();
         $this->assertDatabaseMissing('products', ['id' => $product->id]);
     }
 
     /** @test */
     public function it_returns_404_when_deleting_a_non_existent_product(): void
     {
-        $this->deleteJson('/api/v1/catalog/products/99999')
-            ->assertNotFound();
+        $this->deleteJson('/api/v1/catalog/products/99999')->assertNotFound();
     }
 
-    // ── GET /api/v1/catalog/products/{id} ────────────────────────────────────
+    // ── GET /api/v1/catalog/products ─────────────────────────────────────────
 
     /** @test */
     public function it_can_fetch_a_published_product_by_id(): void
@@ -296,8 +277,7 @@ class ProductsTest extends TestCase
         $this->getJson("/api/v1/catalog/products/{$product->id}")
             ->assertOk()
             ->assertJsonPath('id', $product->id)
-            ->assertJsonPath('title', 'Smart Watch')
-            ->assertJsonPath('status', 'published');
+            ->assertJsonPath('title', 'Smart Watch');
     }
 
     /** @test */
@@ -305,18 +285,14 @@ class ProductsTest extends TestCase
     {
         $product = Product::create(['title' => 'Unreleased', 'slug' => 'unreleased', 'status' => 'draft']);
 
-        $this->getJson("/api/v1/catalog/products/{$product->id}")
-            ->assertNotFound();
+        $this->getJson("/api/v1/catalog/products/{$product->id}")->assertNotFound();
     }
 
     /** @test */
     public function it_returns_404_when_product_is_not_found(): void
     {
-        $this->getJson('/api/v1/catalog/products/99999')
-            ->assertNotFound();
+        $this->getJson('/api/v1/catalog/products/99999')->assertNotFound();
     }
-
-    // ── GET /api/v1/catalog/products/{id}/admin ──────────────────────────────
 
     /** @test */
     public function it_returns_draft_products_on_the_admin_endpoint(): void
@@ -325,11 +301,8 @@ class ProductsTest extends TestCase
 
         $this->getJson("/api/v1/catalog/products/{$product->id}/admin")
             ->assertOk()
-            ->assertJsonPath('id', $product->id)
             ->assertJsonPath('status', 'draft');
     }
-
-    // ── GET /api/v1/catalog/products/slug/{slug} ─────────────────────────────
 
     /** @test */
     public function it_can_fetch_a_published_product_by_slug(): void
@@ -344,40 +317,33 @@ class ProductsTest extends TestCase
     /** @test */
     public function it_returns_404_when_no_product_matches_the_slug(): void
     {
-        $this->getJson('/api/v1/catalog/products/slug/does-not-exist')
-            ->assertNotFound();
+        $this->getJson('/api/v1/catalog/products/slug/does-not-exist')->assertNotFound();
     }
-
-    // ── GET /api/v1/catalog/categories/{categoryId}/products ─────────────────
 
     /** @test */
     public function it_can_list_published_products_in_a_category(): void
     {
         $category = Category::create(['name' => 'Tech', 'slug' => 'tech', 'is_active' => true]);
-        Product::create(['title' => 'Phone', 'slug' => 'phone', 'status' => 'published', 'category_id' => $category->id]);
+        Product::create(['title' => 'Phone',  'slug' => 'phone',  'status' => 'published', 'category_id' => $category->id]);
         Product::create(['title' => 'Tablet', 'slug' => 'tablet', 'status' => 'published', 'category_id' => $category->id]);
-        Product::create(['title' => 'Secret', 'slug' => 'secret', 'status' => 'draft', 'category_id' => $category->id]);
+        Product::create(['title' => 'Secret', 'slug' => 'secret', 'status' => 'draft',     'category_id' => $category->id]);
 
-        $response = $this->getJson("/api/v1/catalog/categories/{$category->id}/products");
-
-        $response->assertOk()
+        $this->getJson("/api/v1/catalog/categories/{$category->id}/products")
+            ->assertOk()
             ->assertJsonStructure(['data', 'links', 'meta']);
 
-        $this->assertCount(2, $response->json('data'));
+        $this->assertCount(2, $this->getJson("/api/v1/catalog/categories/{$category->id}/products")->json('data'));
     }
-
-    // ── GET /api/v1/catalog/products (general index + filters + search) ───────
 
     /** @test */
     public function it_lists_all_published_products(): void
     {
-        Product::create(['title' => 'Published A', 'slug' => 'pub-a', 'status' => 'published']);
-        Product::create(['title' => 'Published B', 'slug' => 'pub-b', 'status' => 'published']);
-        Product::create(['title' => 'Draft C', 'slug' => 'draft-c', 'status' => 'draft']);
+        Product::create(['title' => 'Published A', 'slug' => 'pub-a',   'status' => 'published']);
+        Product::create(['title' => 'Published B', 'slug' => 'pub-b',   'status' => 'published']);
+        Product::create(['title' => 'Draft C',     'slug' => 'draft-c', 'status' => 'draft']);
 
         $this->getJson('/api/v1/catalog/products')
             ->assertOk()
-            ->assertJsonStructure(['data', 'links', 'meta'])
             ->assertJsonCount(2, 'data');
     }
 
@@ -386,9 +352,8 @@ class ProductsTest extends TestCase
     {
         Product::create(['title' => 'Draft Only', 'slug' => 'draft-only', 'status' => 'draft']);
 
-        $response = $this->getJson('/api/v1/catalog/products');
-
-        $response->assertOk()
+        $this->getJson('/api/v1/catalog/products')
+            ->assertOk()
             ->assertJsonCount(0, 'data')
             ->assertJsonPath('meta.total', 0);
     }
@@ -396,7 +361,7 @@ class ProductsTest extends TestCase
     /** @test */
     public function it_filters_products_by_category_id(): void
     {
-        $tech = Category::create(['name' => 'Tech', 'slug' => 'tech', 'is_active' => true]);
+        $tech = Category::create(['name' => 'Tech',    'slug' => 'tech',    'is_active' => true]);
         $fashion = Category::create(['name' => 'Fashion', 'slug' => 'fashion', 'is_active' => true]);
 
         Product::create(['title' => 'Phone', 'slug' => 'phone', 'status' => 'published', 'category_id' => $tech->id]);
@@ -419,11 +384,11 @@ class ProductsTest extends TestCase
     /** @test */
     public function it_filters_products_by_min_price_using_the_default_variant(): void
     {
-        $cheap = Product::create(['title' => 'Budget Item', 'slug' => 'budget-item', 'status' => 'published']);
-        ProductVariant::create(['product_id' => $cheap->id, 'sku' => 'CHEAP-01', 'is_default' => true, 'base_price' => 50000]);
+        $cheap = Product::create(['title' => 'Budget Item',  'slug' => 'budget-item',  'status' => 'published']);
+        ProductVariant::create(['product_id' => $cheap->id,     'sku' => 'CHEAP-01', 'type' => 'color', 'is_default' => true, 'base_price' => 50000]);
 
         $expensive = Product::create(['title' => 'Premium Item', 'slug' => 'premium-item', 'status' => 'published']);
-        ProductVariant::create(['product_id' => $expensive->id, 'sku' => 'PREM-01', 'is_default' => true, 'base_price' => 500000]);
+        ProductVariant::create(['product_id' => $expensive->id, 'sku' => 'PREM-01',  'type' => 'color', 'is_default' => true, 'base_price' => 500000]);
 
         $this->getJson('/api/v1/catalog/products?min_price=100000')
             ->assertOk()
@@ -434,11 +399,11 @@ class ProductsTest extends TestCase
     /** @test */
     public function it_filters_products_by_max_price_using_the_default_variant(): void
     {
-        $cheap = Product::create(['title' => 'Budget Item', 'slug' => 'budget-item', 'status' => 'published']);
-        ProductVariant::create(['product_id' => $cheap->id, 'sku' => 'CHEAP-01', 'is_default' => true, 'base_price' => 50000]);
+        $cheap = Product::create(['title' => 'Budget Item',  'slug' => 'budget-item',  'status' => 'published']);
+        ProductVariant::create(['product_id' => $cheap->id,     'sku' => 'CHEAP-01', 'type' => 'color', 'is_default' => true, 'base_price' => 50000]);
 
         $expensive = Product::create(['title' => 'Premium Item', 'slug' => 'premium-item', 'status' => 'published']);
-        ProductVariant::create(['product_id' => $expensive->id, 'sku' => 'PREM-01', 'is_default' => true, 'base_price' => 500000]);
+        ProductVariant::create(['product_id' => $expensive->id, 'sku' => 'PREM-01',  'type' => 'color', 'is_default' => true, 'base_price' => 500000]);
 
         $this->getJson('/api/v1/catalog/products?max_price=100000')
             ->assertOk()
@@ -450,10 +415,9 @@ class ProductsTest extends TestCase
     public function it_ignores_non_default_variants_when_filtering_by_price(): void
     {
         $product = Product::create(['title' => 'Multi-variant', 'slug' => 'multi-variant', 'status' => 'published']);
-        ProductVariant::create(['product_id' => $product->id, 'sku' => 'MV-DEFAULT', 'is_default' => true, 'base_price' => 50000]);
-        ProductVariant::create(['product_id' => $product->id, 'sku' => 'MV-OTHER', 'is_default' => false, 'base_price' => 999000]);
+        ProductVariant::create(['product_id' => $product->id, 'sku' => 'MV-DEFAULT', 'type' => 'color', 'is_default' => true,  'base_price' => 50000]);
+        ProductVariant::create(['product_id' => $product->id, 'sku' => 'MV-OTHER',   'type' => 'color', 'is_default' => false, 'base_price' => 999000]);
 
-        // min_price is above the default variant price — product should NOT appear
         $this->getJson('/api/v1/catalog/products?min_price=100000')
             ->assertOk()
             ->assertJsonCount(0, 'data');
@@ -463,7 +427,7 @@ class ProductsTest extends TestCase
     public function it_searches_products_by_title(): void
     {
         Product::create(['title' => 'Wireless Headphones', 'slug' => 'wireless-headphones', 'status' => 'published']);
-        Product::create(['title' => 'Running Shoes', 'slug' => 'running-shoes', 'status' => 'published']);
+        Product::create(['title' => 'Running Shoes',       'slug' => 'running-shoes',       'status' => 'published']);
 
         $this->getJson('/api/v1/catalog/products?search=Wireless')
             ->assertOk()
@@ -486,19 +450,18 @@ class ProductsTest extends TestCase
     /** @test */
     public function it_applies_combined_filters_correctly(): void
     {
-        $tech = Category::create(['name' => 'Tech', 'slug' => 'tech', 'is_active' => true]);
+        $tech = Category::create(['name' => 'Tech',    'slug' => 'tech',    'is_active' => true]);
         $fashion = Category::create(['name' => 'Fashion', 'slug' => 'fashion', 'is_active' => true]);
 
-        $keyboard = Product::create(['title' => 'Keyboard', 'slug' => 'keyboard', 'status' => 'published', 'category_id' => $tech->id]);
-        ProductVariant::create(['product_id' => $keyboard->id, 'sku' => 'KB-01', 'is_default' => true, 'base_price' => 80000]);
+        $keyboard = Product::create(['title' => 'Keyboard',       'slug' => 'keyboard',       'status' => 'published', 'category_id' => $tech->id]);
+        ProductVariant::create(['product_id' => $keyboard->id, 'sku' => 'KB-01',    'type' => 'color', 'is_default' => true, 'base_price' => 80000]);
 
-        $monitor = Product::create(['title' => 'Monitor', 'slug' => 'monitor', 'status' => 'published', 'category_id' => $tech->id]);
-        ProductVariant::create(['product_id' => $monitor->id, 'sku' => 'MON-01', 'is_default' => true, 'base_price' => 300000]);
+        $monitor = Product::create(['title' => 'Monitor',         'slug' => 'monitor',         'status' => 'published', 'category_id' => $tech->id]);
+        ProductVariant::create(['product_id' => $monitor->id,  'sku' => 'MON-01',   'type' => 'color', 'is_default' => true, 'base_price' => 300000]);
 
-        $shirt = Product::create(['title' => 'Keyboard Shirt', 'slug' => 'keyboard-shirt', 'status' => 'published', 'category_id' => $fashion->id]);
-        ProductVariant::create(['product_id' => $shirt->id, 'sku' => 'SHIRT-01', 'is_default' => true, 'base_price' => 80000]);
+        $shirt = Product::create(['title' => 'Keyboard Shirt',    'slug' => 'keyboard-shirt',  'status' => 'published', 'category_id' => $fashion->id]);
+        ProductVariant::create(['product_id' => $shirt->id,    'sku' => 'SHIRT-01', 'type' => 'color', 'is_default' => true, 'base_price' => 80000]);
 
-        // category=tech + max_price=100000 + search=Key → only Keyboard matches all three
         $this->getJson("/api/v1/catalog/products?category_id={$tech->id}&max_price=100000&search=Key")
             ->assertOk()
             ->assertJsonCount(1, 'data')

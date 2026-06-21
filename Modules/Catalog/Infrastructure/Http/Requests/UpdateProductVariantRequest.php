@@ -34,6 +34,7 @@ class UpdateProductVariantRequest extends FormRequest
     {
         return [
             'sku' => ['sometimes', 'string', 'max:255', Rule::unique('product_variants', 'sku')->ignore($this->route('variantId'))],
+            'type' => ['sometimes', 'in:image,color'],
             'base_price' => ['sometimes', 'integer', 'min:0'],
             'compare_at_price' => ['nullable', 'integer', 'min:0'],
             'is_default' => ['sometimes', 'boolean'],

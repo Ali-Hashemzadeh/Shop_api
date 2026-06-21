@@ -2,6 +2,26 @@
 
 ## [Unreleased](https://github.com/laravel/laravel/compare/v12.12.1...12.x)
 
+### Feat — `type` field on product variants (required, `image` | `color`)
+
+**`ProductVariant` now requires a `type` field (string, `image` or `color`).**
+
+#### Changed
+- Migration `2026_06_21_000000_add_type_to_product_variants_table.php` — adds `string('type')` after `sku`.
+- `ProductVariant` — added `type` to `$fillable`.
+- `ProductVariantDTO` — added `public readonly string $type`; `fromModel()` maps it.
+- `ProductVariantResource` — exposes `type` in the JSON response.
+- `StoreProductVariantRequest` — `'type' => ['required', 'in:image,color']`.
+- `UpdateProductVariantRequest` — `'type' => ['sometimes', 'in:image,color']`.
+- `StoreProductRequest` — `'variants.*.type' => ['required', 'in:image,color']`.
+- `UpdateProductRequest` — `'variants.*.type' => ['required', 'in:image,color']`.
+- `CreateProductVariantAction` — passes `type` through to `createProductVariant`.
+- Tests — all `ProductVariant::create()` calls and variant POST/PATCH payloads updated with `type`; 4 new type-specific tests added to `ProductVariantsTest`.
+
+**Result: test suite is 215/215 green (581 assertions).**
+
+---
+
 ### Feat — Variant upsert on PATCH /products/{id} + remove inline file uploads
 
 **`PATCH /api/v1/catalog/products/{id}` now accepts an optional `variants` array with upsert-by-SKU semantics.**

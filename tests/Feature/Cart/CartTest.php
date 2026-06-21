@@ -28,7 +28,7 @@ class CartTest extends TestCase
     public function cart_item_includes_product_name_when_catalog_variant_exists(): void
     {
         $product = Product::create(['title' => 'Samsung Galaxy S25', 'slug' => 's25', 'status' => 'published']);
-        ProductVariant::create(['product_id' => $product->id, 'sku' => 'S25-BLK', 'base_price' => 89000000, 'is_default' => true, 'attributes' => []]);
+        ProductVariant::create(['product_id' => $product->id, 'sku' => 'S25-BLK', 'type' => 'color', 'base_price' => 89000000, 'is_default' => true, 'attributes' => []]);
         InventoryStock::create(['sku' => 'S25-BLK', 'quantity' => 10, 'reserved_quantity' => 0]);
 
         $this->withHeaders(['X-Session-Id' => self::SESSION])

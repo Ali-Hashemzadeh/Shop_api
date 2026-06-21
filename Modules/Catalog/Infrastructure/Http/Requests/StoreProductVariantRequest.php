@@ -35,6 +35,7 @@ class StoreProductVariantRequest extends FormRequest
     {
         return [
             'sku' => ['required', 'string', 'max:255', 'unique:product_variants,sku'],
+            'type' => ['required', 'in:image,color'],
             'base_price' => ['required', 'integer', 'min:0'],
             'compare_at_price' => ['nullable', 'integer', 'min:0'],
             'is_default' => ['nullable', 'boolean'],

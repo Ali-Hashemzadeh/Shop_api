@@ -17,6 +17,7 @@ class ProductVariantResource extends JsonResource
         return [
             'id' => $dto->id,
             'sku' => $dto->sku,
+            'type' => $dto->type,
             'is_default' => $dto->isDefault,
             'base_price' => $dto->basePrice,
             'compare_at_price' => $dto->compareAtPrice,

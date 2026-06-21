@@ -9,6 +9,7 @@ class ProductVariantDTO
     public function __construct(
         public readonly int $id,
         public readonly string $sku,
+        public readonly string $type,
         public readonly bool $isDefault,
         public readonly int $basePrice,
         public readonly ?int $compareAtPrice,
@@ -25,6 +26,7 @@ class ProductVariantDTO
         return new self(
             id: $variant->id,
             sku: $variant->sku,
+            type: $variant->type,
             isDefault: $variant->is_default,
             basePrice: $variant->base_price,
             compareAtPrice: $variant->compare_at_price,

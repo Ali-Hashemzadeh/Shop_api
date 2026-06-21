@@ -49,6 +49,7 @@ class CreateProductVariantAction
 
             return $this->catalog->createProductVariant($productId, [
                 'sku' => $data['sku'],
+                'type' => $data['type'],
                 'is_default' => $isDefault,
                 'base_price' => (int) $data['base_price'],
                 'compare_at_price' => isset($data['compare_at_price']) ? (int) $data['compare_at_price'] : null,

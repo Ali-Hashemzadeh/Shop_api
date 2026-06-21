@@ -162,13 +162,13 @@ Match the surrounding code. Concrete patterns used throughout:
 |---|---|---|
 | **Identity** | ✅ Complete | Passwordless OTP auth, profiles, RBAC, provinces/cities, addresses |
 | **Media** | ✅ Complete | File upload ledger + standalone upload/delete endpoints |
-| **Catalog** | ✅ Complete | Categories, products, galleries, variants, atomic nested create, variant upsert on update — 101 tests |
+| **Catalog** | ✅ Complete | Categories, products, galleries, variants, atomic nested create, variant upsert on update, variant `type` (`image`/`color`) — 107 tests |
 | **Inventory** | ✅ Complete | Stock tracking, reservation lifecycle, append-only ledger — 24 tests |
 | **Cart** | ✅ Complete | Guest + auth carts, stock-validated add/update, Catalog price enrichment — 15 tests |
 | **Orders** | 🚧 Scaffolded | Directory skeleton exists under `Modules/Orders/`; provider **not yet** in `bootstrap/providers.php` and not documented in README/AGENT_CONTEXT — confirm scope before building |
 | Payment | 📋 Planned | Pending roadmap review |
 
-**Test suite baseline: 210 tests / 567 assertions, all green.**
+**Test suite baseline: 215 tests / 581 assertions, all green.**
 
 ### Identity — key facts
 - **Passwordless OTP, phone-based, unified register+login** (sign-up == login).
@@ -195,7 +195,7 @@ Match the surrounding code. Concrete patterns used throughout:
 - Entities: `Category` (infinite nesting via `parent_id`), `Product` (`draft`/`published`,
   `primary_media_id`), `ProductImage` (gallery, `sort_order`), `ProductVariant` (unique
   `sku`, integer `base_price`/`compare_at_price`, JSON `attributes`, per-variant
-  `media_id`, `is_default` **single-true invariant enforced at the application layer**).
+  `type` (`image` or `color`, required), `media_id`, `is_default` **single-true invariant enforced at the application layer**).
 - **Contract:** `CatalogManagerInterface` — full read/write surface for higher modules.
 - **Atomic nested create:** `POST /api/v1/catalog/products` accepts an optional `variants`
   array. When provided, the product and all variants are created together inside a single

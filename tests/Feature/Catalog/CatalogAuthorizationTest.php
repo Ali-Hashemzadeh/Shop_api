@@ -268,6 +268,7 @@ class CatalogAuthorizationTest extends TestCase
         $variant = ProductVariant::create([
             'product_id' => $product->id,
             'sku' => 'WGT-001',
+            'type' => 'color',
             'is_default' => true,
             'base_price' => 1000,
         ]);
@@ -283,6 +284,7 @@ class CatalogAuthorizationTest extends TestCase
         ProductVariant::create([
             'product_id' => $product->id,
             'sku' => 'WGT-SKU',
+            'type' => 'color',
             'is_default' => true,
             'base_price' => 1000,
         ]);
