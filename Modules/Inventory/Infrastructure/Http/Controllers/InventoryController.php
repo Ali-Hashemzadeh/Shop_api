@@ -6,7 +6,6 @@ namespace Modules\Inventory\Infrastructure\Http\Controllers;
 
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
-use Modules\Inventory\Infrastructure\Http\Requests\IndexLedgerRequest;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Routing\Controller;
 use Modules\Inventory\Application\Actions\UpdateStockAction;
@@ -16,6 +15,7 @@ use Modules\Inventory\Domain\Models\InventoryLedgerEntry;
 use Modules\Inventory\Domain\Models\InventoryStock;
 use Modules\Inventory\Infrastructure\Http\Requests\AdjustStockRequest;
 use Modules\Inventory\Infrastructure\Http\Requests\BatchStockRequest;
+use Modules\Inventory\Infrastructure\Http\Requests\IndexLedgerRequest;
 use Modules\Inventory\Infrastructure\Http\Resources\InventoryLedgerEntryResource;
 use Modules\Inventory\Infrastructure\Http\Resources\InventoryStockResource;
 
