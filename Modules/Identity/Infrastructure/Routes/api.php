@@ -6,7 +6,7 @@ Route::middleware('api')->prefix('api/v1')->group(function () {
     require __DIR__.'/authentication.php';
     require __DIR__.'/location.php';
 
-    Route::middleware('auth:sanctum')->group(function () {
+    Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         require __DIR__.'/profile.php';
         require __DIR__.'/address.php';
     });

@@ -55,6 +55,7 @@
     .badge { font-size: 10px; padding: 2px 7px; border-radius: 99px; background: var(--surface2); border: 1px solid var(--border); color: var(--muted); white-space: nowrap; }
     .badge.auth { border-color: var(--accent); color: var(--accent); }
     .badge.admin { border-color: var(--delete); color: var(--delete); }
+    .badge.rate { border-color: #22d3ee; color: #22d3ee; }
 
     .endpoint-body { border-top: 1px solid var(--border); padding: 20px 18px; display: flex; flex-direction: column; gap: 16px; }
     .block-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--accent); margin-bottom: 6px; }
@@ -102,6 +103,8 @@
   <a href="#pagination">Pagination</a>
   <a href="#money">Money &amp; Prices</a>
   <a href="#media-strategy">Media Upload Strategy</a>
+
+  <a href="#rate-limits">Rate Limiting</a>
 
   <div class="section-label">Identity</div>
   <a href="#otp">OTP — Login / Register</a>
@@ -255,6 +258,19 @@ curl -s -X POST http://localhost:8000/api/v1/media \
   <div class="note"><strong>These two approaches are mutually exclusive per field.</strong> For example, send <code>primary_media_id</code> OR <code>primary_image</code>, never both at the same time.</div>
 
 
+  <!-- ═══ RATE LIMITS ═══ -->
+  <h2 id="rate-limits">Rate Limiting</h2>
+  <p>Every endpoint is protected by a named rate limiter. Exceeding the limit returns <strong>429 Too Many Requests</strong> with a <code>Retry-After</code> header. Limits reset every 60 seconds.</p>
+  <table>
+    <tr><th>Limiter</th><th>Limit</th><th>Key</th><th>Applied to</th></tr>
+    <tr><td>otp</td><td class="req">5 / min</td><td>IP address</td><td>POST /otp/request, POST /otp/verify</td></tr>
+    <tr><td>public</td><td class="opt">120 / min</td><td>IP address</td><td>All open storefront reads (catalog, inventory stock, locations, media list)</td></tr>
+    <tr><td>inventory-batch</td><td class="opt">30 / min</td><td>IP address</td><td>POST /inventory/batch (unauthenticated, more expensive per call)</td></tr>
+    <tr><td>uploads</td><td class="opt">20 / min</td><td>User ID (or IP for guests)</td><td>POST /media</td></tr>
+    <tr><td>api</td><td class="opt">60 / min (auth) · 30 / min (guest)</td><td>User ID or IP</td><td>All authenticated endpoints; guest cart falls back to IP</td></tr>
+  </table>
+  <div class="note"><strong>Endpoint badges:</strong> endpoints with non-default limits show a <span class="badge rate">N/min</span> badge in their header. All other public reads are 120/min and all authenticated writes are 60/min.</div>
+
   <!-- ═══ IDENTITY ═══ -->
   <h2 id="otp">OTP — Login / Register</h2>
 
@@ -263,6 +279,7 @@ curl -s -X POST http://localhost:8000/api/v1/media \
       <span class="method post">POST</span>
       <span class="endpoint-path">/otp/request</span>
       <span class="badge">Public</span>
+      <span class="badge rate">5/min · per IP</span>
     </div>
     <div class="endpoint-body">
       <p>Sends an OTP code to the given phone number. Creates the user account on first use. The same endpoint handles both first-time registration and subsequent logins.</p>
@@ -291,6 +308,7 @@ curl -s -X POST http://localhost:8000/api/v1/media \
       <span class="method post">POST</span>
       <span class="endpoint-path">/otp/verify</span>
       <span class="badge">Public</span>
+      <span class="badge rate">5/min · per IP</span>
     </div>
     <div class="endpoint-body">
       <p>Verifies the OTP code and returns a Bearer token. The code is consumed immediately and cannot be reused. Store the returned token securely (e.g. <code>localStorage</code> or a secure cookie).</p>
@@ -902,6 +920,7 @@ curl -s -X POST http://localhost:8000/api/v1/media \
       <span class="method post">POST</span>
       <span class="endpoint-path">/media</span>
       <span class="badge admin">Requires media.upload permission</span>
+      <span class="badge rate">20/min · per user</span>
     </div>
     <div class="endpoint-body">
       <p>Upload a single image file and receive a <code>media_id</code> + public URL. Use this for the pre-upload flow before creating products, categories, or variants.</p>
@@ -1660,6 +1679,7 @@ GET /api/v1/catalog/products?category_id=5&amp;min_price=10000000&amp;max_price=
       <span class="method post">POST</span>
       <span class="endpoint-path">/inventory/batch</span>
       <span class="badge">Public</span>
+      <span class="badge rate">30/min · per IP</span>
     </div>
     <div class="endpoint-body">
       <p>Look up stock for multiple SKUs in one request. The response is a plain object keyed by SKU. SKUs with no stock record are silently omitted. Use this on a cart page or category listing to show stock indicators without N+1 requests.</p>

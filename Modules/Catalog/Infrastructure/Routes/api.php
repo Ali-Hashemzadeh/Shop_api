@@ -9,19 +9,21 @@ use Modules\Catalog\Infrastructure\Http\Controllers\ProductVariantsController;
 Route::middleware('api')->prefix('api/v1/catalog')->group(function () {
 
     // ── PUBLIC: Unauthenticated storefront read routes ────────────────────────
-    Route::get('/categories/roots', [CategoriesController::class, 'indexRoots']);
-    Route::get('/categories/{id}', [CategoriesController::class, 'show']);
+    Route::middleware('throttle:public')->group(function () {
+        Route::get('/categories/roots', [CategoriesController::class, 'indexRoots']);
+        Route::get('/categories/{id}', [CategoriesController::class, 'show']);
 
-    Route::get('/products', [ProductsController::class, 'index']);
-    Route::get('/products/slug/{slug}', [ProductsController::class, 'showBySlug']);
-    Route::get('/products/{id}', [ProductsController::class, 'show']);
-    Route::get('/categories/{categoryId}/products', [ProductsController::class, 'indexByCategory']);
+        Route::get('/products', [ProductsController::class, 'index']);
+        Route::get('/products/slug/{slug}', [ProductsController::class, 'showBySlug']);
+        Route::get('/products/{id}', [ProductsController::class, 'show']);
+        Route::get('/categories/{categoryId}/products', [ProductsController::class, 'indexByCategory']);
 
-    Route::get('/variants/sku/{sku}', [ProductVariantsController::class, 'showBySku']);
-    Route::get('/variants/{variantId}', [ProductVariantsController::class, 'show']);
+        Route::get('/variants/sku/{sku}', [ProductVariantsController::class, 'showBySku']);
+        Route::get('/variants/{variantId}', [ProductVariantsController::class, 'show']);
+    });
 
     // ── PROTECTED: Requires valid Sanctum token; authorization enforced by policies ──
-    Route::middleware('auth:sanctum')->group(function () {
+    Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
 
         // Categories
         Route::post('/categories', [CategoriesController::class, 'store']);

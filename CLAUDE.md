@@ -144,6 +144,13 @@ Match the surrounding code. Concrete patterns used throughout:
   a `Route::middleware('auth:sanctum')` group. `auth:sanctum` yields **401** for
   unauthenticated; policies yield **403** for unauthorized; public routes never return
   401/403.
+- **Rate limiting (always apply):** Every route group must carry a named throttle middleware.
+  Five named limiters are defined in `AppServiceProvider::configureRateLimiting()`:
+  `otp` (5/min per IP — OTP endpoints only), `public` (120/min per IP — open reads),
+  `inventory-batch` (30/min per IP — unauthenticated batch), `uploads` (20/min per user —
+  file upload), `api` (60/min per user, 30/min per IP fallback — all authenticated routes
+  and guest cart). When adding a new module, choose the appropriate limiter and apply it at
+  the route-group level. Exceeding the limit returns **429** with a `Retry-After` header.
 - **Pagination:** list endpoints return a `LengthAwarePaginator` (`{data, links, meta}`
   envelope), default 15/page, `per_page` clamped 1–100, `page` for the page number — both
   auto-documented by Scramble.
