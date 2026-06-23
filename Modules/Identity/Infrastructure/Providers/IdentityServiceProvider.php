@@ -16,6 +16,7 @@ use Modules\Identity\Infrastructure\Persistence\Repositories\EloquentIdentityMan
 use Modules\Identity\Infrastructure\Persistence\Repositories\EloquentUserRepository;
 use Modules\Identity\Infrastructure\Persistence\Repositories\UserRepositoryInterface;
 use Modules\Identity\Infrastructure\Services\LogOtpSender;
+use Modules\Identity\Infrastructure\Services\SmsIrOtpSender;
 
 class IdentityServiceProvider extends ServiceProvider
 {
@@ -28,8 +29,20 @@ class IdentityServiceProvider extends ServiceProvider
         $this->app->bind(
             AddressRepositoryInterface::class,
             EloquentAddressRepository::class);
-        // Log-only placeholder until the SMS web service is wired in.
-        $this->app->bind(OtpSenderInterface::class, LogOtpSender::class);
+        // Use SMS.ir when configured; fall back to log-only in dev/test.
+        $this->app->bind(OtpSenderInterface::class, function () {
+            $apiKey = (string) config('identity.sms.api_key', '');
+
+            if ($apiKey === '') {
+                return new LogOtpSender;
+            }
+
+            return new SmsIrOtpSender(
+                apiKey: $apiKey,
+                templateId: (int) config('identity.sms.template_id'),
+                codeParam: (string) config('identity.sms.code_param', 'Code'),
+            );
+        });
         $this->loadMigrationsFrom(
             base_path(
                 'Modules/Identity/Infrastructure/Persistence/Migrations'
