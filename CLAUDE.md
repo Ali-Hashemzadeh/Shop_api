@@ -178,9 +178,11 @@ Match the surrounding code. Concrete patterns used throughout:
   and mints a Sanctum token.
 - OTP is stored **hashed** (`otp_code`, hidden) with `otp_expires_at`; verified via
   `Hash::check`, consumed on success (replay-safe).
-- **Delivery boundary:** `OtpSenderInterface::send(phone, code)`, bound to a log-only
-  `LogOtpSender` placeholder. Swap the binding in `IdentityServiceProvider` for a real SMS
-  gateway without touching the flow.
+- **Delivery boundary:** `OtpSenderInterface::send(phone, code)`. In production, bound to
+  `SmsIrOtpSender` (calls `POST https://api.sms.ir/v1/send/verify`, template-based only,
+  converts `09XXXXXXXXX` → `98XXXXXXXXX`). Falls back to `LogOtpSender` when
+  `SMSIR_API_KEY` is empty — no code changes needed between environments. Config lives in
+  `config/identity.php` under the `sms` key (`api_key`, `template_id`, `code_param`).
 - **Public contract:** `IdentityManagerInterface::isAdmin(int $userId): bool` — but prefer
   direct `$user->can('...')` permission checks in policies over role checks.
 
@@ -193,8 +195,9 @@ Match the surrounding code. Concrete patterns used throughout:
 
 ### Catalog — key facts
 - Entities: `Category` (infinite nesting via `parent_id`), `Product` (`draft`/`published`,
-  `primary_media_id`), `ProductImage` (gallery, `sort_order`), `ProductVariant` (unique
-  `sku`, integer `base_price`/`compare_at_price`, JSON `attributes`, per-variant
+  `primary_media_id`), `ProductImage` (gallery, `sort_order`), `ProductVariant` (auto-generated
+  `sku` format `bdp{productId}-v{n}` — **never accepted from client input**, integer
+  `base_price`/`compare_at_price`, JSON `attributes`, per-variant
   `type` (`image` or `color`, required), `media_id`, `is_default` **single-true invariant enforced at the application layer**).
 - **Contract:** `CatalogManagerInterface` — full read/write surface for higher modules.
 - **Atomic nested create:** `POST /api/v1/catalog/products` accepts an optional `variants`
@@ -202,10 +205,11 @@ Match the surrounding code. Concrete patterns used throughout:
   `DB::transaction`. Validation enforces that exactly one variant has `is_default: true`.
   Omitting `variants` is valid — the standalone variant routes are unchanged.
 - **Variant upsert on update:** `PATCH /api/v1/catalog/products/{id}` also accepts an
-  optional `variants` array with upsert-by-SKU semantics — SKU already on this product →
-  `updateProductVariant`; new SKU → `createProductVariant`; variants absent from the array
-  are untouched. Invariant: at most one submitted variant may have `is_default: true`.
-  All variant mutations are wrapped in the same `DB::transaction` as the product update.
+  optional `variants` array with upsert-by-ID semantics — known `id` already on this product →
+  `updateProductVariant`; missing or unknown `id` → `createProductVariant` with auto-generated
+  SKU; variants absent from the array are untouched. Invariant: at most one submitted variant
+  may have `is_default: true`. All variant mutations are wrapped in the same `DB::transaction`
+  as the product update.
 - **No inline file uploads on product endpoints.** Pass `primary_media_id`,
   `gallery_media_ids`, or `variants.*.media_id` (pre-uploaded via `POST /api/v1/media`).
 - Permissions: `catalog.category.{create,update,delete}`,

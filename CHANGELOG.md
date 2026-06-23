@@ -2,6 +2,41 @@
 
 ## [Unreleased](https://github.com/laravel/laravel/compare/v12.12.1...12.x)
 
+### Feat — SMS.ir template-based OTP delivery
+
+**OTP codes are now delivered via SMS.ir's verify/template API in production.**
+
+#### Added
+- `Modules/Identity/Infrastructure/Services/SmsIrOtpSender.php` — new `OtpSenderInterface` implementation. Calls `POST https://api.sms.ir/v1/send/verify` with `X-API-KEY` header, converts `09XXXXXXXXX` → `98XXXXXXXXX`, and passes the OTP as a named template parameter.
+- `config/identity.php` — new `sms` section: `api_key`, `template_id`, `code_param` (defaults to `"Code"`).
+- `.env.example` — `SMSIR_API_KEY=` and `SMSIR_TEMPLATE_ID=` documented with fallback note.
+
+#### Changed
+- `IdentityServiceProvider` — `OtpSenderInterface` binding is now conditional: uses `SmsIrOtpSender` when `SMSIR_API_KEY` is non-empty; falls back to `LogOtpSender` automatically in dev/test (no code changes needed to switch environments).
+
+**Result: test suite remains 215/215 green (all OTP tests use the injected mock sender).**
+
+---
+
+### Feat — Auto-generate SKU as `bdp{productId}-v{n}`; variant upsert by ID on PATCH
+
+**SKUs are now generated entirely in the backend. The `sku` field is removed from all request inputs.**
+
+#### Changed
+- `CreateProductVariantAction` — generates `bdp{$productId}-v{$n}` inside `DB::transaction()` using `lockForUpdate()` to prevent race conditions. `n` = existing variant count + 1.
+- `CreateProductAction` — generates `bdp{$productId}-v{$i+1}` for each variant in the nested-create loop (index-based since the product is always fresh).
+- `UpdateProductAction` — variant upsert key changed from SKU to `id`. Submitted variant with a known `id` → `updateProductVariant`; no `id` or unknown `id` → new variant with auto-generated SKU. New variant count tracked via `$newOffset` to avoid collisions within the same request.
+- `StoreProductVariantRequest` — removed `sku` required rule.
+- `StoreProductRequest` — removed `variants.*.sku` required rule.
+- `UpdateProductVariantRequest` — removed `sku` optional rule and unused `Rule` import.
+- `UpdateProductRequest` — replaced `variants.*.sku` (required, distinct) with `variants.*.id` (nullable, integer, distinct).
+- `ProductVariantsTest` — removed `sku` from all payloads; renamed SKU-duplicate test to `it_generates_unique_skus_for_consecutive_variants`; replaced SKU-update test with `it_does_not_update_sku_even_if_ignored`.
+- `ProductsTest` — removed `sku` from nested variant payloads; `test_can_update_product_variants_with_upsert_by_sku` renamed to `test_can_update_product_variants_with_upsert_by_id` and updated to use `id` field.
+
+**Result: test suite is 215/215 green (581 assertions).**
+
+---
+
 ### Feat — `type` field on product variants (required, `image` | `color`)
 
 **`ProductVariant` now requires a `type` field (string, `image` or `color`).**
