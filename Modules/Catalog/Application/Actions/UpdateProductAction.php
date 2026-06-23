@@ -7,6 +7,7 @@ namespace Modules\Catalog\Application\Actions;
 use Illuminate\Support\Facades\DB;
 use Modules\Catalog\Domain\Contracts\CatalogManagerInterface;
 use Modules\Catalog\Domain\DTOs\ProductDTO;
+use Modules\Catalog\Domain\Models\ProductVariant;
 
 class UpdateProductAction
 {
@@ -23,15 +24,22 @@ class UpdateProductAction
             $productDto = $this->catalog->updateProduct($id, $productData);
 
             if ($variantsData !== null) {
-                $existingBySku = collect($productDto->variants)->keyBy('sku');
+                $existingById = collect($productDto->variants)->keyBy('id');
+                $existingCount = ProductVariant::where('product_id', $id)->lockForUpdate()->count();
+                $newOffset = 0;
 
                 foreach ($variantsData as $variantData) {
-                    $existing = $existingBySku->get($variantData['sku']);
+                    $variantId = isset($variantData['id']) ? (int) $variantData['id'] : null;
 
-                    if ($existing !== null) {
-                        $this->catalog->updateProductVariant($existing->id, $variantData);
+                    if ($variantId !== null && $existingById->has($variantId)) {
+                        $this->catalog->updateProductVariant($variantId, collect($variantData)->except('id')->all());
                     } else {
-                        $this->catalog->createProductVariant($id, $variantData);
+                        $sku = 'bdp'.$id.'-v'.($existingCount + $newOffset + 1);
+                        $newOffset++;
+                        $this->catalog->createProductVariant($id, array_merge(
+                            collect($variantData)->except('id')->all(),
+                            ['sku' => $sku]
+                        ));
                     }
                 }
             }

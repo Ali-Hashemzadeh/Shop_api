@@ -90,8 +90,8 @@ class ProductsTest extends TestCase
             'title' => 'Laptop Pro',
             'status' => 'published',
             'variants' => [
-                ['sku' => 'LP-BLK-256', 'type' => 'color', 'base_price' => 50000000, 'compare_at_price' => 55000000, 'is_default' => true,  'attributes' => ['color' => 'Black']],
-                ['sku' => 'LP-SLV-512', 'type' => 'color', 'base_price' => 65000000, 'compare_at_price' => null,     'is_default' => false, 'attributes' => ['color' => 'Silver']],
+                ['type' => 'color', 'base_price' => 50000000, 'compare_at_price' => 55000000, 'is_default' => true,  'attributes' => ['color' => 'Black']],
+                ['type' => 'color', 'base_price' => 65000000, 'compare_at_price' => null,     'is_default' => false, 'attributes' => ['color' => 'Silver']],
             ],
         ]);
 
@@ -99,9 +99,10 @@ class ProductsTest extends TestCase
             ->assertJsonStructure(['id', 'title', 'variants'])
             ->assertJsonCount(2, 'variants');
 
+        $productId = $response->json('id');
         $this->assertDatabaseHas('products', ['title' => 'Laptop Pro']);
-        $this->assertDatabaseHas('product_variants', ['sku' => 'LP-BLK-256', 'type' => 'color', 'is_default' => 1]);
-        $this->assertDatabaseHas('product_variants', ['sku' => 'LP-SLV-512', 'type' => 'color', 'is_default' => 0]);
+        $this->assertDatabaseHas('product_variants', ['sku' => 'bdp'.$productId.'-v1', 'type' => 'color', 'is_default' => 1]);
+        $this->assertDatabaseHas('product_variants', ['sku' => 'bdp'.$productId.'-v2', 'type' => 'color', 'is_default' => 0]);
     }
 
     /** @test */
@@ -110,13 +111,12 @@ class ProductsTest extends TestCase
         $this->postJson('/api/v1/catalog/products', [
             'title' => 'Bad Product',
             'variants' => [
-                ['sku' => 'SKU-A', 'type' => 'color', 'base_price' => 10000, 'is_default' => false],
-                ['sku' => 'SKU-B', 'type' => 'color', 'base_price' => 20000, 'is_default' => false],
+                ['type' => 'color', 'base_price' => 10000, 'is_default' => false],
+                ['type' => 'color', 'base_price' => 20000, 'is_default' => false],
             ],
         ])->assertUnprocessable()->assertJsonValidationErrors(['variants']);
 
         $this->assertDatabaseMissing('products', ['title' => 'Bad Product']);
-        $this->assertDatabaseMissing('product_variants', ['sku' => 'SKU-A']);
     }
 
     /** @test */
@@ -125,13 +125,12 @@ class ProductsTest extends TestCase
         $this->postJson('/api/v1/catalog/products', [
             'title' => 'Bad Product',
             'variants' => [
-                ['sku' => 'SKU-C', 'type' => 'color', 'base_price' => 10000, 'is_default' => true],
-                ['sku' => 'SKU-D', 'type' => 'color', 'base_price' => 20000, 'is_default' => true],
+                ['type' => 'color', 'base_price' => 10000, 'is_default' => true],
+                ['type' => 'color', 'base_price' => 20000, 'is_default' => true],
             ],
         ])->assertUnprocessable()->assertJsonValidationErrors(['variants']);
 
         $this->assertDatabaseMissing('products', ['title' => 'Bad Product']);
-        $this->assertDatabaseMissing('product_variants', ['sku' => 'SKU-C']);
     }
 
     /** @test */
@@ -140,7 +139,7 @@ class ProductsTest extends TestCase
         $this->postJson('/api/v1/catalog/products', [
             'title' => 'Bad Product',
             'variants' => [
-                ['sku' => 'SKU-E', 'base_price' => 10000, 'is_default' => true],
+                ['base_price' => 10000, 'is_default' => true],
             ],
         ])->assertUnprocessable()->assertJsonValidationErrors(['variants.0.type']);
     }
@@ -205,20 +204,25 @@ class ProductsTest extends TestCase
     }
 
     /** @test */
-    public function test_can_update_product_variants_with_upsert_by_sku(): void
+    public function test_can_update_product_variants_with_upsert_by_id(): void
     {
         $product = Product::create(['title' => 'Phone', 'slug' => 'phone', 'status' => 'draft']);
-        ProductVariant::create(['product_id' => $product->id, 'sku' => 'PH-BLK', 'type' => 'color', 'is_default' => true, 'base_price' => 10000000]);
+        $variant = ProductVariant::create(['product_id' => $product->id, 'sku' => 'bdp'.$product->id.'-v1', 'type' => 'color', 'is_default' => true, 'base_price' => 10000000]);
 
         $this->patchJson("/api/v1/catalog/products/{$product->id}", [
             'variants' => [
-                ['sku' => 'PH-BLK', 'type' => 'color', 'base_price' => 12000000, 'is_default' => true,  'attributes' => []],
-                ['sku' => 'PH-WHT', 'type' => 'color', 'base_price' => 11000000, 'is_default' => false, 'attributes' => ['color' => 'White']],
+                ['id' => $variant->id, 'type' => 'color', 'base_price' => 12000000, 'is_default' => true,  'attributes' => []],
+                ['type' => 'color', 'base_price' => 11000000, 'is_default' => false, 'attributes' => ['color' => 'White']],
             ],
         ])->assertOk()->assertJsonCount(2, 'variants');
 
-        $this->assertDatabaseHas('product_variants', ['sku' => 'PH-BLK', 'base_price' => 12000000, 'is_default' => 1]);
-        $this->assertDatabaseHas('product_variants', ['sku' => 'PH-WHT', 'base_price' => 11000000, 'is_default' => 0]);
+        $this->assertDatabaseHas('product_variants', ['id' => $variant->id, 'base_price' => 12000000, 'is_default' => 1]);
+        $this->assertDatabaseHas('product_variants', [
+            'product_id' => $product->id,
+            'sku' => 'bdp'.$product->id.'-v2',
+            'base_price' => 11000000,
+            'is_default' => 0,
+        ]);
     }
 
     /** @test */
@@ -242,12 +246,12 @@ class ProductsTest extends TestCase
 
         $this->patchJson("/api/v1/catalog/products/{$product->id}", [
             'variants' => [
-                ['sku' => 'W-BLK', 'type' => 'color', 'base_price' => 5000000, 'is_default' => true,  'attributes' => []],
-                ['sku' => 'W-WHT', 'type' => 'color', 'base_price' => 5000000, 'is_default' => true,  'attributes' => []],
+                ['type' => 'color', 'base_price' => 5000000, 'is_default' => true,  'attributes' => []],
+                ['type' => 'color', 'base_price' => 5000000, 'is_default' => true,  'attributes' => []],
             ],
         ])->assertUnprocessable()->assertJsonValidationErrors(['variants']);
 
-        $this->assertDatabaseMissing('product_variants', ['sku' => 'W-BLK']);
+        $this->assertDatabaseMissing('product_variants', ['product_id' => $product->id]);
     }
 
     // ── DELETE /api/v1/catalog/products/{id} ─────────────────────────────────

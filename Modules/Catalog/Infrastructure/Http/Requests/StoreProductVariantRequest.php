@@ -34,7 +34,6 @@ class StoreProductVariantRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'sku' => ['required', 'string', 'max:255', 'unique:product_variants,sku'],
             'type' => ['required', 'in:image,color'],
             'base_price' => ['required', 'integer', 'min:0'],
             'compare_at_price' => ['nullable', 'integer', 'min:0'],

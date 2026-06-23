@@ -4,7 +4,6 @@ namespace Modules\Catalog\Infrastructure\Http\Requests;
 
 use Dedoc\Scramble\Attributes\BodyParameter;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 
 #[BodyParameter('variant_image', description: 'Replace the variant image (JPEG/PNG/WebP, max 4 MB). Send as multipart/form-data. Mutually exclusive with media_id.', type: 'string', format: 'binary', required: false, infer: false)]
 class UpdateProductVariantRequest extends FormRequest
@@ -33,7 +32,6 @@ class UpdateProductVariantRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'sku' => ['sometimes', 'string', 'max:255', Rule::unique('product_variants', 'sku')->ignore($this->route('variantId'))],
             'type' => ['sometimes', 'in:image,color'],
             'base_price' => ['sometimes', 'integer', 'min:0'],
             'compare_at_price' => ['nullable', 'integer', 'min:0'],

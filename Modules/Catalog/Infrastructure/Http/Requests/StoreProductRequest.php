@@ -37,7 +37,6 @@ class StoreProductRequest extends FormRequest
             'gallery_media_ids' => ['nullable', 'array'],
             'gallery_media_ids.*' => ['integer'],
             'variants' => ['nullable', 'array', 'min:1'],
-            'variants.*.sku' => ['required', 'string', 'max:255', 'distinct', 'unique:product_variants,sku'],
             'variants.*.type' => ['required', 'in:image,color'],
             'variants.*.base_price' => ['required', 'integer', 'min:0'],
             'variants.*.compare_at_price' => ['nullable', 'integer', 'min:0'],

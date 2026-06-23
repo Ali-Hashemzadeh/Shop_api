@@ -36,7 +36,7 @@ class UpdateProductRequest extends FormRequest
             'category_id' => ['nullable', 'integer', 'exists:categories,id'],
             'primary_media_id' => ['nullable', 'integer'],
             'variants' => ['nullable', 'array', 'min:1'],
-            'variants.*.sku' => ['required', 'string', 'max:255', 'distinct'],
+            'variants.*.id' => ['nullable', 'integer', 'distinct'],
             'variants.*.type' => ['required', 'in:image,color'],
             'variants.*.base_price' => ['required', 'integer', 'min:0'],
             'variants.*.compare_at_price' => ['nullable', 'integer', 'min:0'],
