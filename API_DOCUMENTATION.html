@@ -972,6 +972,12 @@ const res = await fetch(<span class="str">'/api/v1/media'</span>, {
   <!-- ═══ CATEGORIES ═══ -->
   <h2 id="categories">Catalog — Categories</h2>
   <p>Categories form an infinite tree. A category with <code>parent_id: null</code> is a root category. Children reference their parent via <code>parent_id</code>.</p>
+  <p>Every category response includes two tree fields:</p>
+  <ul>
+    <li><strong><code>parent</code></strong> — full ancestor chain going upward, each parent embedding its own <code>parent</code>, up to 5 levels. <code>null</code> for root categories.</li>
+    <li><strong><code>children</code></strong> — full descendant subtree going downward, each child embedding its own <code>children</code>, up to 5 levels. Empty array <code>[]</code> for leaf categories.</li>
+  </ul>
+  <p>Note: <code>parent</code> objects in the chain carry <code>children: []</code> — only the requested category exposes its own subtree, avoiding sibling bloat.</p>
 
   <div class="endpoint">
     <div class="endpoint-header">
@@ -980,7 +986,7 @@ const res = await fetch(<span class="str">'/api/v1/media'</span>, {
       <span class="badge">Public</span>
     </div>
     <div class="endpoint-body">
-      <p>Paginated list of active root-level categories (no parent). Use this for the main navigation menu.</p>
+      <p>Paginated list of active root-level categories with their full descendant subtree nested. Use this as the single call for a landing-page navigation menu — no extra requests needed to drill into children.</p>
       <div class="block-label">Query Parameters</div>
       <table><tr><th>Param</th><th>Type</th><th>Description</th></tr>
         <tr><td>per_page</td><td class="opt">optional</td><td>1–100. Default: 15.</td></tr>
@@ -991,19 +997,45 @@ const res = await fetch(<span class="str">'/api/v1/media'</span>, {
   <span class="key">"data"</span>: [
     {
       <span class="key">"id"</span>:        <span class="num">1</span>,
-      <span class="key">"name"</span>:      <span class="str">"پوشاک"</span>,
-      <span class="key">"slug"</span>:      <span class="str">"clothing"</span>,
-      <span class="key">"is_active"</span>: <span class="bool">true</span>,
-      <span class="key">"parent_id"</span>: <span class="null-val">null</span>,
-      <span class="key">"image_url"</span>: <span class="str">"http://localhost:8000/storage/categories/clothing.webp"</span>
-    },
-    {
-      <span class="key">"id"</span>:        <span class="num">2</span>,
       <span class="key">"name"</span>:      <span class="str">"الکترونیک"</span>,
       <span class="key">"slug"</span>:      <span class="str">"electronics"</span>,
       <span class="key">"is_active"</span>: <span class="bool">true</span>,
       <span class="key">"parent_id"</span>: <span class="null-val">null</span>,
-      <span class="key">"image_url"</span>: <span class="null-val">null</span>
+      <span class="key">"image_url"</span>: <span class="null-val">null</span>,
+      <span class="key">"parent"</span>:    <span class="null-val">null</span>,
+      <span class="key">"children"</span>: [
+        {
+          <span class="key">"id"</span>:        <span class="num">2</span>,
+          <span class="key">"name"</span>:      <span class="str">"گوشی هوشمند"</span>,
+          <span class="key">"slug"</span>:      <span class="str">"smartphones"</span>,
+          <span class="key">"is_active"</span>: <span class="bool">true</span>,
+          <span class="key">"parent_id"</span>: <span class="num">1</span>,
+          <span class="key">"image_url"</span>: <span class="null-val">null</span>,
+          <span class="key">"parent"</span>:    <span class="null-val">null</span>,
+          <span class="key">"children"</span>: [
+            {
+              <span class="key">"id"</span>:        <span class="num">4</span>,
+              <span class="key">"name"</span>:      <span class="str">"اندروید"</span>,
+              <span class="key">"slug"</span>:      <span class="str">"android"</span>,
+              <span class="key">"is_active"</span>: <span class="bool">true</span>,
+              <span class="key">"parent_id"</span>: <span class="num">2</span>,
+              <span class="key">"image_url"</span>: <span class="null-val">null</span>,
+              <span class="key">"parent"</span>:    <span class="null-val">null</span>,
+              <span class="key">"children"</span>: []
+            }
+          ]
+        },
+        {
+          <span class="key">"id"</span>:        <span class="num">3</span>,
+          <span class="key">"name"</span>:      <span class="str">"لپ‌تاپ"</span>,
+          <span class="key">"slug"</span>:      <span class="str">"laptops"</span>,
+          <span class="key">"is_active"</span>: <span class="bool">true</span>,
+          <span class="key">"parent_id"</span>: <span class="num">1</span>,
+          <span class="key">"image_url"</span>: <span class="null-val">null</span>,
+          <span class="key">"parent"</span>:    <span class="null-val">null</span>,
+          <span class="key">"children"</span>: []
+        }
+      ]
     }
   ],
   <span class="key">"links"</span>: { <span class="comment">/* ... */</span> },
@@ -1019,18 +1051,71 @@ const res = await fetch(<span class="str">'/api/v1/media'</span>, {
       <span class="badge">Public</span>
     </div>
     <div class="endpoint-body">
-      <p>Returns a single category by ID. Use this to fetch sub-categories after the user navigates into a root category.</p>
-      <div class="block-label">Response — 200 OK</div>
+      <p>Returns a single category by ID with its full ancestor chain (<code>parent</code>) and full descendant subtree (<code>children</code>). Suitable for detail pages, breadcrumb rendering, and sub-menu expansion.</p>
+      <div class="block-label">Response — 200 OK (leaf category — shows parent chain)</div>
       <pre>{
-  <span class="key">"data"</span>: {
-    <span class="key">"id"</span>:        <span class="num">5</span>,
+  <span class="key">"id"</span>:        <span class="num">4</span>,
+  <span class="key">"name"</span>:      <span class="str">"اندروید"</span>,
+  <span class="key">"slug"</span>:      <span class="str">"android"</span>,
+  <span class="key">"is_active"</span>: <span class="bool">true</span>,
+  <span class="key">"parent_id"</span>: <span class="num">2</span>,
+  <span class="key">"image_url"</span>: <span class="null-val">null</span>,
+  <span class="key">"parent"</span>: {
+    <span class="key">"id"</span>:        <span class="num">2</span>,
     <span class="key">"name"</span>:      <span class="str">"گوشی هوشمند"</span>,
     <span class="key">"slug"</span>:      <span class="str">"smartphones"</span>,
     <span class="key">"is_active"</span>: <span class="bool">true</span>,
-    <span class="key">"parent_id"</span>: <span class="num">2</span>,
-    <span class="key">"image_url"</span>: <span class="null-val">null</span>
-  }
+    <span class="key">"parent_id"</span>: <span class="num">1</span>,
+    <span class="key">"image_url"</span>: <span class="null-val">null</span>,
+    <span class="key">"parent"</span>: {
+      <span class="key">"id"</span>:        <span class="num">1</span>,
+      <span class="key">"name"</span>:      <span class="str">"الکترونیک"</span>,
+      <span class="key">"slug"</span>:      <span class="str">"electronics"</span>,
+      <span class="key">"is_active"</span>: <span class="bool">true</span>,
+      <span class="key">"parent_id"</span>: <span class="null-val">null</span>,
+      <span class="key">"image_url"</span>: <span class="null-val">null</span>,
+      <span class="key">"parent"</span>:    <span class="null-val">null</span>,
+      <span class="key">"children"</span>: []
+    },
+    <span class="key">"children"</span>: []
+  },
+  <span class="key">"children"</span>: []
 }</pre>
+      <div class="block-label">Response — 200 OK (root category — shows children tree)</div>
+      <pre>{
+  <span class="key">"id"</span>:        <span class="num">1</span>,
+  <span class="key">"name"</span>:      <span class="str">"الکترونیک"</span>,
+  <span class="key">"slug"</span>:      <span class="str">"electronics"</span>,
+  <span class="key">"is_active"</span>: <span class="bool">true</span>,
+  <span class="key">"parent_id"</span>: <span class="null-val">null</span>,
+  <span class="key">"image_url"</span>: <span class="null-val">null</span>,
+  <span class="key">"parent"</span>:    <span class="null-val">null</span>,
+  <span class="key">"children"</span>: [
+    {
+      <span class="key">"id"</span>:        <span class="num">2</span>,
+      <span class="key">"name"</span>:      <span class="str">"گوشی هوشمند"</span>,
+      <span class="key">"slug"</span>:      <span class="str">"smartphones"</span>,
+      <span class="key">"is_active"</span>: <span class="bool">true</span>,
+      <span class="key">"parent_id"</span>: <span class="num">1</span>,
+      <span class="key">"image_url"</span>: <span class="null-val">null</span>,
+      <span class="key">"parent"</span>:    <span class="null-val">null</span>,
+      <span class="key">"children"</span>: [
+        {
+          <span class="key">"id"</span>:        <span class="num">4</span>,
+          <span class="key">"name"</span>:      <span class="str">"اندروید"</span>,
+          <span class="key">"slug"</span>:      <span class="str">"android"</span>,
+          <span class="key">"is_active"</span>: <span class="bool">true</span>,
+          <span class="key">"parent_id"</span>: <span class="num">2</span>,
+          <span class="key">"image_url"</span>: <span class="null-val">null</span>,
+          <span class="key">"parent"</span>:    <span class="null-val">null</span>,
+          <span class="key">"children"</span>: []
+        }
+      ]
+    }
+  ]
+}</pre>
+      <div class="block-label">Response — 404 Not Found</div>
+      <pre>{ <span class="key">"message"</span>: <span class="str">"Category not found."</span> }</pre>
     </div>
   </div>
 
@@ -1053,21 +1138,24 @@ const res = await fetch(<span class="str">'/api/v1/media'</span>, {
       <pre>{
   <span class="key">"name"</span>:      <span class="str">"گوشی هوشمند"</span>,
   <span class="key">"slug"</span>:      <span class="str">"smartphones"</span>,
-  <span class="key">"parent_id"</span>: <span class="num">2</span>,
+  <span class="key">"parent_id"</span>: <span class="num">1</span>,
   <span class="key">"is_active"</span>: <span class="bool">true</span>,
   <span class="key">"media_id"</span>:  <span class="num">18</span>
 }</pre>
       <div class="block-label">Response — 201 Created</div>
       <pre>{
   <span class="key">"data"</span>: {
-    <span class="key">"id"</span>:        <span class="num">5</span>,
+    <span class="key">"id"</span>:        <span class="num">2</span>,
     <span class="key">"name"</span>:      <span class="str">"گوشی هوشمند"</span>,
     <span class="key">"slug"</span>:      <span class="str">"smartphones"</span>,
     <span class="key">"is_active"</span>: <span class="bool">true</span>,
-    <span class="key">"parent_id"</span>: <span class="num">2</span>,
-    <span class="key">"image_url"</span>: <span class="str">"http://localhost:8000/storage/categories/phones.webp"</span>
+    <span class="key">"parent_id"</span>: <span class="num">1</span>,
+    <span class="key">"image_url"</span>: <span class="str">"http://localhost:8000/storage/categories/phones.webp"</span>,
+    <span class="key">"parent"</span>:    <span class="null-val">null</span>,
+    <span class="key">"children"</span>: []
   }
 }</pre>
+      <p style="font-size:0.85em;color:#888;margin-top:6px">Note: <code>parent</code> is <code>null</code> on create/update responses — the action returns the DTO without reloading the parent chain. Use <code>GET /catalog/categories/{id}</code> to get the full tree.</p>
     </div>
   </div>
 
@@ -1083,12 +1171,14 @@ const res = await fetch(<span class="str">'/api/v1/media'</span>, {
       <div class="block-label">Response — 200 OK</div>
       <pre>{
   <span class="key">"data"</span>: {
-    <span class="key">"id"</span>:        <span class="num">5</span>,
+    <span class="key">"id"</span>:        <span class="num">2</span>,
     <span class="key">"name"</span>:      <span class="str">"گوشی هوشمند"</span>,
     <span class="key">"slug"</span>:      <span class="str">"smartphones"</span>,
     <span class="key">"is_active"</span>: <span class="bool">false</span>,
-    <span class="key">"parent_id"</span>: <span class="num">2</span>,
-    <span class="key">"image_url"</span>: <span class="str">"http://localhost:8000/storage/categories/phones.webp"</span>
+    <span class="key">"parent_id"</span>: <span class="num">1</span>,
+    <span class="key">"image_url"</span>: <span class="str">"http://localhost:8000/storage/categories/phones.webp"</span>,
+    <span class="key">"parent"</span>:    <span class="null-val">null</span>,
+    <span class="key">"children"</span>: []
   }
 }</pre>
     </div>
