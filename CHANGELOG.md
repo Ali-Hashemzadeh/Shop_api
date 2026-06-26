@@ -2,6 +2,26 @@
 
 ## [Unreleased](https://github.com/laravel/laravel/compare/v12.12.1...12.x)
 
+### Feat — Category `parent` chain and `children` tree on category responses
+
+**Every category response now includes the full ancestor chain upward and the full descendant tree downward.**
+
+#### Added
+- `CategoryDTO` — `?self $parent` and `array $children` fields (both optional, backward-compatible defaults).
+- `CategoryResource` — `parent` (recursive `CategoryResource` or `null`) and `children` (`CategoryResource::collection`) keys.
+- `EloquentCatalogManager::buildCategoryDto()` — unified recursive DTO builder. Builds the parent chain with `$withChildren = false` (no sibling bloat) and the children tree with `$withChildren = true`.
+- `EloquentCatalogManager::collectCategoryMediaIds()` — walks both loaded relations to collect media IDs for a single batch `getMediaCollection` call (no N+1).
+- `CategoryTreeSeeder` — standalone dev seeder: Electronics root → 4 children (Phones + Laptops each with 2 grandchildren, Tablets, Accessories). Run with `php artisan db:seed --class="Modules\Catalog\Infrastructure\Persistence\Seeders\CategoryTreeSeeder"`.
+
+#### Changed
+- `findCategory` — eager-loads `parent.parent.parent.parent.parent` and `children.children.children.children.children` (5-level cap each direction).
+- `getActiveRootCategories` — eager-loads `children.children.children.children.children`; roots listing now returns the full subtree nested, making it suitable as a landing-page category menu endpoint.
+- `CategoriesTest` — 22 tests (7 new assertions, 2 new parent-chain tests, 2 new children tests).
+
+**Result: test suite is 217/217 green (594 assertions).**
+
+---
+
 ### Feat — SMS.ir template-based OTP delivery
 
 **OTP codes are now delivered via SMS.ir's verify/template API in production.**
@@ -457,4 +477,4 @@ DELETE /api/v1/catalog/variants/{variantId}   — Delete
 
 ## [v12.0.0 (2025-??-??)](https://github.com/laravel/laravel/compare/v11.0.2...v12.0.0)
 
-Laravel 12 includes a variety of changes to the application skeleton. Please consult the diff to see what's new.
+Laravel 12 includes a variety of changes to the application skeleton. Please consult the diff to see what's new

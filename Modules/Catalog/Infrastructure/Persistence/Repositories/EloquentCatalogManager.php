@@ -27,11 +27,20 @@ class EloquentCatalogManager implements CatalogManagerInterface
 
     public function findCategory(int $id): ?CategoryDTO
     {
-        $category = Category::query()->find($id);
+        $category = Category::with([
+            'parent.parent.parent.parent.parent',
+            'children.children.children.children.children',
+        ])->find($id);
 
-        return $category
-            ? CategoryDTO::fromModel($category, $this->resolveUrl((int) $category->media_id))
-            : null;
+        if ($category === null) {
+            return null;
+        }
+
+        $mediaMap = $this->buildMediaMap(
+            array_values(array_unique(array_filter($this->collectCategoryMediaIds($category))))
+        );
+
+        return $this->buildCategoryDto($category, $mediaMap);
     }
 
     public function getActiveRootCategories(int $perPage = 15): LengthAwarePaginator
@@ -39,12 +48,20 @@ class EloquentCatalogManager implements CatalogManagerInterface
         $paginator = Category::query()
             ->where('is_active', true)
             ->whereNull('parent_id')
+            ->with('children.children.children.children.children')
             ->paginate($perPage);
 
-        $mediaMap = $this->buildMediaMap($paginator->pluck('media_id')->filter()->all());
+        $allMediaIds = $paginator->getCollection()
+            ->flatMap(fn (Category $cat) => $this->collectCategoryMediaIds($cat))
+            ->unique()
+            ->filter()
+            ->values()
+            ->all();
+
+        $mediaMap = $this->buildMediaMap($allMediaIds);
 
         return $paginator->through(
-            fn (Category $cat) => CategoryDTO::fromModel($cat, $mediaMap->get($cat->media_id)?->url)
+            fn (Category $cat) => $this->buildCategoryDto($cat, $mediaMap)
         );
     }
 
@@ -297,6 +314,43 @@ class EloquentCatalogManager implements CatalogManagerInterface
         }
 
         return $this->media->getMediaCollection($ids)->keyBy(fn (MediaDTO $dto) => $dto->id);
+    }
+
+    private function buildCategoryDto(Category $category, Collection $mediaMap, bool $withChildren = true): CategoryDTO
+    {
+        $parentDto = $category->parent
+            ? $this->buildCategoryDto($category->parent, $mediaMap, false)
+            : null;
+
+        $children = $withChildren
+            ? $category->children
+                ->map(fn (Category $child) => $this->buildCategoryDto($child, $mediaMap, true))
+                ->all()
+            : [];
+
+        return CategoryDTO::fromModel(
+            $category,
+            $mediaMap->get($category->media_id)?->url,
+            $parentDto,
+            $children,
+        );
+    }
+
+    private function collectCategoryMediaIds(Category $category): array
+    {
+        $ids = $category->media_id ? [(int) $category->media_id] : [];
+
+        if ($category->relationLoaded('parent') && $category->parent) {
+            $ids = array_merge($ids, $this->collectCategoryMediaIds($category->parent));
+        }
+
+        if ($category->relationLoaded('children')) {
+            foreach ($category->children as $child) {
+                $ids = array_merge($ids, $this->collectCategoryMediaIds($child));
+            }
+        }
+
+        return $ids;
     }
 
     private function resolveUrl(?int $mediaId): ?string

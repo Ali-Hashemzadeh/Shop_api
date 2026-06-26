@@ -21,6 +21,8 @@ class CategoryResource extends JsonResource
             'is_active' => $dto->isActive,
             'parent_id' => $dto->parentId,
             'image_url' => $dto->imageUrl,
+            'parent' => $dto->parent !== null ? new CategoryResource($dto->parent) : null,
+            'children' => CategoryResource::collection($dto->children),
         ];
     }
 }

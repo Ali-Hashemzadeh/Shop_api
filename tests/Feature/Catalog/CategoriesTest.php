@@ -207,7 +207,53 @@ class CategoriesTest extends TestCase
             ->assertJsonPath('id', $category->id)
             ->assertJsonPath('name', 'Books')
             ->assertJsonPath('slug', 'books')
-            ->assertJsonPath('is_active', true);
+            ->assertJsonPath('is_active', true)
+            ->assertJsonPath('parent', null)
+            ->assertJsonPath('children', []);
+    }
+
+    /** @test */
+    public function it_includes_the_full_parent_chain_in_the_show_response(): void
+    {
+        $root = Category::create(['name' => 'Root', 'slug' => 'root', 'is_active' => true]);
+        $mid  = Category::create(['name' => 'Mid', 'slug' => 'mid', 'is_active' => true, 'parent_id' => $root->id]);
+        $leaf = Category::create(['name' => 'Leaf', 'slug' => 'leaf', 'is_active' => true, 'parent_id' => $mid->id]);
+
+        $this->getJson("/api/v1/catalog/categories/{$leaf->id}")
+            ->assertOk()
+            ->assertJsonPath('id', $leaf->id)
+            ->assertJsonPath('parent.id', $mid->id)
+            ->assertJsonPath('parent.parent.id', $root->id)
+            ->assertJsonPath('parent.parent.parent', null);
+    }
+
+    /** @test */
+    public function it_includes_nested_children_in_the_show_response(): void
+    {
+        $root = Category::create(['name' => 'Root', 'slug' => 'root', 'is_active' => true]);
+        $mid  = Category::create(['name' => 'Mid', 'slug' => 'mid', 'is_active' => true, 'parent_id' => $root->id]);
+        $leaf = Category::create(['name' => 'Leaf', 'slug' => 'leaf', 'is_active' => true, 'parent_id' => $mid->id]);
+
+        $this->getJson("/api/v1/catalog/categories/{$root->id}")
+            ->assertOk()
+            ->assertJsonPath('id', $root->id)
+            ->assertJsonPath('parent', null)
+            ->assertJsonPath('children.0.id', $mid->id)
+            ->assertJsonPath('children.0.children.0.id', $leaf->id)
+            ->assertJsonPath('children.0.children.0.children', []);
+    }
+
+    /** @test */
+    public function it_includes_children_in_the_roots_listing(): void
+    {
+        $root = Category::create(['name' => 'Root', 'slug' => 'root', 'is_active' => true]);
+        Category::create(['name' => 'Child', 'slug' => 'child', 'is_active' => true, 'parent_id' => $root->id]);
+
+        $response = $this->getJson('/api/v1/catalog/categories/roots');
+
+        $response->assertOk();
+        $this->assertNotEmpty($response->json('data.0.children'));
+        $this->assertEquals('Child', $response->json('data.0.children.0.name'));
     }
 
     /** @test */
