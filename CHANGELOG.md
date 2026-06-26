@@ -2,6 +2,37 @@
 
 ## [Unreleased](https://github.com/laravel/laravel/compare/v12.12.1...12.x)
 
+### Feat — Order Module: foundational infrastructure
+
+**A complete, production-ready Order module serving as an immutable financial contract anchor.**
+
+#### Added
+- `Modules/Order/Domain/Enums/OrderStatus.php` — PHP 8.1 backed enum: `PENDING`, `PAID`, `PROCESSING`, `SHIPPED`, `CANCELLED`, `FAILED`.
+- `Modules/Order/Domain/DTOs/OrderDTO.php` + `OrderItemDTO.php` — immutable DTOs with `fromModel()` factory; all monetary fields are integers (Cents Rule).
+- `Modules/Order/Domain/Contracts/OrderManagerInterface.php` — public cross-module contract: `createOrderFromCart`, `markAsPaid`, `markAsComplete`, `getUserOrders`, `findOrder`.
+- `Modules/Order/Domain/Models/Order.php` + `OrderItem.php` — private Eloquent models; `shipping_address` cast to `array`, all money columns cast to `integer`.
+- `Modules/Order/Domain/Exceptions/EmptyCartException.php` + `InvalidAddressException.php`.
+- `CreateOrderAction` — full checkout orchestration in `DB::transaction()`: cancels any existing pending order (releases reservations), snapshots cart prices and shipping address, creates order + items, reserves stock per SKU, clears the cart.
+- `CancelExpiredOrdersAction` — finds pending orders older than 15 minutes, releases inventory reservations, marks them `cancelled`. Returns count.
+- Two migrations: `orders` and `order_items` tables (all monetary columns are integers).
+- `EloquentOrderManager` — `getUserOrders` maps paginator items to DTOs via `->through()`.
+- `OrderPermissionsSeeder` — `order.create`, `order.view-own`, `order.view-admin`; granted to `admin` + `customer` (create/view-own only).
+- `OrderController` — `POST /api/v1/orders` (201) and `GET /api/v1/orders` (paginated).
+- `StoreOrderRequest` — `authorize()` checks `order.create` → 403 before validation.
+- `OrdersCancelExpiredCommand` (`orders:cancel-expired`) — scheduled every minute in `routes/console.php`.
+- `OrderServiceProvider` registered in `bootstrap/providers.php`.
+- `seedOrderPermissions()` helper in `tests/TestCase.php`.
+
+#### Tests — `tests/Feature/Order/OrderTest.php` (6 tests, 20 assertions)
+- Happy path: price snapshot, stock reserved, cart cleared after order creation.
+- Auto-cancel: existing pending order cancelled + reservations released when new order is placed.
+- TTL expiry: `orders:cancel-expired` cancels orders older than 15 minutes and releases inventory.
+- Auth matrix: 401 unauthenticated, 422 validation, 422 empty cart.
+
+**Result: test suite is 223/223 green (614 assertions).**
+
+---
+
 ### Feat — Category `parent` chain and `children` tree on category responses
 
 **Every category response now includes the full ancestor chain upward and the full descendant tree downward.**

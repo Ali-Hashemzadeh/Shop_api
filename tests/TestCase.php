@@ -9,6 +9,7 @@ use Modules\Identity\Domain\Models\User;
 use Modules\Identity\Infrastructure\Persistence\Seeders\RolesAndPermissionsSeeder;
 use Modules\Inventory\Infrastructure\Persistence\Seeders\InventoryPermissionsSeeder;
 use Modules\Media\Infrastructure\Persistence\Seeders\MediaPermissionsSeeder;
+use Modules\Order\Infrastructure\Persistence\Seeders\OrderPermissionsSeeder;
 
 abstract class TestCase extends BaseTestCase
 {
@@ -30,6 +31,11 @@ abstract class TestCase extends BaseTestCase
     protected function seedInventoryPermissions(): void
     {
         $this->seed(InventoryPermissionsSeeder::class);
+    }
+
+    protected function seedOrderPermissions(): void
+    {
+        $this->seed(OrderPermissionsSeeder::class);
     }
 
     protected function actingAsCustomer(?User $user = null): User

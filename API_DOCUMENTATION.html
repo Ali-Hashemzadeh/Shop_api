@@ -135,6 +135,11 @@
   <a href="#cart-clear">Clear Cart</a>
   <a href="#cart-merge">Merge (Post-Login)</a>
   <a href="#cart-frontend-guide">Frontend Guide</a>
+
+  <div class="section-label">Orders</div>
+  <a href="#order-overview">Overview</a>
+  <a href="#order-create">Place Order</a>
+  <a href="#order-list">My Orders</a>
 </nav>
 
 <main>
@@ -2161,6 +2166,152 @@ await guestCartRequest('GET',  '/');
     <tr><td>Logged in</td><td><code>Authorization: Bearer &lt;token&gt;</code></td><td class="opt">Read: <code>auth_token</code></td></tr>
     <tr><td>Just logged in (merge)</td><td><code>Authorization: Bearer &lt;token&gt;</code></td><td class="opt">Read + delete: <code>cart_session_id</code></td></tr>
   </table>
+
+  <!-- ═══════════════════════════════════════════════════════════ ORDERS -->
+  <h2 id="order-overview">Orders</h2>
+  <p>The Order module converts the authenticated user's current cart into an immutable financial record. Every order creation is atomic: prices are snapshotted, inventory is reserved, and the cart is cleared — all in a single database transaction.</p>
+
+  <div class="note">
+    <strong>Authentication required.</strong> All order endpoints require <code>Authorization: Bearer &lt;token&gt;</code>. Unauthenticated requests return <strong>401</strong>. Users without the <code>order.create</code> permission return <strong>403</strong>.
+  </div>
+
+  <div class="note">
+    <strong>Price snapshot.</strong> <code>price_per_unit</code> and <code>line_total</code> on order items are fixed at the moment the order is created. They never change, even if the catalog price is updated later. All monetary values are raw integers (rials).
+  </div>
+
+  <div class="note">
+    <strong>15-minute checkout TTL.</strong> A pending order that is not paid within 15 minutes is automatically cancelled and its inventory reservations are released. If the user tries to check out again, the old pending order is cancelled and replaced by the new one.
+  </div>
+
+  <div class="note">
+    <strong>Auto-cancel on re-checkout.</strong> If a user places a new order while a pending order already exists, the old pending order is cancelled (reservations released) and a new order is created in the same request — no manual cleanup needed.
+  </div>
+
+  <!-- POST /api/v1/orders -->
+  <h3 id="order-create">Place Order</h3>
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/orders</span>
+      <span class="badge auth">Requires auth:sanctum</span>
+      <span class="badge rate">throttle:api</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Converts the authenticated user's current cart into a pending order. The request body supplies the delivery address and shipment method. The server handles everything else atomically.</p>
+      <div class="block-label">Request Body</div>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr><td>address_id</td><td class="req">required · integer</td><td>ID of a saved address that belongs to the authenticated user.</td></tr>
+        <tr><td>shipment_method_id</td><td class="req">required · integer</td><td>ID of the chosen shipment method (Shipment module, future).</td></tr>
+        <tr><td>notes</td><td class="opt">optional · string</td><td>Free-text order note, max 1000 characters.</td></tr>
+      </table>
+      <pre>{
+  <span class="key">"address_id"</span>:         <span class="num">3</span>,
+  <span class="key">"shipment_method_id"</span>: <span class="num">1</span>,
+  <span class="key">"notes"</span>:              <span class="str">"Please ring the doorbell"</span>
+}</pre>
+      <div class="block-label">Response — 201 Created</div>
+      <pre>{
+  <span class="key">"id"</span>:                  <span class="num">42</span>,
+  <span class="key">"status"</span>:              <span class="str">"pending"</span>,
+  <span class="key">"total_amount"</span>:        <span class="num">267000000</span>,   <span class="comment">// rials, integer</span>
+  <span class="key">"shipping_cost"</span>:       <span class="num">0</span>,
+  <span class="key">"tax_amount"</span>:          <span class="num">0</span>,
+  <span class="key">"shipment_method_id"</span>:  <span class="num">1</span>,
+  <span class="key">"shipping_address"</span>: {
+    <span class="key">"id"</span>:          <span class="num">3</span>,
+    <span class="key">"title"</span>:       <span class="str">"Home"</span>,
+    <span class="key">"province_id"</span>: <span class="num">8</span>,
+    <span class="key">"city_id"</span>:     <span class="num">114</span>,
+    <span class="key">"postal_code"</span>: <span class="str">"1234567890"</span>,
+    <span class="key">"address"</span>:     <span class="str">"No. 12, Azadi St., Tehran"</span>
+  },
+  <span class="key">"transaction_ref"</span>:     <span class="null-val">null</span>,
+  <span class="key">"notes"</span>:               <span class="str">"Please ring the doorbell"</span>,
+  <span class="key">"created_at"</span>:          <span class="str">"2026-06-26T12:34:56.000000Z"</span>,
+  <span class="key">"items"</span>: [
+    {
+      <span class="key">"id"</span>:                 <span class="num">101</span>,
+      <span class="key">"sku"</span>:                <span class="str">"S25U-TBK-256"</span>,
+      <span class="key">"product_title"</span>:     <span class="str">"Samsung Galaxy S25 Ultra"</span>,
+      <span class="key">"variant_attributes"</span>: [],
+      <span class="key">"quantity"</span>:           <span class="num">2</span>,
+      <span class="key">"price_per_unit"</span>:     <span class="num">89000000</span>,   <span class="comment">// snapshotted at checkout</span>
+      <span class="key">"line_total"</span>:         <span class="num">178000000</span>
+    },
+    {
+      <span class="key">"id"</span>:                 <span class="num">102</span>,
+      <span class="key">"sku"</span>:                <span class="str">"AIRPODS-PRO2"</span>,
+      <span class="key">"product_title"</span>:     <span class="str">"AirPods Pro 2"</span>,
+      <span class="key">"variant_attributes"</span>: [],
+      <span class="key">"quantity"</span>:           <span class="num">1</span>,
+      <span class="key">"price_per_unit"</span>:     <span class="num">89000000</span>,
+      <span class="key">"line_total"</span>:         <span class="num">89000000</span>
+    }
+  ]
+}</pre>
+      <div class="block-label">Error Responses</div>
+      <table>
+        <tr><th>Status</th><th>Condition</th></tr>
+        <tr><td>401</td><td class="opt">No Bearer token provided</td></tr>
+        <tr><td>403</td><td class="opt">User lacks <code>order.create</code> permission</td></tr>
+        <tr><td>422</td><td class="opt">Cart is empty</td></tr>
+        <tr><td>422</td><td class="opt">Address ID not found or does not belong to this user</td></tr>
+        <tr><td>422</td><td class="opt">Validation failure (missing required fields)</td></tr>
+        <tr><td>429</td><td class="opt">Rate limit exceeded — see <code>Retry-After</code> header</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- GET /api/v1/orders -->
+  <h3 id="order-list">My Orders</h3>
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/orders</span>
+      <span class="badge auth">Requires auth:sanctum</span>
+      <span class="badge rate">throttle:api</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Returns a paginated list of the authenticated user's orders, newest first. Each order includes its full item list.</p>
+      <div class="block-label">Query Parameters</div>
+      <table>
+        <tr><th>Parameter</th><th>Type</th><th>Default</th><th>Description</th></tr>
+        <tr><td>per_page</td><td class="opt">integer</td><td>15</td><td>Items per page, clamped 1–100.</td></tr>
+        <tr><td>page</td><td class="opt">integer</td><td>1</td><td>Page number.</td></tr>
+      </table>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{
+  <span class="key">"data"</span>: [
+    {
+      <span class="key">"id"</span>:                 <span class="num">42</span>,
+      <span class="key">"status"</span>:             <span class="str">"pending"</span>,
+      <span class="key">"total_amount"</span>:       <span class="num">267000000</span>,
+      <span class="key">"shipping_cost"</span>:      <span class="num">0</span>,
+      <span class="key">"tax_amount"</span>:         <span class="num">0</span>,
+      <span class="key">"shipment_method_id"</span>: <span class="num">1</span>,
+      <span class="key">"shipping_address"</span>:   { <span class="comment">/* snapshotted address object */</span> },
+      <span class="key">"transaction_ref"</span>:    <span class="null-val">null</span>,
+      <span class="key">"notes"</span>:              <span class="null-val">null</span>,
+      <span class="key">"created_at"</span>:         <span class="str">"2026-06-26T12:34:56.000000Z"</span>,
+      <span class="key">"items"</span>:              [ <span class="comment">/* same shape as POST response items */</span> ]
+    }
+  ],
+  <span class="key">"links"</span>: { <span class="key">"first"</span>: <span class="str">"..."</span>, <span class="key">"last"</span>: <span class="str">"..."</span>, <span class="key">"prev"</span>: <span class="null-val">null</span>, <span class="key">"next"</span>: <span class="null-val">null</span> },
+  <span class="key">"meta"</span>:  { <span class="key">"current_page"</span>: <span class="num">1</span>, <span class="key">"per_page"</span>: <span class="num">15</span>, <span class="key">"total"</span>: <span class="num">1</span>, <span class="key">"last_page"</span>: <span class="num">1</span> }
+}</pre>
+      <div class="block-label">Order status values</div>
+      <table>
+        <tr><th>Value</th><th>Meaning</th></tr>
+        <tr><td><code>pending</code></td><td>Awaiting payment. Expires after 15 minutes if unpaid.</td></tr>
+        <tr><td><code>paid</code></td><td>Payment confirmed. Inventory reservation is now committed.</td></tr>
+        <tr><td><code>processing</code></td><td>Order is being fulfilled / packed.</td></tr>
+        <tr><td><code>shipped</code></td><td>Dispatched to the carrier.</td></tr>
+        <tr><td><code>cancelled</code></td><td>Cancelled (by user, by TTL expiry, or by a new checkout).</td></tr>
+        <tr><td><code>failed</code></td><td>Payment or fulfilment failure.</td></tr>
+      </table>
+    </div>
+  </div>
 
 </main>
 

@@ -6,6 +6,7 @@ use Modules\Catalog\Infrastructure\Providers\CatalogServiceProvider;
 use Modules\Identity\Infrastructure\Providers\IdentityServiceProvider;
 use Modules\Inventory\Infrastructure\Providers\InventoryServiceProvider;
 use Modules\Media\Infrastructure\Providers\MediaServiceProvider;
+use Modules\Order\Infrastructure\Providers\OrderServiceProvider;
 
 return [
     AppServiceProvider::class,
@@ -14,4 +15,5 @@ return [
     MediaServiceProvider::class,
     InventoryServiceProvider::class,
     CartServiceProvider::class,
+    OrderServiceProvider::class,
 ];

@@ -107,6 +107,16 @@ Provides guest and authenticated shopping carts with real-time stock validation 
 - **Price enrichment:** `getCart()` calls `CatalogManagerInterface::findVariantBySku()` for each item and populates `base_price`, `compare_at_price`, `image_url`, and `line_total` (all integers, Cents Rule).
 - **Authorization:** No permissions required — cart operations are self-service.
 
+### Order (Complete)
+Immutable financial contract anchor. Converts a validated cart into a locked order, atomically reserves inventory, and enforces a 15-minute checkout TTL via a scheduled command.
+
+- **Key entities:** `Order` (status, snapshotted `shipping_address` JSON, integer totals), `OrderItem` (snapshotted sku, product_title, price_per_unit, line_total — all integers)
+- **Key contract:** `OrderManagerInterface` — `createOrderFromCart`, `markAsPaid`, `markAsComplete`, `getUserOrders`, `findOrder`.
+- **Checkout flow:** `POST /api/v1/orders` cancels any existing pending order (releasing reserved inventory), snapshots prices and shipping address, creates the new order, reserves stock per item, and clears the cart — all in a single `DB::transaction()`.
+- **TTL enforcement:** `orders:cancel-expired` runs every minute and cancels pending orders older than 15 minutes, releasing their inventory reservations.
+- **Price snapshot:** Order items store prices at creation time and never change, even if the catalog is updated.
+- **Authorization:** Requires `auth:sanctum` + `order.create` permission. Customers receive this permission by default.
+
 ---
 
 ## API Overview
@@ -172,6 +182,13 @@ Send `X-Session-Id: <uuid>` for guest carts. Authenticated users use their Beare
 | `PATCH` | `/cart/items/{itemId}` | Update item quantity (stock-validated) |
 | `DELETE` | `/cart/items/{itemId}` | Remove item from cart |
 | `DELETE` | `/cart` | Clear entire cart |
+
+### Orders (`auth:sanctum` + `order.create` required)
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/orders` | Place an order from the current cart |
+| `GET` | `/orders` | List authenticated user's order history (paginated) |
 
 Auto-generated interactive API docs are available at `/docs/api` when running locally (powered by Scramble).
 
@@ -269,8 +286,10 @@ tests/
     ├── Inventory/
     │   ├── InventoryTest.php            # Stock CRUD, reservation lifecycle, batch lookup
     │   └── InventoryAuthorizationTest.php # Auth matrix: 401 / 403 / public access
-    └── Cart/
-        └── CartTest.php                 # Guest + auth carts, stock validation, isolation
+    ├── Cart/
+    │   └── CartTest.php                 # Guest + auth carts, stock validation, isolation
+    └── Order/
+        └── OrderTest.php                # Checkout flow, auto-cancel, TTL expiry, auth matrix
 ```
 
 ---
@@ -284,7 +303,7 @@ tests/
 | Catalog | Complete |
 | Inventory | Complete |
 | Cart | Complete |
-| Order | Planned |
+| Order | Complete |
 | Payment | Planned |
 
 ---

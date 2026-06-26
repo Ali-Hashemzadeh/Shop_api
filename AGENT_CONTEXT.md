@@ -161,9 +161,39 @@ Modules/
   * **Authorization:** No permission gates — cart is self-service; ownership enforced by `CartIdentificationMiddleware`.
   * **Test suite:** `CartTest` — **15 tests, 53 assertions**: guest add/view/clear, authenticated user, guest-vs-auth isolation, stock validation (zero stock → 422, missing inventory → 422), update/remove/404 matrix.
 
+### 📦 6. Order Module (Status: Active & Complete)
+* **Responsibility:** Immutable financial contract anchor. Translates a validated cart into a locked order record, atomically reserves inventory, and manages a 15-minute pending-order TTL via a scheduled command.
+  * **Tables:**
+      * `orders`: `id`, `user_id` (indexed), `status` (string, default `pending`), `total_amount` (int), `shipping_cost` (int, default 0), `tax_amount` (int, default 0), `shipment_method_id` (nullable bigint), `shipping_address` (JSON — snapshotted at creation, immutable), `transaction_ref` (nullable unique string), `notes` (nullable text), timestamps. Index on `[user_id, status]`.
+      * `order_items`: `id`, `order_id` (FK → orders, cascade delete), `sku`, `product_title`, `variant_attributes` (JSON), `quantity` (int), `price_per_unit` (int), `line_total` (int), timestamps. All monetary columns are integers (Cents Rule). Prices are snapshotted at order creation — they never update even if the catalog changes.
+  * **Domain Models (internal):** `Order`, `OrderItem`.
+  * **Public Contract:** `Modules\Order\Domain\Contracts\OrderManagerInterface`:
+      * `createOrderFromCart(int $userId, int $addressId, int $shipmentMethodId, ?string $notes): OrderDTO` — full checkout orchestration.
+      * `markAsPaid(int $orderId, string $transactionRef): OrderDTO` — transitions to `paid`, stores transaction reference.
+      * `markAsComplete(int $orderId): OrderDTO` — transitions to `processing`.
+      * `getUserOrders(int $userId, int $perPage = 15): LengthAwarePaginator` — paginator items are DTOs (mapped via `->through()`).
+      * `findOrder(int $orderId): ?OrderDTO`.
+  * **DTOs:** `OrderDTO` (id, userId, status as `OrderStatus` enum, totalAmount, shippingCost, taxAmount, shipmentMethodId, shippingAddress array, transactionRef, notes, createdAt, items[]), `OrderItemDTO` (id, orderId, sku, productTitle, variantAttributes, quantity, pricePerUnit, lineTotal).
+  * **Enum:** `OrderStatus: string` — PENDING, PAID, PROCESSING, SHIPPED, CANCELLED, FAILED.
+  * **Exceptions:** `EmptyCartException`, `InvalidAddressException` (both in `Domain/Exceptions/`).
+  * **`CreateOrderAction`** — constructor deps: `CartManagerInterface`, `InventoryManagerInterface`. Single `DB::transaction()`:
+      1. Fetch enriched cart via `CartManagerInterface::getCart()`.
+      2. Snapshot address from `DB::table('addresses')` (no Identity model import).
+      3. Cancel any existing pending order for the user + `releaseReservation` per item.
+      4. Create `Order` + `OrderItem` records (prices snapshotted from CartItemDTO).
+      5. `reserveStock(sku, qty, orderId)` per item.
+      6. `clearCart(cartId)`.
+  * **`CancelExpiredOrdersAction`** — dep: `InventoryManagerInterface`. Finds pending orders with `created_at < now() - 15 min`, releases reservations, cancels. Run every minute by `orders:cancel-expired` Artisan command scheduled in `routes/console.php`.
+  * **HTTP Endpoints:**
+      * `POST /api/v1/orders` — body `{address_id, shipment_method_id, notes?}`; requires `auth:sanctum` + `order.create`; returns 201 OrderResource. 422 on empty cart or invalid address.
+      * `GET /api/v1/orders` — paginated order history for the authenticated user; requires `auth:sanctum`; returns paginated OrderResource collection.
+  * **Authorization:** `StoreOrderRequest::authorize()` checks `order.create` → 403 before validation. No `OrderPolicy` yet — admin order management is a future concern.
+  * **Permissions:** `order.create`, `order.view-own`, `order.view-admin` — admin receives all three; customer receives `order.create` + `order.view-own`.
+  * **Test suite:** `OrderTest` — **6 tests, 20 assertions**: price snapshot + stock reservation + cart-cleared, auto-cancel pending, TTL expiry command, 401/422 auth matrix.
+
 ---
 
-## 6. Completed & Ready
+## 7. Completed & Ready
 
 | Module | Status | Tests |
 |---|---|---|
@@ -172,8 +202,9 @@ Modules/
 | Catalog | ✅ Complete | 95 passing across 4 test classes |
 | Inventory | ✅ Complete | 24 passing across 2 test classes |
 | Cart | ✅ Complete | 22 passing (CartTest) |
+| Order | ✅ Complete | 6 passing (OrderTest) |
 
-**Total test suite: 206 tests, 542 assertions — all green.**
+**Total test suite: 223 tests, 614 assertions — all green.**
 
-**Next module in queue:** Order or Payment — pending product roadmap review.
+**Next module in queue:** Payment — pending product roadmap review.
 
