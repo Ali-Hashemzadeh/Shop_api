@@ -17,6 +17,9 @@ class VerifyOtpRequest extends FormRequest
             'phone' => ['required', 'string', 'regex:/^09\d{9}$/'],
             'code' => ['required', 'string'],
             'device_name' => ['required', 'string', 'max:100'],
+            // Optional registration fields a new user may set while verifying.
+            'name' => ['nullable', 'string', 'max:120'],
+            'password' => ['nullable', 'string', 'min:8', 'max:255'],
         ];
     }
 

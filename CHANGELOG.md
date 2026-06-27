@@ -2,6 +2,28 @@
 
 ## [Unreleased](https://github.com/laravel/laravel/compare/v12.12.1...12.x)
 
+### Feat — Identity Module: password authentication alongside OTP (split-auth onboarding)
+
+**Returning users can now log in with a password; new users still verify phone ownership via OTP first.**
+
+#### Added
+- `Modules/Identity/Application/Actions/CheckUserStatus.php` — resolves which auth methods a phone may use. Unknown phone → `{is_new_user: true, allowed_methods: ["otp"]}`; known phone → `{is_new_user: false, allowed_methods: ["password", "otp"]}`.
+- `Modules/Identity/Application/Actions/LoginWithPassword.php` — finds the user by phone and verifies via `Hash::check()`. Unknown phone, password-less account, and wrong password all return the same generic **401 `Invalid credentials.`** (no account-existence leak). On success mints a Sanctum token.
+- `Modules/Identity/Infrastructure/Http/Requests/CheckUserRequest.php` + `LoginPasswordRequest.php` — validate `phone_number` (`09XXXXXXXXX`); login also requires `password` and accepts optional `device_name`.
+- `AuthController::checkUser()` and `AuthController::loginPassword()`.
+- Routes: `POST /api/v1/auth/check-user` (`throttle:public`) and `POST /api/v1/auth/login-password` (`throttle:otp`, strict per-IP brute-force limiter).
+- Migration `2026_06_27_120000_ensure_users_password_nullable.php` — defensive, idempotent guarantee that `users.password` exists and is nullable (no-op on current schema; the column was already made nullable in the OTP refactor).
+
+#### Changed
+- `VerifyOtp` action + `VerifyOtpRequest` — registration completion (OTP verify) now accepts optional `name` and `password` (8–255 chars). The password is hashed with `Hash::make()` before persistence. Both fields are optional, so the existing OTP-only flow is unchanged.
+
+#### Tests — `tests/Feature/Identity/PasswordAuthTest.php` (11 tests, 42 assertions)
+- `/check-user` distinguishes new vs. existing accounts and rejects invalid phones.
+- New users register with a password that is stored as a verifiable hash (never cleartext); short passwords rejected; omitting password leaves it `null`.
+- Existing users log in with a password and receive a token; wrong password / unknown phone / password-less account / missing password all handled (401 / 422).
+
+**Result: test suite is 245/245 green (692 assertions).**
+
 ### Feat — Identity: capture map pin on addresses
 
 **Addresses previously stored `province_id`/`city_id`/`postal_code`/`address` but no geolocation — the exact point a user drops on a map was lost.**

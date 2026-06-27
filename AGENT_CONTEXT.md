@@ -44,22 +44,24 @@ Modules/
 ## 3. Current Module Ecosystem Ledger
 
 ### 🔒 1. Identity Module (Status: Active & Complete)
-* **Responsibility:** Passwordless OTP authentication, user profile management, shipping location matrices, and user addresses.
+* **Responsibility:** OTP + password authentication, user profile management, shipping location matrices, and user addresses.
   * **Key Entities:** `User`, `Address`, `Province`, `City`.
   * **State:** Fully functional, using decoupled Eloquent repositories bound to service contracts (`UserRepositoryInterface`, `AddressRepositoryInterface`).
-  * **Authentication — Passwordless OTP (phone-based, unified register+login):**
-      * Schema (`2026_06_15_120000_refactor_users_table_for_otp_auth`): `password` and `name` made nullable; added `otp_code` (stored **hashed**, hidden), `otp_expires_at` (datetime cast), and a loose `media_id` (FK-free profile image, per Media coupling rule).
-      * `POST /api/v1/otp/request` — body `phone` (required, `09xxxxxxxxx`), optional `name`. Finds the user by phone or **creates one on first contact** (assigns `customer` role; sign-up == login). Generates a numeric code (`identity.otp.length`, default 5), stores its hash with a TTL (`identity.otp.ttl_minutes`, default 2), and dispatches it. Returns `200 {message, expires_in}`.
-      * `POST /api/v1/otp/verify` — body `phone`, `code`, `device_name`. Validates code presence, expiry, and `Hash::check`; on success consumes the code (cleared, single-use, replay-safe) and mints a Sanctum token. Returns `200 {message, user, token}`. Failure → `422` on `code`.
+  * **Authentication — split-auth onboarding (OTP + optional password, phone-based, unified register+login):**
+      * Schema (`2026_06_15_120000_refactor_users_table_for_otp_auth`): `password` and `name` made nullable; added `otp_code` (stored **hashed**, hidden), `otp_expires_at` (datetime cast), and a loose `media_id` (FK-free profile image, per Media coupling rule). `2026_06_27_120000_ensure_users_password_nullable` re-affirms `password` nullability (defensive, idempotent no-op on the current schema). `User` casts `password` to `hashed` and hides it.
+      * `POST /api/v1/auth/check-user` — body `phone_number` (required, `09xxxxxxxxx`), `throttle:public`. Returns `200 {is_new_user, allowed_methods}`. Unknown phone → `{true, ["otp"]}` (forces OTP to prove ownership before a password path opens); known phone → `{false, ["password", "otp"]}`. Action: `CheckUserStatus`.
+      * `POST /api/v1/otp/request` — body `phone` (required, `09xxxxxxxxx`), optional `name`. Finds the user by phone or **creates one on first contact** (assigns `customer` role; sign-up == login). Generates a numeric code (`identity.otp.length`, default 5), stores its hash with a TTL (`identity.otp.ttl_minutes`, default 2), and dispatches it. Returns `200 {message, expires_in, is_new_user}`.
+      * `POST /api/v1/otp/verify` — body `phone`, `code`, `device_name`, plus optional registration fields `name` and `password` (8–255, hashed via `Hash::make`). Validates code presence, expiry, and `Hash::check`; on success consumes the code (cleared, single-use, replay-safe), persists any supplied name/password, and mints a Sanctum token. Returns `200 {message, user, token}`. Failure → `422` on `code`.
+      * `POST /api/v1/auth/login-password` — body `phone_number`, `password`, optional `device_name`, `throttle:otp` (strict per-IP brute-force limiter). Finds the user by phone and verifies via `Hash::check`. Unknown phone, password-less account, and wrong password all return the **same generic `401 {message: "Invalid credentials."}`** (no account-existence leak). Success → `200 {message, user, token}`. Action: `LoginWithPassword` (throws `HttpException(401)`).
       * **Delivery boundary:** `Modules\Identity\Domain\Contracts\OtpSenderInterface::send(phone, code)`. Bound in `IdentityServiceProvider` to `LogOtpSender` (Infrastructure\Services) — a **log-only placeholder** until the SMS web service is wired in. Swap the binding for a real gateway without touching the flow.
-      * **Actions:** `RequestOtp`, `VerifyOtp` (Application\Actions). Old password actions (`RegisterUser`, `LoginUserWithPassword`) and requests (`RegisterRequest`, `LoginRequest`) were **removed**.
+      * **Actions:** `CheckUserStatus`, `RequestOtp`, `VerifyOtp`, `LoginWithPassword` (Application\Actions). All DB access goes through `UserRepositoryInterface` — no model leaks across the module boundary.
   * **Public Cross-Module Contract:**
       * `Modules\Identity\Domain\Contracts\IdentityManagerInterface`: exposes `isAdmin(int $userId): bool`. Available for cross-module role checks, but **prefer direct permission checks via `$user->can('...')` in policies instead** — see Authorization Pattern below.
       * Concrete: `EloquentIdentityManager` (bound in `IdentityServiceProvider::register()`). Internally calls `User::find()->hasRole('admin')` — all Spatie internals stay inside Identity.
   * **Route structure:** user-facing address routes registered under `prefix('addresses')` (plural). Admin user management under `prefix('admin/users')`. Profile self-service under `prefix('profile')`.
   * **Known fix applied:** `UpdateAddressRequest` had `city_id` as `required` instead of `sometimes` — corrected so PATCH requests can update partial fields without supplying city.
   * **Address map pin:** `addresses` carries `latitude`/`longitude` (`decimal(10,7)`) and a nullable `map_address` text line (the map's reverse-geocoded string, distinct from the user-typed `address`). Columns are nullable at the DB level, but `StoreAddressRequest` requires `latitude`/`longitude` (`numeric`, `between:-90,90` / `between:-180,180`) on create; `UpdateAddressRequest` treats all three as `sometimes`. `map_address` is always optional. Exposed on `AddressResource`.
-  * **Test suite:** `AddressTest` (21 — includes map-pin required/range/nullable/update coverage), `ProfileTest` (8), `AuthControllerTest` (10 — full OTP request/verify matrix: create-on-request, no-duplicate, invalid phone, verify+token, wrong/expired/unknown code, single-use replay, me, logout), `RolePermissionTest` — all passing.
+  * **Test suite:** `AddressTest` (21 — includes map-pin required/range/nullable/update coverage), `ProfileTest` (8), `AuthControllerTest` (10 — full OTP request/verify matrix: create-on-request, no-duplicate, invalid phone, verify+token, wrong/expired/unknown code, single-use replay, me, logout), `PasswordAuthTest` (11 — check-user new/existing/invalid, password registration via OTP verify + hash storage, password login success/wrong-password/unknown-phone/password-less/missing-password), `RolePermissionTest` — all passing.
 
 ### 📁 2. Media Module (Status: Active & Complete)
 * **Responsibility:** Lightweight, high-performance physical file uploads and tracking ledger.
@@ -213,7 +215,7 @@ Modules/
 
 | Module | Status | Tests |
 |---|---|---|
-| Identity | ✅ Complete (passwordless OTP) | AddressTest, ProfileTest, AuthControllerTest (10), RolePermissionTest |
+| Identity | ✅ Complete (OTP + password) | AddressTest, ProfileTest, AuthControllerTest (10), PasswordAuthTest (11), RolePermissionTest |
 | Media | ✅ Complete | 12 passing (MediaUploadTest) + existing MediaManagerTest |
 | Catalog | ✅ Complete | 128 passing across 4 test classes |
 | Inventory | ✅ Complete | 24 passing across 2 test classes |

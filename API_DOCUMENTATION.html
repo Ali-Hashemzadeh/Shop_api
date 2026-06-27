@@ -107,7 +107,7 @@
   <a href="#rate-limits">Rate Limiting</a>
 
   <div class="section-label">Identity</div>
-  <a href="#otp">OTP — Login / Register</a>
+  <a href="#otp">Authentication — Login / Register</a>
   <a href="#me">Current User &amp; Logout</a>
   <a href="#profile">Profile</a>
   <a href="#locations">Provinces &amp; Cities</a>
@@ -201,12 +201,13 @@ curl -s -X POST http://localhost:8000/api/v1/media \
   <div class="note"><strong>Finding the OTP in development:</strong> The app uses <code>LogOtpSender</code> which writes the code to the Laravel log. Run <code>php artisan pail</code> (or check <code>storage/logs/laravel.log</code>) and look for a line containing <code>OTP</code> and the phone number.</div>
 
   <h3 id="auth-flow">Authentication Flow</h3>
-  <p>This API uses <strong>passwordless OTP authentication</strong>. There are no passwords. The flow is always:</p>
+  <p>This API uses <strong>split-auth onboarding</strong>: new users verify phone ownership via OTP first, while returning users may choose OTP <em>or</em> a password. The flow is:</p>
   <ol>
-    <li>Call <strong>POST /otp/request</strong> with the user's phone number — the server sends an OTP code (SMS in production, logged in development). Check <code>is_new_user</code> in the response to know if this is a first-time registration.</li>
-    <li>Call <strong>POST /otp/verify</strong> with the phone, the code, and a device name — the server returns a <strong>Bearer token</strong> and the user object.</li>
+    <li>Call <strong>POST /auth/check-user</strong> with the phone number. The response tells you whether this is a new account and which methods are allowed: a new phone returns <code>{is_new_user: true, allowed_methods: ["otp"]}</code>; an existing phone returns <code>{is_new_user: false, allowed_methods: ["password", "otp"]}</code>. Render the login UI accordingly.</li>
+    <li><strong>OTP path:</strong> Call <strong>POST /otp/request</strong> with the phone — the server sends an OTP code (SMS in production, logged in development). Then call <strong>POST /otp/verify</strong> with the phone, code, and a device name to receive a <strong>Bearer token</strong>. New users may also send <code>name</code> and <code>password</code> on verify to complete registration in one step.</li>
+    <li><strong>Password path (returning users only):</strong> Call <strong>POST /auth/login-password</strong> with the phone and password to receive a <strong>Bearer token</strong> directly.</li>
     <li>Store the token and include it as <code>Authorization: Bearer {token}</code> on every subsequent protected request.</li>
-    <li>The first time a phone number is used, an account is created automatically — register and login are the same endpoint.</li>
+    <li>The first time a phone number is used, an account is created automatically — register and login are the same flow.</li>
     <li>After verifying, check <code>user.name === null</code> in the response. If null, show a profile completion screen and call <strong>PATCH /profile</strong> before continuing into the app.</li>
   </ol>
   <div class="note"><strong>is_new_user flag:</strong> <code>POST /otp/request</code> returns <code>is_new_user: true</code> when the phone was not previously registered. Use this to show different UI before the OTP step — e.g. "Create account" vs "Welcome back" — or to decide whether to show a profile completion screen after verification.</div>
@@ -268,7 +269,7 @@ curl -s -X POST http://localhost:8000/api/v1/media \
   <p>Every endpoint is protected by a named rate limiter. Exceeding the limit returns <strong>429 Too Many Requests</strong> with a <code>Retry-After</code> header. Limits reset every 60 seconds.</p>
   <table>
     <tr><th>Limiter</th><th>Limit</th><th>Key</th><th>Applied to</th></tr>
-    <tr><td>otp</td><td class="req">5 / min</td><td>IP address</td><td>POST /otp/request, POST /otp/verify</td></tr>
+    <tr><td>otp</td><td class="req">5 / min</td><td>IP address</td><td>POST /otp/request, POST /otp/verify, POST /auth/login-password</td></tr>
     <tr><td>public</td><td class="opt">120 / min</td><td>IP address</td><td>All open storefront reads (catalog, inventory stock, locations, media list)</td></tr>
     <tr><td>inventory-batch</td><td class="opt">30 / min</td><td>IP address</td><td>POST /inventory/batch (unauthenticated, more expensive per call)</td></tr>
     <tr><td>uploads</td><td class="opt">20 / min</td><td>User ID (or IP for guests)</td><td>POST /media</td></tr>
@@ -277,7 +278,38 @@ curl -s -X POST http://localhost:8000/api/v1/media \
   <div class="note"><strong>Endpoint badges:</strong> endpoints with non-default limits show a <span class="badge rate">N/min</span> badge in their header. All other public reads are 120/min and all authenticated writes are 60/min.</div>
 
   <!-- ═══ IDENTITY ═══ -->
-  <h2 id="otp">OTP — Login / Register</h2>
+  <h2 id="otp">Authentication — Login / Register</h2>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/auth/check-user</span>
+      <span class="badge">Public</span>
+      <span class="badge rate">120/min · per IP</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Resolves which authentication methods a phone number may use. Call this first to drive the login UI: new numbers must register via OTP (to prove phone ownership), while existing numbers can also use a password.</p>
+      <div class="block-label">Request Body</div>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr><td>phone_number</td><td class="req">required</td><td>11-digit mobile number starting with 09. Example: <code>09123456789</code></td></tr>
+      </table>
+      <pre>{
+  <span class="key">"phone_number"</span>: <span class="str">"09123456789"</span>
+}</pre>
+      <div class="block-label">Response — 200 OK (new phone)</div>
+      <pre>{
+  <span class="key">"is_new_user"</span>:     <span class="bool">true</span>,
+  <span class="key">"allowed_methods"</span>: [<span class="str">"otp"</span>]
+}</pre>
+      <div class="block-label">Response — 200 OK (existing phone)</div>
+      <pre>{
+  <span class="key">"is_new_user"</span>:     <span class="bool">false</span>,
+  <span class="key">"allowed_methods"</span>: [<span class="str">"password"</span>, <span class="str">"otp"</span>]
+}</pre>
+      <div class="note"><strong>How to use:</strong> If <code>allowed_methods</code> contains <code>"password"</code>, show a password field with a "Login with code instead" fallback. If it only contains <code>"otp"</code>, send the user straight into the OTP flow.</div>
+    </div>
+  </div>
 
   <div class="endpoint">
     <div class="endpoint-header">
@@ -323,11 +355,15 @@ curl -s -X POST http://localhost:8000/api/v1/media \
         <tr><td>phone</td><td class="req">required</td><td>Same phone number used in /otp/request</td></tr>
         <tr><td>code</td><td class="req">required</td><td>The numeric OTP code received by the user</td></tr>
         <tr><td>device_name</td><td class="req">required</td><td>Label for this login session. Shown in token management. Max 100 chars. E.g. <code>"Chrome on Windows"</code> or <code>"Samsung Galaxy S24"</code></td></tr>
+        <tr><td>name</td><td class="opt">optional</td><td>Display name set during first-time registration. Max 120 chars.</td></tr>
+        <tr><td>password</td><td class="opt">optional</td><td>Sets a password for the account so the user can later log in via <code>/auth/login-password</code>. 8–255 chars. Stored hashed; never required (accounts may stay OTP-only).</td></tr>
       </table>
       <pre>{
   <span class="key">"phone"</span>:       <span class="str">"09123456789"</span>,
   <span class="key">"code"</span>:        <span class="str">"481923"</span>,
-  <span class="key">"device_name"</span>: <span class="str">"Chrome on Windows 11"</span>
+  <span class="key">"device_name"</span>: <span class="str">"Chrome on Windows 11"</span>,
+  <span class="key">"name"</span>:        <span class="str">"Sara Ahmadi"</span>,    <span class="comment">// optional — first-time registration</span>
+  <span class="key">"password"</span>:    <span class="str">"super-secret-pw"</span> <span class="comment">// optional — enables password login later</span>
 }</pre>
       <div class="block-label">Response — 200 OK</div>
       <pre>{
@@ -347,6 +383,47 @@ curl -s -X POST http://localhost:8000/api/v1/media \
   <span class="key">"message"</span>: <span class="str">"The verification code is invalid or has expired."</span>,
   <span class="key">"errors"</span>:  { <span class="key">"code"</span>: [<span class="str">"The verification code is invalid or has expired."</span>] }
 }</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/auth/login-password</span>
+      <span class="badge">Public</span>
+      <span class="badge rate">5/min · per IP</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Logs an existing user in with their password and returns a Bearer token — no OTP round-trip. Only works for accounts that have set a password (via <code>/otp/verify</code>). New or password-less accounts must use the OTP flow.</p>
+      <div class="block-label">Request Body</div>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr><td>phone_number</td><td class="req">required</td><td>11-digit mobile number starting with 09. Example: <code>09123456789</code></td></tr>
+        <tr><td>password</td><td class="req">required</td><td>The account password</td></tr>
+        <tr><td>device_name</td><td class="opt">optional</td><td>Label for this login session. Max 100 chars. Defaults to <code>"password-login"</code>.</td></tr>
+      </table>
+      <pre>{
+  <span class="key">"phone_number"</span>: <span class="str">"09123456789"</span>,
+  <span class="key">"password"</span>:     <span class="str">"super-secret-pw"</span>,
+  <span class="key">"device_name"</span>:  <span class="str">"Chrome on Windows 11"</span>
+}</pre>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{
+  <span class="key">"message"</span>: <span class="str">"Logged in successfully."</span>,
+  <span class="key">"token"</span>:   <span class="str">"1|AbCdEfGhIjKlMnOpQrStUvWxYz1234567890abcdef"</span>,
+  <span class="key">"user"</span>: {
+    <span class="key">"id"</span>:         <span class="num">42</span>,
+    <span class="key">"name"</span>:       <span class="str">"Sara Ahmadi"</span>,
+    <span class="key">"email"</span>:      <span class="null-val">null</span>,
+    <span class="key">"phone"</span>:      <span class="str">"09123456789"</span>,
+    <span class="key">"created_at"</span>: <span class="str">"2026-06-17T10:30:00.000000Z"</span>
+  }
+}</pre>
+      <div class="block-label">Error — 401 Unauthorized</div>
+      <pre>{
+  <span class="key">"message"</span>: <span class="str">"Invalid credentials."</span>
+}</pre>
+      <div class="note"><strong>Generic by design:</strong> a wrong password, an unknown phone, and an account with no password set all return the <em>same</em> 401 so the endpoint never reveals whether an account exists.</div>
     </div>
   </div>
 
