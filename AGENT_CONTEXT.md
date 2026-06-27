@@ -191,9 +191,24 @@ Modules/
   * **Permissions:** `order.create`, `order.view-own`, `order.view-admin` — admin receives all three; customer receives `order.create` + `order.view-own`.
   * **Test suite:** `OrderTest` — **6 tests, 20 assertions**: price snapshot + stock reservation + cart-cleared, auto-cancel pending, TTL expiry command, 401/422 auth matrix.
 
+### 💳 7. Payment Module (Status: Active & Complete)
+* **Responsibility:** Hybrid payment processing — cash/offline (`in_person`) and online gateway (`online`) via the Strategy Pattern.
+  * **Tables:** `payments`: id, order_id (indexed bigint, no cascade FK), method_type (string), gateway (string nullable), transaction_reference (string unique nullable), amount (int — Cents Rule), status (string), gateway_response (json nullable), timestamps.
+  * **Domain Enums:** `PaymentMethodType` (ONLINE, IN_PERSON), `PaymentStatus` (INITIATED, CAPTURED, FAILED, REFUNDED, PENDING_CASH).
+  * **Contracts:** `PaymentGatewayDriverInterface` (requestPayment, verifyPayment), `PaymentManagerInterface` (initializePayment).
+  * **Gateway Drivers (Strategy):** `ZarinpalGatewayDriver` (production — Zarinpal REST API v4), `MockGatewayDriver` (test-only, `shouldVerifySucceed` flag), `PaymentGatewayFactory` (singleton, resolves name → driver via `app()`).
+  * **Actions:** `InitializePaymentAction` (in_person → pending_cash + markAsPaid; online → gateway redirect + initiated row), `HandleZarinpalCallbackAction` (idempotency guard, verify, capture/fail, markAsPaid).
+  * **HTTP Endpoints:**
+      * `POST /api/v1/payments/initialize` — auth:sanctum + throttle:api. Requires `payment.create`. Returns `{type, payment_id, status, redirect_url}`.
+      * `GET /api/v1/payments/zarinpal/callback` — PUBLIC + throttle:public. Returns `{success, message, payment_id?, reference_id?}`.
+  * **Config:** `config/payment.php` — `PAYMENT_DEFAULT_GATEWAY`, `ZARINPAL_MERCHANT_ID`, `ZARINPAL_SANDBOX`.
+  * **Permissions:** `payment.create` — granted to admin + customer.
+  * **Cross-module:** `OrderManagerInterface` only (contract boundary, no Order model imported).
+  * **Test suite:** `PaymentTest` — **11 tests, 36 assertions** covering both flows, callback success/cancel/verify-fail, idempotency, auth matrix.
+
 ---
 
-## 7. Completed & Ready
+## 8. Completed & Ready
 
 | Module | Status | Tests |
 |---|---|---|
@@ -203,8 +218,7 @@ Modules/
 | Inventory | ✅ Complete | 24 passing across 2 test classes |
 | Cart | ✅ Complete | 22 passing (CartTest) |
 | Order | ✅ Complete | 6 passing (OrderTest) |
+| Payment | ✅ Complete | 11 passing (PaymentTest) |
 
-**Total test suite: 223 tests, 614 assertions — all green.**
-
-**Next module in queue:** Payment — pending product roadmap review.
+**Total test suite: 234 tests, 650 assertions — all green.**
 

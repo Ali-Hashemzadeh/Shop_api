@@ -18,6 +18,7 @@ class CartItemDTO
         public readonly ?int $compareAtPrice,
         public readonly ?string $imageUrl,
         public readonly int $lineTotal,
+        public readonly array $attributes = [],
     ) {}
 
     public static function fromModel(
@@ -26,6 +27,7 @@ class CartItemDTO
         ?int $basePrice = null,
         ?int $compareAtPrice = null,
         ?string $imageUrl = null,
+        array $attributes = [],
     ): self {
         return new self(
             id: $item->id,
@@ -37,6 +39,7 @@ class CartItemDTO
             compareAtPrice: $compareAtPrice,
             imageUrl: $imageUrl,
             lineTotal: $basePrice !== null ? $item->quantity * $basePrice : 0,
+            attributes: $attributes,
         );
     }
 
@@ -46,6 +49,7 @@ class CartItemDTO
         ?int $basePrice,
         ?int $compareAtPrice,
         ?string $imageUrl,
+        array $attributes = [],
     ): self {
         return new self(
             id: $this->id,
@@ -57,6 +61,7 @@ class CartItemDTO
             compareAtPrice: $compareAtPrice,
             imageUrl: $imageUrl,
             lineTotal: $basePrice !== null ? $this->quantity * $basePrice : 0,
+            attributes: $attributes,
         );
     }
 }

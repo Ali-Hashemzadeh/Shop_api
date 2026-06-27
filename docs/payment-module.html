@@ -1,0 +1,1085 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Payment Module — Technical Deep Dive</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #222535;
+    --border: #2e3148;
+    --text: #e2e4f0;
+    --muted: #8b8fa8;
+    --accent: #7c6af7;
+    --accent2: #5eead4;
+    --green: #4ade80;
+    --red: #f87171;
+    --yellow: #fbbf24;
+    --blue: #60a5fa;
+    --orange: #fb923c;
+    --pink: #f472b6;
+    --code-bg: #12141e;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.7;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  .layout { display: flex; min-height: 100vh; }
+  nav {
+    width: 260px;
+    flex-shrink: 0;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+    padding: 24px 0;
+  }
+  nav h2 {
+    font-size: 11px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 0 20px 8px;
+  }
+  nav ul { list-style: none; }
+  nav ul li a {
+    display: block;
+    padding: 6px 20px;
+    color: var(--muted);
+    font-size: 13px;
+    border-left: 2px solid transparent;
+    transition: all .15s;
+  }
+  nav ul li a:hover { color: var(--text); border-left-color: var(--accent); background: rgba(124,106,247,.07); text-decoration: none; }
+  nav ul li.section { margin-top: 16px; }
+  main { flex: 1; max-width: 900px; padding: 48px 40px; }
+
+  h1 { font-size: 2rem; color: #fff; font-weight: 700; margin-bottom: 8px; }
+  h2 { font-size: 1.4rem; color: #fff; font-weight: 600; margin: 48px 0 16px; padding-top: 8px; }
+  h3 { font-size: 1.05rem; color: var(--accent2); font-weight: 600; margin: 28px 0 10px; }
+  h4 { font-size: .9rem; color: var(--yellow); font-weight: 600; margin: 20px 0 8px; text-transform: uppercase; letter-spacing: .06em; }
+  p { margin-bottom: 12px; color: #cdd0e0; }
+  ul, ol { padding-left: 20px; margin-bottom: 12px; color: #cdd0e0; }
+  li { margin-bottom: 4px; }
+  strong { color: var(--text); }
+  .subtitle { color: var(--muted); font-size: 1rem; margin-bottom: 32px; }
+  .divider { border: none; border-top: 1px solid var(--border); margin: 40px 0; }
+
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    overflow-x: auto;
+    margin: 12px 0 20px;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  code { font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace; }
+  p code, li code {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 12.5px;
+    color: var(--accent2);
+  }
+
+  .kw  { color: #c792ea; }
+  .fn  { color: #82aaff; }
+  .str { color: #c3e88d; }
+  .num { color: #f78c6c; }
+  .cmt { color: #546e7a; font-style: italic; }
+  .cls { color: #ffcb6b; }
+  .var { color: #eeffff; }
+  .ns  { color: #89ddff; }
+  .prop{ color: #f07178; }
+  .typ { color: #ffcb6b; }
+
+  .callout {
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin: 16px 0;
+    border-left: 3px solid;
+    font-size: 13.5px;
+  }
+  .callout.info  { background: rgba(96,165,250,.08); border-color: var(--blue);   color: #b8d4fa; }
+  .callout.warn  { background: rgba(251,191,36,.07); border-color: var(--yellow); color: #fde68a; }
+  .callout.good  { background: rgba(74,222,128,.07); border-color: var(--green);  color: #bbf7d0; }
+  .callout strong { color: inherit; }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 99px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .04em;
+    vertical-align: middle;
+    margin-left: 6px;
+  }
+  .badge.green  { background: rgba(74,222,128,.15);  color: var(--green); }
+  .badge.blue   { background: rgba(96,165,250,.15);  color: var(--blue); }
+  .badge.orange { background: rgba(251,146,60,.15);  color: var(--orange); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { background: var(--surface2); color: var(--muted); font-weight: 600; padding: 10px 14px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  td { padding: 9px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td code { font-size: 12px; }
+
+  .filetree {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    font-family: 'Cascadia Code','Fira Code','Consolas', monospace;
+    font-size: 13px;
+    line-height: 1.9;
+  }
+  .filetree .dir  { color: #89ddff; }
+  .filetree .file { color: #c3e88d; }
+  .filetree .ann  { color: var(--muted); font-style: italic; }
+
+  .flow { display: flex; flex-direction: column; margin: 20px 0; }
+  .flow-step { display: flex; align-items: flex-start; gap: 16px; position: relative; }
+  .flow-step::before { content: ''; position: absolute; left: 19px; top: 42px; bottom: -20px; width: 2px; background: var(--border); }
+  .flow-step:last-child::before { display: none; }
+  .flow-num { flex-shrink: 0; width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; margin-top: 2px; }
+  .flow-body { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; flex: 1; margin-bottom: 20px; }
+  .flow-body h5 { font-size: .85rem; margin-bottom: 4px; }
+  .flow-body p  { font-size: 13px; margin: 0; color: var(--muted); }
+
+  .step-blue   .flow-num { background: rgba(96,165,250,.15); color: var(--blue);   border: 1px solid rgba(96,165,250,.3); }
+  .step-purple .flow-num { background: rgba(124,106,247,.15); color: #b4a9ff;     border: 1px solid rgba(124,106,247,.3); }
+  .step-green  .flow-num { background: rgba(74,222,128,.12); color: var(--green); border: 1px solid rgba(74,222,128,.3); }
+  .step-orange .flow-num { background: rgba(251,146,60,.12); color: var(--orange);border: 1px solid rgba(251,146,60,.3); }
+
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+  .card h5 { font-size: .85rem; color: var(--accent2); margin-bottom: 6px; }
+  .card p  { font-size: 13px; color: var(--muted); margin: 0; }
+
+  section { scroll-margin-top: 24px; }
+
+  @media (max-width: 900px) {
+    nav { display: none; }
+    main { padding: 24px 20px; }
+    .cards { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+
+<nav>
+  <h2>Payment Module</h2>
+  <ul>
+    <li><a href="#overview">Overview</a></li>
+    <li><a href="#filetree">File Structure</a></li>
+    <li class="section"><a href="#domain">Domain Layer</a></li>
+    <li><a href="#enums">— Enums</a></li>
+    <li><a href="#dtos">— DTOs</a></li>
+    <li><a href="#contracts">— Contracts</a></li>
+    <li><a href="#model">— Model</a></li>
+    <li class="section"><a href="#schema">Database Schema</a></li>
+    <li class="section"><a href="#strategy">Gateway Strategy Pattern</a></li>
+    <li><a href="#interface">— Driver Interface</a></li>
+    <li><a href="#zarinpal">— ZarinpalGatewayDriver</a></li>
+    <li><a href="#mock">— MockGatewayDriver</a></li>
+    <li><a href="#factory">— PaymentGatewayFactory</a></li>
+    <li class="section"><a href="#actions">Application Actions</a></li>
+    <li><a href="#init-action">— InitializePaymentAction</a></li>
+    <li><a href="#callback-action">— HandleZarinpalCallbackAction</a></li>
+    <li class="section"><a href="#http">HTTP Layer</a></li>
+    <li><a href="#routes">— Routes</a></li>
+    <li><a href="#controller">— Controller</a></li>
+    <li><a href="#request">— FormRequest</a></li>
+    <li><a href="#resource">— API Resource</a></li>
+    <li class="section"><a href="#provider">Service Provider</a></li>
+    <li><a href="#config">Config</a></li>
+    <li class="section"><a href="#flows">Complete Request Flows</a></li>
+    <li><a href="#flow-inperson">— In-Person Flow</a></li>
+    <li><a href="#flow-online">— Online Initialize</a></li>
+    <li><a href="#flow-callback">— Callback Flow</a></li>
+    <li class="section"><a href="#testing">Testing Strategy</a></li>
+    <li><a href="#crossmodule">Cross-Module Rules</a></li>
+    <li><a href="#cents">The Cents Rule</a></li>
+  </ul>
+</nav>
+
+<main>
+
+<h1>Payment Module</h1>
+<p class="subtitle">Technical deep-dive for backend developers — architecture, code flows, and design decisions.</p>
+
+<section id="overview">
+<h2>Overview</h2>
+<p>The Payment module handles all money movement in the system. It supports two checkout pathways controlled by a <strong>Strategy Pattern</strong>:</p>
+<div class="cards">
+  <div class="card">
+    <h5>in_person <span class="badge orange">offline</span></h5>
+    <p>Cash or physical terminal. The system writes a <code>pending_cash</code> ledger row and immediately marks the order as <code>paid</code> — synchronous, no redirect.</p>
+  </div>
+  <div class="card">
+    <h5>online <span class="badge blue">async</span></h5>
+    <p>Bank gateway redirect (Zarinpal). System creates an <code>initiated</code> payment row, returns a redirect URL, and waits for the bank to call back via a public GET endpoint.</p>
+  </div>
+</div>
+<div class="callout info">
+  <strong>Module boundary rule:</strong> Payment only crosses into Order via <code>OrderManagerInterface</code> (a contract). It never imports <code>Modules\Order\Domain\Models\Order</code>. All other modules are off-limits.
+</div>
+</section>
+
+<hr class="divider">
+
+<section id="filetree">
+<h2>File Structure</h2>
+<div class="filetree">
+<span class="dir">Modules/Payment/</span>
+├── <span class="dir">Domain/</span>
+│   ├── <span class="dir">Contracts/</span>
+│   │   ├── <span class="file">PaymentGatewayDriverInterface.php</span>   <span class="ann">← Strategy contract for gateway drivers</span>
+│   │   └── <span class="file">PaymentManagerInterface.php</span>          <span class="ann">← Public API of this module</span>
+│   ├── <span class="dir">DTOs/</span>
+│   │   ├── <span class="file">GatewayRedirectDTO.php</span>               <span class="ann">← Carries redirect URL + authority token</span>
+│   │   └── <span class="file">PaymentDTO.php</span>                       <span class="ann">← Full payment ledger, used in responses</span>
+│   ├── <span class="dir">Enums/</span>
+│   │   ├── <span class="file">PaymentMethodType.php</span>                <span class="ann">← ONLINE | IN_PERSON</span>
+│   │   └── <span class="file">PaymentStatus.php</span>                    <span class="ann">← INITIATED | CAPTURED | FAILED | …</span>
+│   └── <span class="dir">Models/</span>
+│       └── <span class="file">Payment.php</span>                          <span class="ann">← PRIVATE to this module only</span>
+│
+├── <span class="dir">Application/</span>
+│   └── <span class="dir">Actions/</span>
+│       ├── <span class="file">InitializePaymentAction.php</span>          <span class="ann">← Core checkout logic (both pathways)</span>
+│       └── <span class="file">HandleZarinpalCallbackAction.php</span>     <span class="ann">← Bank return handler with idempotency</span>
+│
+└── <span class="dir">Infrastructure/</span>
+    ├── <span class="dir">Gateways/</span>
+    │   ├── <span class="file">PaymentGatewayFactory.php</span>            <span class="ann">← Resolves gateway name → driver instance</span>
+    │   ├── <span class="file">ZarinpalGatewayDriver.php</span>            <span class="ann">← Production Zarinpal REST v4</span>
+    │   └── <span class="file">MockGatewayDriver.php</span>               <span class="ann">← Test driver, no real HTTP calls</span>
+    ├── <span class="dir">Http/</span>
+    │   ├── <span class="dir">Controllers/PaymentController.php</span>
+    │   ├── <span class="dir">Requests/InitializePaymentRequest.php</span>
+    │   └── <span class="dir">Resources/PaymentResource.php</span>
+    ├── <span class="dir">Persistence/</span>
+    │   ├── <span class="dir">Migrations/</span>  <span class="ann">← creates payments table</span>
+    │   ├── <span class="dir">Repositories/EloquentPaymentManager.php</span>
+    │   └── <span class="dir">Seeders/PaymentPermissionsSeeder.php</span>
+    ├── <span class="dir">Providers/PaymentServiceProvider.php</span>  <span class="ann">← Wires everything into Laravel</span>
+    └── <span class="dir">Routes/api.php</span>
+</div>
+<div class="callout info">
+  <strong>DDD / Hexagonal layout rule:</strong> The <code>Domain/</code> layer has zero Laravel dependencies — only pure PHP. <code>Application/</code> (Actions) orchestrates domain objects. <code>Infrastructure/</code> contains all Laravel-specific code (Eloquent, HTTP client, routes, providers).
+</div>
+</section>
+
+<hr class="divider">
+
+<section id="domain">
+<h2>Domain Layer</h2>
+
+<section id="enums">
+<h3>Enums</h3>
+<p>PHP 8.1 backed enums so the string values are stored in the DB and you can always <code>PaymentStatus::from($row->status)</code> without a map.</p>
+<pre><code><span class="kw">enum</span> <span class="cls">PaymentMethodType</span>: <span class="typ">string</span>
+{
+    <span class="kw">case</span> <span class="prop">ONLINE</span>    = <span class="str">'online'</span>;
+    <span class="kw">case</span> <span class="prop">IN_PERSON</span> = <span class="str">'in_person'</span>;
+}
+
+<span class="kw">enum</span> <span class="cls">PaymentStatus</span>: <span class="typ">string</span>
+{
+    <span class="kw">case</span> <span class="prop">INITIATED</span>    = <span class="str">'initiated'</span>;     <span class="cmt">// online: payment request sent, waiting callback</span>
+    <span class="kw">case</span> <span class="prop">CAPTURED</span>     = <span class="str">'captured'</span>;      <span class="cmt">// online: gateway verify succeeded</span>
+    <span class="kw">case</span> <span class="prop">FAILED</span>       = <span class="str">'failed'</span>;        <span class="cmt">// cancelled by user or rejected by gateway</span>
+    <span class="kw">case</span> <span class="prop">REFUNDED</span>     = <span class="str">'refunded'</span>;      <span class="cmt">// reserved for future refund flow</span>
+    <span class="kw">case</span> <span class="prop">PENDING_CASH</span> = <span class="str">'pending_cash'</span>;  <span class="cmt">// in_person: cash collected offline</span>
+}</code></pre>
+
+<h4>Status state machine</h4>
+<table>
+  <tr><th>Status</th><th>Meaning</th><th>Next valid states</th></tr>
+  <tr><td><code>initiated</code></td><td>Online payment request sent to gateway; user at bank site</td><td>→ <code>captured</code>, <code>failed</code></td></tr>
+  <tr><td><code>captured</code></td><td>Bank verified transaction, money confirmed</td><td>→ <code>refunded</code> (future)</td></tr>
+  <tr><td><code>failed</code></td><td>User cancelled at bank, or gateway verification rejected</td><td>Terminal</td></tr>
+  <tr><td><code>pending_cash</code></td><td>In-person cash payment logged; operator will collect offline</td><td>Terminal</td></tr>
+  <tr><td><code>refunded</code></td><td>Money returned (future flow)</td><td>Terminal</td></tr>
+</table>
+</section>
+
+<section id="dtos">
+<h3>DTOs</h3>
+<p>All DTOs are immutable — every property is <code>public readonly</code>. They cross module boundaries; Eloquent models never do.</p>
+<pre><code><span class="cmt">// GatewayRedirectDTO — returned by requestPayment()</span>
+<span class="kw">class</span> <span class="cls">GatewayRedirectDTO</span>
+{
+    <span class="kw">public function</span> <span class="fn">__construct</span>(
+        <span class="kw">public readonly</span> <span class="typ">string</span> <span class="var">$redirectUrl</span>,         <span class="cmt">// where to send the user's browser</span>
+        <span class="kw">public readonly</span> <span class="typ">string</span> <span class="var">$transactionReference</span>, <span class="cmt">// Zarinpal Authority token</span>
+    ) {}
+}</code></pre>
+<pre><code><span class="cmt">// PaymentDTO — full ledger row for API responses</span>
+<span class="kw">class</span> <span class="cls">PaymentDTO</span>
+{
+    <span class="kw">public function</span> <span class="fn">__construct</span>(
+        <span class="kw">public readonly</span> <span class="typ">int</span>               <span class="var">$id</span>,
+        <span class="kw">public readonly</span> <span class="typ">int</span>               <span class="var">$orderId</span>,
+        <span class="kw">public readonly</span> <span class="cls">PaymentMethodType</span> <span class="var">$methodType</span>,
+        <span class="kw">public readonly</span> <span class="typ">?string</span>           <span class="var">$gateway</span>,
+        <span class="kw">public readonly</span> <span class="typ">?string</span>           <span class="var">$transactionReference</span>,
+        <span class="kw">public readonly</span> <span class="typ">int</span>               <span class="var">$amount</span>,         <span class="cmt">// always in rials</span>
+        <span class="kw">public readonly</span> <span class="cls">PaymentStatus</span>     <span class="var">$status</span>,
+        <span class="kw">public readonly</span> <span class="typ">?array</span>            <span class="var">$gatewayResponse</span>,
+        <span class="kw">public readonly</span> <span class="cls">Carbon</span>            <span class="var">$createdAt</span>,
+    ) {}
+
+    <span class="kw">public static function</span> <span class="fn">fromModel</span>(<span class="cls">Payment</span> <span class="var">$payment</span>): <span class="kw">self</span>
+    {
+        <span class="kw">return new</span> <span class="kw">self</span>(
+            id:                   <span class="var">$payment</span>-><span class="prop">id</span>,
+            orderId:              <span class="var">$payment</span>-><span class="prop">order_id</span>,
+            methodType:           <span class="cls">PaymentMethodType</span>::<span class="fn">from</span>(<span class="var">$payment</span>-><span class="prop">method_type</span>),
+            gateway:              <span class="var">$payment</span>-><span class="prop">gateway</span>,
+            transactionReference: <span class="var">$payment</span>-><span class="prop">transaction_reference</span>,
+            amount:               <span class="var">$payment</span>-><span class="prop">amount</span>,
+            status:               <span class="cls">PaymentStatus</span>::<span class="fn">from</span>(<span class="var">$payment</span>-><span class="prop">status</span>),
+            gatewayResponse:      <span class="var">$payment</span>-><span class="prop">gateway_response</span>,
+            createdAt:            <span class="cls">Carbon</span>::<span class="fn">parse</span>(<span class="var">$payment</span>-><span class="prop">created_at</span>),
+        );
+    }
+}</code></pre>
+</section>
+
+<section id="contracts">
+<h3>Contracts (Public Interfaces)</h3>
+<p>These two interfaces are the only things other modules or the HTTP layer may depend on from this module.</p>
+<pre><code><span class="cmt">// PaymentGatewayDriverInterface — every driver implements this</span>
+<span class="kw">interface</span> <span class="cls">PaymentGatewayDriverInterface</span>
+{
+    <span class="kw">public function</span> <span class="fn">requestPayment</span>(
+        <span class="typ">int</span>    <span class="var">$orderId</span>,
+        <span class="typ">int</span>    <span class="var">$amountInCents</span>,
+        <span class="typ">string</span> <span class="var">$callbackUrl</span>,
+        <span class="typ">?array</span> <span class="var">$customerMetadata</span> = [],
+    ): <span class="cls">GatewayRedirectDTO</span>;
+
+    <span class="cmt">// Returns: ['success' => bool, 'reference_id' => ?string, 'raw_response' => array]</span>
+    <span class="kw">public function</span> <span class="fn">verifyPayment</span>(<span class="typ">int</span> <span class="var">$amountInCents</span>, <span class="typ">string</span> <span class="var">$authority</span>): <span class="typ">array</span>;
+}
+
+<span class="cmt">// PaymentManagerInterface — the public API other modules can call</span>
+<span class="kw">interface</span> <span class="cls">PaymentManagerInterface</span>
+{
+    <span class="kw">public function</span> <span class="fn">initializePayment</span>(<span class="typ">int</span> <span class="var">$orderId</span>, <span class="typ">string</span> <span class="var">$methodType</span>, <span class="typ">?string</span> <span class="var">$gateway</span> = <span class="kw">null</span>): <span class="typ">array</span>;
+}</code></pre>
+</section>
+
+<section id="model">
+<h3>Payment Model (private)</h3>
+<p>Eloquent model. Private to this module — nothing outside <code>Modules/Payment/</code> imports it. The <code>amount</code> cast to <code>integer</code> enforces the Cents Rule at the ORM level.</p>
+<pre><code><span class="kw">class</span> <span class="cls">Payment</span> <span class="kw">extends</span> <span class="cls">Model</span>
+{
+    <span class="kw">protected</span> <span class="var">$fillable</span> = [
+        <span class="str">'order_id'</span>, <span class="str">'method_type'</span>, <span class="str">'gateway'</span>,
+        <span class="str">'transaction_reference'</span>, <span class="str">'amount'</span>, <span class="str">'status'</span>, <span class="str">'gateway_response'</span>,
+    ];
+
+    <span class="kw">protected</span> <span class="var">$casts</span> = [
+        <span class="str">'amount'</span>           => <span class="str">'integer'</span>, <span class="cmt">// Cents Rule enforcement</span>
+        <span class="str">'gateway_response'</span> => <span class="str">'array'</span>,   <span class="cmt">// auto JSON decode on read</span>
+    ];
+}</code></pre>
+</section>
+</section>
+
+<hr class="divider">
+
+<section id="schema">
+<h2>Database Schema</h2>
+<table>
+  <tr><th>Column</th><th>Type</th><th>Notes</th></tr>
+  <tr><td><code>id</code></td><td>BIGINT UNSIGNED PK</td><td>Auto-increment</td></tr>
+  <tr><td><code>order_id</code></td><td>BIGINT UNSIGNED, indexed</td><td>Loose reference — no DB foreign key. Index gives query performance without coupling the tables. Follows the same pattern as <code>media_id</code> in other modules.</td></tr>
+  <tr><td><code>method_type</code></td><td>VARCHAR</td><td><code>online</code> or <code>in_person</code></td></tr>
+  <tr><td><code>gateway</code></td><td>VARCHAR nullable</td><td><code>zarinpal</code>, <code>mock</code>, or null for in_person</td></tr>
+  <tr><td><code>transaction_reference</code></td><td>VARCHAR UNIQUE nullable</td><td>Stores Zarinpal Authority on init; replaced by permanent <code>ref_id</code> on capture. UNIQUE prevents duplicate captures from double-delivery of callbacks.</td></tr>
+  <tr><td><code>amount</code></td><td>INT (not DECIMAL)</td><td>Always in rials — the Cents Rule. Never a float.</td></tr>
+  <tr><td><code>status</code></td><td>VARCHAR</td><td>State machine value from the PaymentStatus enum</td></tr>
+  <tr><td><code>gateway_response</code></td><td>JSON nullable</td><td>Full raw response body from Zarinpal. Stored for audit logs and dispute resolution. Null for in_person payments.</td></tr>
+  <tr><td><code>created_at</code> / <code>updated_at</code></td><td>TIMESTAMP</td><td>Standard Laravel timestamps</td></tr>
+</table>
+<div class="callout warn">
+  <strong>Why no DB foreign key to orders?</strong> Adding <code>REFERENCES orders(id)</code> at the DB layer would couple the two tables permanently, making it impossible to extract either module into a microservice without a schema migration. The application layer enforces the relationship via <code>OrderManagerInterface::findOrder()</code>.
+</div>
+</section>
+
+<hr class="divider">
+
+<section id="strategy">
+<h2>Gateway Strategy Pattern</h2>
+<p>The Strategy Pattern lets you swap payment gateways without touching business logic. Three pieces work together:</p>
+<pre><code><span class="cmt">// How it connects:</span>
+<span class="cmt">// InitializePaymentAction    → calls PaymentGatewayFactory::make('zarinpal')</span>
+<span class="cmt">// PaymentGatewayFactory      → resolves ZarinpalGatewayDriver (implements interface)</span>
+<span class="cmt">// InitializePaymentAction    → calls $driver->requestPayment(...)</span>
+<span class="cmt">// In tests: factory resolves → MockGatewayDriver (same interface, no HTTP)</span>
+<span class="cmt">// The action never knows which concrete driver it's using</span></code></pre>
+
+<section id="interface">
+<h3>PaymentGatewayDriverInterface</h3>
+<p><strong><code>requestPayment()</code></strong> — called during checkout. Creates a payment session at the gateway and returns a redirect URL plus an authority token.</p>
+<p><strong><code>verifyPayment()</code></strong> — called on callback. Sends the authority back to the bank to confirm the transaction really happened and returns a permanent reference ID.</p>
+</section>
+
+<section id="zarinpal">
+<h3>ZarinpalGatewayDriver</h3>
+<p>Production driver for Zarinpal REST API v4. Uses Laravel's <code>Http</code> facade.</p>
+<pre><code><span class="kw">class</span> <span class="cls">ZarinpalGatewayDriver</span> <span class="kw">implements</span> <span class="cls">PaymentGatewayDriverInterface</span>
+{
+    <span class="kw">private const</span> <span class="prop">REQUEST_URL</span>   = <span class="str">'https://payment.zarinpal.com/pg/v4/payment/request.json'</span>;
+
+    <span class="kw">private const</span> <span class="prop">VERIFY_URL</span>    = <span class="str">'https://payment.zarinpal.com/pg/v4/payment/verify.json'</span>;
+
+    <span class="kw">private const</span> <span class="prop">START_PAY_URL</span> = <span class="str">'https://payment.zarinpal.com/pg/StartPay/'</span>;
+
+    <span class="kw">public function</span> <span class="fn">requestPayment</span>(<span class="typ">int</span> <span class="var">$orderId</span>, <span class="typ">int</span> <span class="var">$amountInCents</span>, ...): <span class="cls">GatewayRedirectDTO</span>
+    {
+        <span class="var">$response</span> = <span class="cls">Http</span>::<span class="fn">post</span>(<span class="kw">self</span>::<span class="prop">REQUEST_URL</span>, [
+            <span class="str">'merchant_id'</span>  => <span class="fn">config</span>(<span class="str">'payment.gateways.zarinpal.merchant_id'</span>),
+            <span class="str">'amount'</span>       => <span class="var">$amountInCents</span>,   <span class="cmt">// rials, sent as-is</span>
+            <span class="str">'callback_url'</span> => <span class="var">$callbackUrl</span>,
+            <span class="str">'description'</span>  => <span class="str">"Payment for order #{$orderId}"</span>,
+            <span class="str">'metadata'</span>     => <span class="var">$customerMetadata</span> ?? [],
+        ]);
+
+        <span class="var">$data</span> = <span class="var">$response</span>-><span class="fn">json</span>();
+
+        <span class="kw">if</span> ((<span class="var">$data</span>[<span class="str">'data'</span>][<span class="str">'code'</span>] ?? <span class="kw">null</span>) !== <span class="num">100</span>) {
+            <span class="kw">throw new</span> <span class="cls">RuntimeException</span>(<span class="str">'Zarinpal request failed: '</span> . <span class="fn">json_encode</span>(<span class="var">$data</span>[<span class="str">'errors'</span>] ?? <span class="var">$data</span>));
+        }
+
+        <span class="var">$authority</span> = <span class="var">$data</span>[<span class="str">'data'</span>][<span class="str">'authority'</span>];
+
+        <span class="kw">return new</span> <span class="cls">GatewayRedirectDTO</span>(
+            redirectUrl:          <span class="kw">self</span>::<span class="prop">START_PAY_URL</span> . <span class="var">$authority</span>,
+            transactionReference: <span class="var">$authority</span>,  <span class="cmt">// stored in payments.transaction_reference</span>
+        );
+    }
+
+    <span class="kw">public function</span> <span class="fn">verifyPayment</span>(<span class="typ">int</span> <span class="var">$amountInCents</span>, <span class="typ">string</span> <span class="var">$authority</span>): <span class="typ">array</span>
+    {
+        <span class="var">$data</span> = <span class="cls">Http</span>::<span class="fn">post</span>(<span class="kw">self</span>::<span class="prop">VERIFY_URL</span>, [
+            <span class="str">'merchant_id'</span> => <span class="fn">config</span>(<span class="str">'payment.gateways.zarinpal.merchant_id'</span>),
+            <span class="str">'amount'</span>      => <span class="var">$amountInCents</span>,
+            <span class="str">'authority'</span>   => <span class="var">$authority</span>,
+        ])-><span class="fn">json</span>();
+
+        <span class="var">$code</span>    = <span class="var">$data</span>[<span class="str">'data'</span>][<span class="str">'code'</span>] ?? <span class="kw">null</span>;
+        <span class="var">$success</span> = <span class="fn">in_array</span>(<span class="var">$code</span>, [<span class="num">100</span>, <span class="num">101</span>], <span class="kw">true</span>); <span class="cmt">// 100=new, 101=already verified</span>
+
+        <span class="kw">return</span> [
+            <span class="str">'success'</span>      => <span class="var">$success</span>,
+            <span class="str">'reference_id'</span> => <span class="var">$success</span> ? (<span class="typ">string</span>)(<span class="var">$data</span>[<span class="str">'data'</span>][<span class="str">'ref_id'</span>] ?? <span class="str">''</span>) : <span class="kw">null</span>,
+            <span class="str">'raw_response'</span> => <span class="var">$data</span>,  <span class="cmt">// saved to gateway_response column</span>
+        ];
+    }
+}</code></pre>
+<div class="callout info">
+  <strong>Zarinpal response codes:</strong> <code>100</code> = new successful capture. <code>101</code> = already verified before (idempotent re-check from bank side). Anything else = error. The <code>authority</code> is a temporary session token; the <code>ref_id</code> is the permanent bank transaction reference.
+</div>
+</section>
+
+<section id="mock">
+<h3>MockGatewayDriver</h3>
+<p>A test double that implements the same interface but makes zero HTTP calls. Configure it before the test request hits the app.</p>
+<pre><code><span class="kw">class</span> <span class="cls">MockGatewayDriver</span> <span class="kw">implements</span> <span class="cls">PaymentGatewayDriverInterface</span>
+{
+    <span class="kw">public</span> <span class="typ">bool</span>   <span class="var">$shouldVerifySucceed</span> = <span class="kw">true</span>;
+    <span class="kw">public</span> <span class="typ">string</span> <span class="var">$fakeAuthority</span>        = <span class="str">'MOCK-AUTHORITY-0000000001'</span>;
+    <span class="kw">public</span> <span class="typ">string</span> <span class="var">$fakeRefId</span>            = <span class="str">'MOCK-REF-12345'</span>;
+
+    <span class="kw">public function</span> <span class="fn">requestPayment</span>(...): <span class="cls">GatewayRedirectDTO</span>
+    {
+        <span class="kw">return new</span> <span class="cls">GatewayRedirectDTO</span>(
+            redirectUrl:          <span class="str">'https://mock-gateway.test/pay/'</span> . <span class="var">$this</span>-><span class="prop">fakeAuthority</span>,
+            transactionReference: <span class="var">$this</span>-><span class="prop">fakeAuthority</span>,
+        );
+    }
+
+    <span class="kw">public function</span> <span class="fn">verifyPayment</span>(<span class="typ">int</span> <span class="var">$amount</span>, <span class="typ">string</span> <span class="var">$authority</span>): <span class="typ">array</span>
+    {
+        <span class="kw">if</span> (! <span class="var">$this</span>-><span class="prop">shouldVerifySucceed</span>) {
+            <span class="kw">return</span> [<span class="str">'success'</span> => <span class="kw">false</span>, <span class="str">'reference_id'</span> => <span class="kw">null</span>,
+                    <span class="str">'raw_response'</span> => [<span class="str">'data'</span> => [<span class="str">'code'</span> => -<span class="num">22</span>]]];
+        }
+        <span class="kw">return</span> [<span class="str">'success'</span> => <span class="kw">true</span>, <span class="str">'reference_id'</span> => <span class="var">$this</span>-><span class="prop">fakeRefId</span>,
+                <span class="str">'raw_response'</span> => [<span class="str">'data'</span> => [<span class="str">'code'</span> => <span class="num">100</span>, <span class="str">'ref_id'</span> => <span class="var">$this</span>-><span class="prop">fakeRefId</span>]]];
+    }
+}
+
+<span class="cmt">// In tests — override the singleton in the container before the request:</span>
+<span class="var">$driver</span> = <span class="kw">new</span> <span class="cls">MockGatewayDriver</span>();
+<span class="var">$driver</span>-><span class="prop">shouldVerifySucceed</span> = <span class="kw">false</span>;                         <span class="cmt">// simulate rejection</span>
+<span class="var">$this</span>-><span class="prop">app</span>-><span class="fn">instance</span>(<span class="cls">MockGatewayDriver</span>::<span class="kw">class</span>, <span class="var">$driver</span>);</code></pre>
+</section>
+
+<section id="factory">
+<h3>PaymentGatewayFactory</h3>
+<p>A singleton that maps string names to driver classes and resolves them from the container.</p>
+<pre><code><span class="kw">class</span> <span class="cls">PaymentGatewayFactory</span>
+{
+    <span class="kw">private</span> <span class="typ">array</span> <span class="var">$drivers</span> = [
+        <span class="str">'zarinpal'</span> => <span class="cls">ZarinpalGatewayDriver</span>::<span class="kw">class</span>,
+        <span class="str">'mock'</span>     => <span class="cls">MockGatewayDriver</span>::<span class="kw">class</span>,
+    ];
+
+    <span class="kw">public function</span> <span class="fn">make</span>(<span class="typ">string</span> <span class="var">$gateway</span>): <span class="cls">PaymentGatewayDriverInterface</span>
+    {
+        <span class="kw">if</span> (! <span class="fn">isset</span>(<span class="var">$this</span>-><span class="prop">drivers</span>[<span class="var">$gateway</span>])) {
+            <span class="kw">throw new</span> <span class="cls">InvalidArgumentException</span>(<span class="str">"Unknown gateway driver: [{$gateway}]"</span>);
+        }
+        <span class="kw">return</span> <span class="fn">app</span>(<span class="var">$this</span>-><span class="prop">drivers</span>[<span class="var">$gateway</span>]); <span class="cmt">// app() lets tests override via $app->instance()</span>
+    }
+
+    <span class="kw">public function</span> <span class="fn">register</span>(<span class="typ">string</span> <span class="var">$name</span>, <span class="typ">string</span> <span class="var">$class</span>): <span class="typ">void</span>
+    {
+        <span class="var">$this</span>-><span class="prop">drivers</span>[<span class="var">$name</span>] = <span class="var">$class</span>; <span class="cmt">// extensibility: e.g. a PayPalServiceProvider can add 'paypal'</span>
+    }
+}</code></pre>
+<div class="callout good">
+  <strong>Why <code>app()</code> instead of <code>new $class()</code>?</strong> Using <code>app()</code> allows the test to bind a configured <code>MockGatewayDriver</code> instance via <code>$this->app->instance()</code>. If you used <code>new</code>, the test override would be bypassed entirely.
+</div>
+</section>
+</section>
+
+<hr class="divider">
+
+<section id="actions">
+<h2>Application Actions</h2>
+<p>Actions are the business logic layer. One <code>handle()</code> method each, depend on Contracts never concrete classes, and wrap all multi-step DB writes in <code>DB::transaction()</code>.</p>
+
+<section id="init-action">
+<h3>InitializePaymentAction</h3>
+<p>The main checkout logic. Branches on <code>method_type</code> and handles both payment pathways.</p>
+<pre><code><span class="kw">class</span> <span class="cls">InitializePaymentAction</span>
+{
+    <span class="kw">public function</span> <span class="fn">__construct</span>(
+        <span class="kw">private readonly</span> <span class="cls">OrderManagerInterface</span>  <span class="var">$orderManager</span>,
+        <span class="kw">private readonly</span> <span class="cls">PaymentGatewayFactory</span> <span class="var">$gatewayFactory</span>,
+    ) {}
+
+    <span class="kw">public function</span> <span class="fn">handle</span>(<span class="typ">int</span> <span class="var">$orderId</span>, <span class="typ">string</span> <span class="var">$methodType</span>, <span class="typ">?string</span> <span class="var">$gateway</span> = <span class="kw">null</span>): <span class="typ">array</span>
+    {
+        <span class="cmt">// 1. Load order via contract — zero Order model imports</span>
+        <span class="var">$order</span> = <span class="var">$this</span>-><span class="prop">orderManager</span>-><span class="fn">findOrder</span>(<span class="var">$orderId</span>);
+        <span class="kw">if</span> (<span class="var">$order</span> === <span class="kw">null</span>) { <span class="fn">abort</span>(<span class="num">404</span>, <span class="str">'Order not found.'</span>); }
+
+        <span class="var">$method</span> = <span class="cls">PaymentMethodType</span>::<span class="fn">from</span>(<span class="var">$methodType</span>);
+
+        <span class="cmt">// ── Branch A: in_person ──────────────────────────────────────────</span>
+        <span class="kw">if</span> (<span class="var">$method</span> === <span class="cls">PaymentMethodType</span>::<span class="prop">IN_PERSON</span>) {
+            <span class="kw">return</span> <span class="cls">DB</span>::<span class="fn">transaction</span>(<span class="kw">function</span> () <span class="kw">use</span> (<span class="var">$orderId</span>, <span class="var">$order</span>) {
+                <span class="var">$ref</span>     = <span class="str">'CASH-'</span> . <span class="fn">uniqid</span>();
+                <span class="var">$payment</span> = <span class="cls">Payment</span>::<span class="fn">create</span>([
+                    <span class="str">'order_id'</span>              => <span class="var">$orderId</span>,
+                    <span class="str">'method_type'</span>           => <span class="cls">PaymentMethodType</span>::<span class="prop">IN_PERSON</span>-><span class="prop">value</span>,
+                    <span class="str">'amount'</span>                => <span class="var">$order</span>-><span class="prop">totalAmount</span>,  <span class="cmt">// int rials from OrderDTO</span>
+                    <span class="str">'status'</span>                => <span class="cls">PaymentStatus</span>::<span class="prop">PENDING_CASH</span>-><span class="prop">value</span>,
+                    <span class="str">'transaction_reference'</span> => <span class="var">$ref</span>,
+                ]);
+                <span class="var">$this</span>-><span class="prop">orderManager</span>-><span class="fn">markAsPaid</span>(<span class="var">$orderId</span>, <span class="var">$ref</span>);
+                <span class="kw">return</span> [<span class="str">'type'</span> => <span class="str">'in_person'</span>, <span class="str">'payment_id'</span> => <span class="var">$payment</span>-><span class="prop">id</span>,
+                        <span class="str">'status'</span> => <span class="cls">PaymentStatus</span>::<span class="prop">PENDING_CASH</span>-><span class="prop">value</span>, <span class="str">'redirect_url'</span> => <span class="kw">null</span>];
+            });
+        }
+
+        <span class="cmt">// ── Branch B: online ─────────────────────────────────────────────</span>
+        <span class="var">$resolvedGateway</span> = <span class="var">$gateway</span> ?? <span class="fn">config</span>(<span class="str">'payment.default_gateway'</span>);
+        <span class="var">$driver</span>          = <span class="var">$this</span>-><span class="prop">gatewayFactory</span>-><span class="fn">make</span>(<span class="var">$resolvedGateway</span>);
+        <span class="var">$redirectDto</span>     = <span class="var">$driver</span>-><span class="fn">requestPayment</span>(
+            orderId:       <span class="var">$orderId</span>,
+            amountInCents: <span class="var">$order</span>-><span class="prop">totalAmount</span>,
+            callbackUrl:   <span class="fn">url</span>(<span class="str">'/api/v1/payments/zarinpal/callback'</span>),
+        );
+
+        <span class="var">$payment</span> = <span class="cls">Payment</span>::<span class="fn">create</span>([
+            <span class="str">'order_id'</span>              => <span class="var">$orderId</span>,
+            <span class="str">'method_type'</span>           => <span class="cls">PaymentMethodType</span>::<span class="prop">ONLINE</span>-><span class="prop">value</span>,
+            <span class="str">'gateway'</span>               => <span class="var">$resolvedGateway</span>,
+            <span class="str">'amount'</span>                => <span class="var">$order</span>-><span class="prop">totalAmount</span>,
+            <span class="str">'status'</span>                => <span class="cls">PaymentStatus</span>::<span class="prop">INITIATED</span>-><span class="prop">value</span>,
+            <span class="str">'transaction_reference'</span> => <span class="var">$redirectDto</span>-><span class="prop">transactionReference</span>, <span class="cmt">// Authority token</span>
+        ]);
+
+        <span class="kw">return</span> [<span class="str">'type'</span> => <span class="str">'online'</span>, <span class="str">'payment_id'</span> => <span class="var">$payment</span>-><span class="prop">id</span>,
+                <span class="str">'status'</span> => <span class="cls">PaymentStatus</span>::<span class="prop">INITIATED</span>-><span class="prop">value</span>,
+                <span class="str">'redirect_url'</span> => <span class="var">$redirectDto</span>-><span class="prop">redirectUrl</span>];
+    }
+}</code></pre>
+<div class="callout warn">
+  <strong>Why transaction scope differs:</strong> The in_person branch wraps both writes in <code>DB::transaction()</code> — if <code>markAsPaid</code> throws, the payment row rolls back too. The online branch does NOT use a transaction around the gateway call because you cannot wrap external HTTP I/O in a DB transaction meaningfully. If the Zarinpal call throws, the Payment row is never created — no rollback needed.
+</div>
+</section>
+
+<section id="callback-action">
+<h3>HandleZarinpalCallbackAction</h3>
+<p>Called when the user returns from the bank. Zarinpal sends <code>Status</code> and <code>Authority</code> as GET query parameters.</p>
+<pre><code><span class="kw">public function</span> <span class="fn">handle</span>(<span class="typ">string</span> <span class="var">$status</span>, <span class="typ">string</span> <span class="var">$authority</span>): <span class="typ">array</span>
+{
+    <span class="cmt">// 1. Find payment by the authority we stored on initialize</span>
+    <span class="var">$payment</span> = <span class="cls">Payment</span>::<span class="fn">where</span>(<span class="str">'transaction_reference'</span>, <span class="var">$authority</span>)-><span class="fn">first</span>();
+    <span class="kw">if</span> (<span class="var">$payment</span> === <span class="kw">null</span>) {
+        <span class="kw">return</span> [<span class="str">'success'</span> => <span class="kw">false</span>, <span class="str">'message'</span> => <span class="str">'Payment record not found.'</span>];
+    }
+
+    <span class="cmt">// 2. User cancelled at bank — skip verify entirely</span>
+    <span class="kw">if</span> (<span class="var">$status</span> !== <span class="str">'OK'</span>) {
+        <span class="var">$payment</span>-><span class="fn">update</span>([<span class="str">'status'</span> => <span class="cls">PaymentStatus</span>::<span class="prop">FAILED</span>-><span class="prop">value</span>]);
+        <span class="kw">return</span> [<span class="str">'success'</span> => <span class="kw">false</span>, <span class="str">'message'</span> => <span class="str">'Payment was cancelled by the user.'</span>];
+    }
+
+    <span class="cmt">// 3. Idempotency guard — callback may be delivered multiple times</span>
+    <span class="kw">if</span> (<span class="var">$payment</span>-><span class="prop">status</span> === <span class="cls">PaymentStatus</span>::<span class="prop">CAPTURED</span>-><span class="prop">value</span>) {
+        <span class="kw">return</span> [<span class="str">'success'</span> => <span class="kw">true</span>, <span class="str">'message'</span> => <span class="str">'Payment already captured.'</span>,
+                <span class="str">'payment_id'</span> => <span class="var">$payment</span>-><span class="prop">id</span>];
+    }
+
+    <span class="cmt">// 4. Verify with the same gateway that created this payment</span>
+    <span class="var">$driver</span> = <span class="var">$this</span>-><span class="prop">gatewayFactory</span>-><span class="fn">make</span>(<span class="var">$payment</span>-><span class="prop">gateway</span> ?? <span class="str">'zarinpal'</span>);
+    <span class="var">$result</span> = <span class="var">$driver</span>-><span class="fn">verifyPayment</span>(<span class="var">$payment</span>-><span class="prop">amount</span>, <span class="var">$authority</span>);
+
+    <span class="cmt">// 5. Write outcome atomically</span>
+    <span class="kw">return</span> <span class="cls">DB</span>::<span class="fn">transaction</span>(<span class="kw">function</span> () <span class="kw">use</span> (<span class="var">$payment</span>, <span class="var">$result</span>) {
+        <span class="kw">if</span> (! <span class="var">$result</span>[<span class="str">'success'</span>]) {
+            <span class="var">$payment</span>-><span class="fn">update</span>([<span class="str">'status'</span> => <span class="cls">PaymentStatus</span>::<span class="prop">FAILED</span>-><span class="prop">value</span>,
+                              <span class="str">'gateway_response'</span> => <span class="var">$result</span>[<span class="str">'raw_response'</span>]]);
+            <span class="kw">return</span> [<span class="str">'success'</span> => <span class="kw">false</span>, <span class="str">'message'</span> => <span class="str">'Payment verification failed.'</span>];
+        }
+
+        <span class="cmt">// Overwrite Authority with permanent ref_id</span>
+        <span class="var">$payment</span>-><span class="fn">update</span>([
+            <span class="str">'status'</span>                => <span class="cls">PaymentStatus</span>::<span class="prop">CAPTURED</span>-><span class="prop">value</span>,
+            <span class="str">'transaction_reference'</span> => <span class="var">$result</span>[<span class="str">'reference_id'</span>], <span class="cmt">// permanent bank ref</span>
+            <span class="str">'gateway_response'</span>      => <span class="var">$result</span>[<span class="str">'raw_response'</span>],
+        ]);
+        <span class="var">$this</span>-><span class="prop">orderManager</span>-><span class="fn">markAsPaid</span>(<span class="var">$payment</span>-><span class="prop">order_id</span>, (<span class="typ">string</span>) <span class="var">$result</span>[<span class="str">'reference_id'</span>]);
+        <span class="kw">return</span> [<span class="str">'success'</span> => <span class="kw">true</span>, <span class="str">'payment_id'</span> => <span class="var">$payment</span>-><span class="prop">id</span>,
+                <span class="str">'reference_id'</span> => <span class="var">$result</span>[<span class="str">'reference_id'</span>]];
+    });
+}</code></pre>
+<div class="callout warn">
+  <strong>The idempotency guard is critical.</strong> Banks and network retries can deliver the same callback multiple times. Without the guard, you'd call <code>verifyPayment()</code> twice — Zarinpal returns code 101 on the second call (already verified), your code would call <code>markAsPaid</code> twice, and write duplicate updates. The guard short-circuits on <code>status === 'captured'</code> before any of that happens.
+</div>
+<div class="callout info">
+  <strong>Why does <code>transaction_reference</code> change on capture?</strong> On initialize it stores the temporary Authority token (used to find the row when the callback arrives). On capture it is overwritten with the permanent <code>ref_id</code> from the bank. This is the field you surface to customers for dispute resolution. The UNIQUE constraint ensures you can never accidentally create two payments with the same authority or the same ref_id.
+</div>
+</section>
+</section>
+
+<hr class="divider">
+
+<section id="http">
+<h2>HTTP Layer</h2>
+
+<section id="routes">
+<h3>Routes</h3>
+<pre><code><span class="cmt">// Protected: initialize requires authentication + rate limiting</span>
+<span class="cls">Route</span>::<span class="fn">middleware</span>([<span class="str">'api'</span>, <span class="str">'auth:sanctum'</span>, <span class="str">'throttle:api'</span>])
+    -><span class="fn">prefix</span>(<span class="str">'api/v1/payments'</span>)
+    -><span class="fn">group</span>(<span class="kw">function</span> () {
+        <span class="cls">Route</span>::<span class="fn">post</span>(<span class="str">'/initialize'</span>, [<span class="cls">PaymentController</span>::<span class="kw">class</span>, <span class="str">'initialize'</span>]);
+    });
+
+<span class="cmt">// Public: callback has NO auth:sanctum — bank redirects user's browser here</span>
+<span class="cls">Route</span>::<span class="fn">middleware</span>([<span class="str">'api'</span>, <span class="str">'throttle:public'</span>])
+    -><span class="fn">prefix</span>(<span class="str">'api/v1/payments'</span>)
+    -><span class="fn">group</span>(<span class="kw">function</span> () {
+        <span class="cls">Route</span>::<span class="fn">get</span>(<span class="str">'/zarinpal/callback'</span>, [<span class="cls">PaymentController</span>::<span class="kw">class</span>, <span class="str">'zarinpalCallback'</span>]);
+    });</code></pre>
+<table>
+  <tr><th>Endpoint</th><th>Auth</th><th>Rate limit</th><th>Reason</th></tr>
+  <tr><td><code>POST /initialize</code></td><td>auth:sanctum</td><td>60/min per user</td><td>Only authenticated users can initiate payment for an order they own</td></tr>
+  <tr><td><code>GET /zarinpal/callback</code></td><td>None</td><td>120/min per IP</td><td>Must be public — Zarinpal redirects the user's browser here. The bank has no Sanctum token.</td></tr>
+</table>
+</section>
+
+<section id="controller">
+<h3>PaymentController</h3>
+<p>Thin controller — no business logic. Delegates entirely to the Action/Manager and formats the response.</p>
+<pre><code><span class="kw">class</span> <span class="cls">PaymentController</span> <span class="kw">extends</span> <span class="cls">Controller</span>
+{
+    <span class="kw">public function</span> <span class="fn">__construct</span>(
+        <span class="kw">private readonly</span> <span class="cls">PaymentManagerInterface</span>       <span class="var">$manager</span>,
+        <span class="kw">private readonly</span> <span class="cls">HandleZarinpalCallbackAction</span>  <span class="var">$handleCallback</span>,
+    ) {}
+
+    <span class="kw">public function</span> <span class="fn">initialize</span>(<span class="cls">InitializePaymentRequest</span> <span class="var">$request</span>): <span class="cls">JsonResponse</span>
+    {
+        <span class="cmt">// FormRequest already ran authorize() + rules() before this executes</span>
+        <span class="var">$result</span> = <span class="var">$this</span>-><span class="prop">manager</span>-><span class="fn">initializePayment</span>(
+            orderId:    (<span class="typ">int</span>) <span class="var">$request</span>-><span class="fn">input</span>(<span class="str">'order_id'</span>),
+            methodType: <span class="var">$request</span>-><span class="fn">input</span>(<span class="str">'method_type'</span>),
+            gateway:    <span class="var">$request</span>-><span class="fn">input</span>(<span class="str">'gateway'</span>),
+        );
+        <span class="kw">return</span> <span class="fn">response</span>()-><span class="fn">json</span>(<span class="var">$result</span>);
+    }
+
+    <span class="kw">public function</span> <span class="fn">zarinpalCallback</span>(<span class="cls">Request</span> <span class="var">$request</span>): <span class="cls">JsonResponse</span>
+    {
+        <span class="var">$status</span>    = (<span class="typ">string</span>) <span class="var">$request</span>-><span class="fn">query</span>(<span class="str">'Status'</span>, <span class="str">''</span>);
+        <span class="var">$authority</span> = (<span class="typ">string</span>) <span class="var">$request</span>-><span class="fn">query</span>(<span class="str">'Authority'</span>, <span class="str">''</span>);
+
+        <span class="kw">if</span> (<span class="fn">empty</span>(<span class="var">$authority</span>)) {
+            <span class="kw">return</span> <span class="fn">response</span>()-><span class="fn">json</span>(
+                [<span class="str">'success'</span> => <span class="kw">false</span>, <span class="str">'message'</span> => <span class="str">'Missing Authority parameter.'</span>], <span class="num">400</span>
+            );
+        }
+
+        <span class="var">$result</span>     = <span class="var">$this</span>-><span class="prop">handleCallback</span>-><span class="fn">handle</span>(<span class="var">$status</span>, <span class="var">$authority</span>);
+        <span class="var">$httpStatus</span> = <span class="var">$result</span>[<span class="str">'success'</span>] ? <span class="num">200</span> : <span class="num">422</span>;
+        <span class="kw">return</span> <span class="fn">response</span>()-><span class="fn">json</span>(<span class="var">$result</span>, <span class="var">$httpStatus</span>);
+    }
+}</code></pre>
+</section>
+
+<section id="request">
+<h3>InitializePaymentRequest</h3>
+<p><code>authorize()</code> runs before <code>rules()</code>, so unauthorized users get <strong>403</strong>, not 422. Permission-based, not role-based — any user granted <code>payment.create</code> can pay.</p>
+<pre><code><span class="kw">public function</span> <span class="fn">authorize</span>(): <span class="typ">bool</span>
+{
+    <span class="kw">return</span> (<span class="typ">bool</span>) <span class="var">$this</span>-><span class="fn">user</span>()?-><span class="fn">can</span>(<span class="str">'payment.create'</span>);
+}
+
+<span class="kw">public function</span> <span class="fn">rules</span>(): <span class="typ">array</span>
+{
+    <span class="kw">return</span> [
+        <span class="str">'order_id'</span>    => [<span class="str">'required'</span>, <span class="str">'integer'</span>],
+        <span class="str">'method_type'</span> => [<span class="str">'required'</span>, <span class="str">'string'</span>, <span class="str">'in:online,in_person'</span>],
+        <span class="str">'gateway'</span>     => [<span class="str">'nullable'</span>, <span class="str">'string'</span>],
+    ];
+}</code></pre>
+</section>
+
+<section id="resource">
+<h3>PaymentResource</h3>
+<p>Accepts a <code>PaymentDTO</code> — never an Eloquent model. Decouples the serialization layer from the DB schema.</p>
+<pre><code><span class="kw">public function</span> <span class="fn">toArray</span>(<span class="cls">Request</span> <span class="var">$request</span>): <span class="typ">array</span>
+{
+    <span class="var">$dto</span> = <span class="var">$this</span>-><span class="prop">resource</span>;
+    <span class="kw">return</span> [
+        <span class="str">'id'</span>                    => <span class="var">$dto</span>-><span class="prop">id</span>,
+        <span class="str">'order_id'</span>              => <span class="var">$dto</span>-><span class="prop">orderId</span>,
+        <span class="str">'method_type'</span>           => <span class="var">$dto</span>-><span class="prop">methodType</span>-><span class="prop">value</span>,  <span class="cmt">// enum → string</span>
+        <span class="str">'gateway'</span>               => <span class="var">$dto</span>-><span class="prop">gateway</span>,
+        <span class="str">'status'</span>                => <span class="var">$dto</span>-><span class="prop">status</span>-><span class="prop">value</span>,
+        <span class="str">'amount'</span>                => <span class="var">$dto</span>-><span class="prop">amount</span>,            <span class="cmt">// integer rials</span>
+        <span class="str">'transaction_reference'</span> => <span class="var">$dto</span>-><span class="prop">transactionReference</span>,
+        <span class="str">'created_at'</span>            => <span class="var">$dto</span>-><span class="prop">createdAt</span>-><span class="fn">toISOString</span>(),
+    ];
+}</code></pre>
+</section>
+</section>
+
+<hr class="divider">
+
+<section id="provider">
+<h2>Service Provider</h2>
+<p>The module's bootstrap entry point — wires everything into Laravel's IoC container.</p>
+<pre><code><span class="kw">class</span> <span class="cls">PaymentServiceProvider</span> <span class="kw">extends</span> <span class="cls">ServiceProvider</span>
+{
+    <span class="kw">public function</span> <span class="fn">register</span>(): <span class="typ">void</span>
+    {
+        <span class="var">$this</span>-><span class="fn">mergeConfigFrom</span>(<span class="fn">__DIR__</span>.<span class="str">'/../../../../config/payment.php'</span>, <span class="str">'payment'</span>);
+        <span class="var">$this</span>-><span class="prop">app</span>-><span class="fn">bind</span>(<span class="cls">PaymentManagerInterface</span>::<span class="kw">class</span>, <span class="cls">EloquentPaymentManager</span>::<span class="kw">class</span>);
+        <span class="var">$this</span>-><span class="prop">app</span>-><span class="fn">singleton</span>(<span class="cls">PaymentGatewayFactory</span>::<span class="kw">class</span>);
+    }
+
+    <span class="kw">public function</span> <span class="fn">boot</span>(): <span class="typ">void</span>
+    {
+        <span class="var">$this</span>-><span class="fn">loadRoutesFrom</span>(<span class="fn">__DIR__</span>.<span class="str">'/../Routes/api.php'</span>);
+        <span class="var">$this</span>-><span class="fn">loadMigrationsFrom</span>(<span class="fn">__DIR__</span>.<span class="str">'/../Persistence/Migrations'</span>);
+    }
+}
+
+<span class="cmt">// bootstrap/providers.php — register the provider here:</span>
+<span class="kw">return</span> [
+    <span class="cls">AppServiceProvider</span>::<span class="kw">class</span>,
+    <span class="cmt">// ... other modules ...</span>
+    <span class="cls">PaymentServiceProvider</span>::<span class="kw">class</span>,
+];</code></pre>
+</section>
+
+<hr class="divider">
+
+<section id="config">
+<h2>Configuration</h2>
+<pre><code><span class="cmt">// config/payment.php</span>
+<span class="kw">return</span> [
+    <span class="str">'default_gateway'</span> => <span class="fn">env</span>(<span class="str">'PAYMENT_DEFAULT_GATEWAY'</span>, <span class="str">'zarinpal'</span>),
+    <span class="str">'gateways'</span> => [
+        <span class="str">'zarinpal'</span> => [
+            <span class="str">'merchant_id'</span> => <span class="fn">env</span>(<span class="str">'ZARINPAL_MERCHANT_ID'</span>, <span class="str">''</span>),
+            <span class="str">'sandbox'</span>     => <span class="fn">env</span>(<span class="str">'ZARINPAL_SANDBOX'</span>, <span class="kw">false</span>),
+        ],
+    ],
+];</code></pre>
+<table>
+  <tr><th>.env key</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>PAYMENT_DEFAULT_GATEWAY</code></td><td><code>zarinpal</code></td><td>Used when caller doesn't specify a gateway</td></tr>
+  <tr><td><code>ZARINPAL_MERCHANT_ID</code></td><td>empty</td><td>Your Zarinpal merchant UUID — required for production</td></tr>
+  <tr><td><code>ZARINPAL_SANDBOX</code></td><td><code>false</code></td><td>Reserved for sandbox URL switching (not yet wired)</td></tr>
+</table>
+</section>
+
+<hr class="divider">
+
+<section id="flows">
+<h2>Complete Request Flows</h2>
+
+<section id="flow-inperson">
+<h3>In-Person Checkout Flow</h3>
+<div class="flow">
+  <div class="flow-step step-blue">
+    <div class="flow-num">1</div>
+    <div class="flow-body">
+      <h5>POST /api/v1/payments/initialize</h5>
+      <p>Body: <code>{"order_id":42,"method_type":"in_person"}</code>. Header: <code>Authorization: Bearer {token}</code></p>
+    </div>
+  </div>
+  <div class="flow-step step-blue">
+    <div class="flow-num">2</div>
+    <div class="flow-body">
+      <h5>auth:sanctum middleware</h5>
+      <p>Resolves user from Sanctum token. Returns 401 if missing, 429 if rate limit hit.</p>
+    </div>
+  </div>
+  <div class="flow-step step-purple">
+    <div class="flow-num">3</div>
+    <div class="flow-body">
+      <h5>InitializePaymentRequest::authorize()</h5>
+      <p><code>$user->can('payment.create')</code> — returns 403 if false. Runs before rules.</p>
+    </div>
+  </div>
+  <div class="flow-step step-purple">
+    <div class="flow-num">4</div>
+    <div class="flow-body">
+      <h5>InitializePaymentRequest::rules()</h5>
+      <p>Validates order_id (required int), method_type (in:online,in_person). Returns 422 on failure.</p>
+    </div>
+  </div>
+  <div class="flow-step step-orange">
+    <div class="flow-num">5</div>
+    <div class="flow-body">
+      <h5>InitializePaymentAction — in_person branch — DB::transaction()</h5>
+      <p>Calls <code>orderManager->findOrder(42)</code>. Gets <code>OrderDTO{totalAmount:150000}</code>. Creates payment row (pending_cash). Calls <code>orderManager->markAsPaid(42, 'CASH-...')</code>. Both writes in one transaction — either both commit or both roll back.</p>
+    </div>
+  </div>
+  <div class="flow-step step-green">
+    <div class="flow-num">6</div>
+    <div class="flow-body">
+      <h5>Response 200</h5>
+      <p><code>{"type":"in_person","payment_id":1,"status":"pending_cash","redirect_url":null}</code></p>
+    </div>
+  </div>
+</div>
+</section>
+
+<section id="flow-online">
+<h3>Online Payment Flow — Initialize</h3>
+<div class="flow">
+  <div class="flow-step step-blue">
+    <div class="flow-num">1</div>
+    <div class="flow-body">
+      <h5>POST /api/v1/payments/initialize</h5>
+      <p>Body: <code>{"order_id":42,"method_type":"online","gateway":"zarinpal"}</code></p>
+    </div>
+  </div>
+  <div class="flow-step step-orange">
+    <div class="flow-num">2</div>
+    <div class="flow-body">
+      <h5>InitializePaymentAction — online branch</h5>
+      <p>Resolves gateway name → factory → <code>ZarinpalGatewayDriver</code>.</p>
+    </div>
+  </div>
+  <div class="flow-step step-purple">
+    <div class="flow-num">3</div>
+    <div class="flow-body">
+      <h5>ZarinpalGatewayDriver::requestPayment()</h5>
+      <p>HTTP POST to Zarinpal. Gets <code>authority="A000000..."</code> and code 100. Returns <code>GatewayRedirectDTO</code>.</p>
+    </div>
+  </div>
+  <div class="flow-step step-orange">
+    <div class="flow-num">4</div>
+    <div class="flow-body">
+      <h5>Write payment row</h5>
+      <p>status=initiated, gateway='zarinpal', transaction_reference='A000000...' (the authority). No DB::transaction — external HTTP cannot be wrapped.</p>
+    </div>
+  </div>
+  <div class="flow-step step-green">
+    <div class="flow-num">5</div>
+    <div class="flow-body">
+      <h5>Response 200</h5>
+      <p><code>{"type":"online","payment_id":2,"status":"initiated","redirect_url":"https://payment.zarinpal.com/pg/StartPay/A000000..."}</code></p>
+    </div>
+  </div>
+  <div class="flow-step step-blue">
+    <div class="flow-num">6</div>
+    <div class="flow-body">
+      <h5>Client redirects user's browser to redirect_url</h5>
+      <p>User pays at Zarinpal site. Flow continues with the callback below.</p>
+    </div>
+  </div>
+</div>
+
+<h3 id="flow-callback">Online Payment Flow — Callback</h3>
+<div class="flow">
+  <div class="flow-step step-blue">
+    <div class="flow-num">1</div>
+    <div class="flow-body">
+      <h5>GET /api/v1/payments/zarinpal/callback?Status=OK&Authority=A000000...</h5>
+      <p>Zarinpal redirects user's browser here after payment attempt. No auth required.</p>
+    </div>
+  </div>
+  <div class="flow-step step-orange">
+    <div class="flow-num">2</div>
+    <div class="flow-body">
+      <h5>PaymentController::zarinpalCallback()</h5>
+      <p>Reads Status and Authority from query string. Guards against missing Authority (returns 400).</p>
+    </div>
+  </div>
+  <div class="flow-step step-orange">
+    <div class="flow-num">3</div>
+    <div class="flow-body">
+      <h5>HandleZarinpalCallbackAction::handle('OK', 'A000000...')</h5>
+      <p>Finds payment by <code>transaction_reference = 'A000000...'</code>.</p>
+    </div>
+  </div>
+  <div class="flow-step step-orange">
+    <div class="flow-num">4</div>
+    <div class="flow-body">
+      <h5>Idempotency guard</h5>
+      <p>If payment.status is already 'captured', return early with success — no double-processing.</p>
+    </div>
+  </div>
+  <div class="flow-step step-purple">
+    <div class="flow-num">5</div>
+    <div class="flow-body">
+      <h5>ZarinpalGatewayDriver::verifyPayment(150000, 'A000000...')</h5>
+      <p>HTTP POST to Zarinpal verify endpoint. Returns code=100, ref_id="123456789".</p>
+    </div>
+  </div>
+  <div class="flow-step step-green">
+    <div class="flow-num">6</div>
+    <div class="flow-body">
+      <h5>DB::transaction() — capture</h5>
+      <p>Updates: status=captured, transaction_reference='123456789' (permanent ref_id), gateway_response={full JSON}. Calls <code>orderManager->markAsPaid(42, '123456789')</code>. Both writes in one transaction.</p>
+    </div>
+  </div>
+  <div class="flow-step step-green">
+    <div class="flow-num">7</div>
+    <div class="flow-body">
+      <h5>Response 200</h5>
+      <p><code>{"success":true,"payment_id":2,"reference_id":"123456789"}</code></p>
+    </div>
+  </div>
+</div>
+
+<h4>Failure paths</h4>
+<ul>
+  <li><strong>Status=NOK (user cancelled):</strong> Step 4 of callback action — writes <code>status=failed</code>, skips verify entirely, returns 422. Order stays <code>pending</code>. User can try again.</li>
+  <li><strong>verifyPayment returns false:</strong> Step 6 fails the success check — writes <code>status=failed</code> + raw response, returns 422. Order stays <code>pending</code>.</li>
+  <li><strong>Missing Authority:</strong> Controller guard catches it before the action is called, returns 400.</li>
+</ul>
+</section>
+</section>
+
+<hr class="divider">
+
+<section id="testing">
+<h2>Testing Strategy</h2>
+<p>All 11 tests in <code>tests/Feature/Payment/PaymentTest.php</code> use <code>RefreshDatabase</code> (SQLite in-memory) and <code>MockGatewayDriver</code> — no real HTTP calls, no Zarinpal account needed.</p>
+<table>
+  <tr><th>Test</th><th>What it verifies</th></tr>
+  <tr><td>in_person happy path</td><td>Payment row (pending_cash) and order (paid) both written in same transaction</td></tr>
+  <tr><td>online initialize</td><td>Payment row (initiated) created; redirect_url contains mock domain</td></tr>
+  <tr><td>callback success</td><td>Payment → captured, transaction_reference replaced with ref_id, order → paid</td></tr>
+  <tr><td>callback NOK (cancel)</td><td>Payment → failed, order stays pending</td></tr>
+  <tr><td>verify rejected</td><td>Gateway returns false; payment → failed, raw response saved, order untouched</td></tr>
+  <tr><td>idempotency</td><td>Second callback on captured payment returns success without re-processing</td></tr>
+  <tr><td>401 unauthenticated</td><td>initialize without token returns 401</td></tr>
+  <tr><td>422 empty body</td><td>Missing required fields return validation error</td></tr>
+  <tr><td>422 invalid method_type</td><td><code>carrier_pigeon</code> rejected by in:online,in_person rule</td></tr>
+  <tr><td>400 missing Authority</td><td>Callback with no Authority param returns 400</td></tr>
+  <tr><td>404 nonexistent order</td><td>initialize with order_id=99999 returns 404</td></tr>
+</table>
+<pre><code><span class="cmt">// Controlling MockGatewayDriver per test:</span>
+<span class="var">$driver</span> = <span class="kw">new</span> <span class="cls">MockGatewayDriver</span>();
+<span class="var">$driver</span>-><span class="prop">shouldVerifySucceed</span> = <span class="kw">false</span>;                        <span class="cmt">// simulate verify failure</span>
+<span class="var">$this</span>-><span class="prop">app</span>-><span class="fn">instance</span>(<span class="cls">MockGatewayDriver</span>::<span class="kw">class</span>, <span class="var">$driver</span>);  <span class="cmt">// override factory resolution</span>
+
+<span class="var">$this</span>-><span class="fn">getJson</span>(<span class="str">'/api/v1/payments/zarinpal/callback?Status=OK&Authority=TEST-AUTH'</span>)
+     -><span class="fn">assertStatus</span>(<span class="num">422</span>)
+     -><span class="fn">assertJsonPath</span>(<span class="str">'success'</span>, <span class="kw">false</span>);</code></pre>
+<div class="callout good">
+  <strong>Why MockGatewayDriver instead of Http::fake()?</strong> <code>Http::fake()</code> intercepts at the HTTP client level and requires you to pattern-match URLs. The MockGatewayDriver approach tests the behavior your code exhibits when a gateway returns success or failure — the driver interface is the contract, the factory is the seam. This is far more readable and resilient to URL changes.
+</div>
+</section>
+
+<hr class="divider">
+
+<section id="crossmodule">
+<h2>Cross-Module Communication</h2>
+<table>
+  <tr><th>Import</th><th>Allowed?</th><th>Why</th></tr>
+  <tr><td><code>use Modules\Order\Domain\Contracts\OrderManagerInterface</code></td><td><span class="badge green">YES</span></td><td>Contracts are the published public API — this is exactly how cross-module calls are designed to work</td></tr>
+  <tr><td><code>use Modules\Order\Domain\Models\Order</code></td><td><span class="badge" style="background:rgba(248,113,113,.15);color:#f87171;">NO</span></td><td>Models are private to their module — importing them breaks the isolation boundary</td></tr>
+  <tr><td><code>DB::table('orders')->join('payments', ...)</code></td><td><span class="badge" style="background:rgba(248,113,113,.15);color:#f87171;">NO</span></td><td>Cross-module DB joins couple schemas at the storage layer, preventing independent migration</td></tr>
+</table>
+<p>The two methods used from <code>OrderManagerInterface</code>:</p>
+<ul>
+  <li><code>findOrder(int $orderId): ?OrderDTO</code> — called in <code>InitializePaymentAction</code> to get <code>totalAmount</code> (already an integer rial value per Cents Rule)</li>
+  <li><code>markAsPaid(int $orderId, string $transactionRef): OrderDTO</code> — called after successful capture or in_person creation; sets order status to <code>paid</code></li>
+</ul>
+</section>
+
+<hr class="divider">
+
+<section id="cents">
+<h2>The Cents Rule</h2>
+<p>Every monetary value is stored and processed as a raw integer in the smallest currency unit (rials). No floats, no decimals, no conversion until the UI needs to format for display.</p>
+<pre><code><span class="cmt">// CORRECT — integer rials everywhere</span>
+<span class="var">$amount</span> = <span class="num">150000</span>;                                              <span class="cmt">// 150,000 rials</span>
+<span class="cls">Payment</span>::<span class="fn">create</span>([<span class="str">'amount'</span> => <span class="var">$amount</span>]);                      <span class="cmt">// stored as INT column</span>
+<span class="var">$driver</span>-><span class="fn">requestPayment</span>(amountInCents: <span class="var">$amount</span>);             <span class="cmt">// sent as-is to Zarinpal</span>
+<span class="var">$driver</span>-><span class="fn">verifyPayment</span>(amountInCents: <span class="var">$payment</span>-><span class="prop">amount</span>);    <span class="cmt">// read back, still int</span>
+
+<span class="cmt">// WRONG — never do this</span>
+<span class="var">$amount</span> = <span class="num">150000.00</span>;                                          <span class="cmt">// forbidden float</span>
+<span class="var">$amount</span> = <span class="var">$price</span> / <span class="num">100</span>;                                       <span class="cmt">// creates a float</span></code></pre>
+<p>Enforced at three levels:</p>
+<ol>
+  <li><strong>DB column</strong>: <code>$table->integer('amount')</code> — rejects floats at the storage layer</li>
+  <li><strong>Eloquent cast</strong>: <code>'amount' => 'integer'</code> — coerces on read from DB</li>
+  <li><strong>Source of truth</strong>: <code>$order->totalAmount</code> from <code>OrderDTO</code> is typed <code>int</code> — payment copies it directly with zero arithmetic</li>
+</ol>
+</section>
+
+</main>
+</div>
+</body>
+</html>

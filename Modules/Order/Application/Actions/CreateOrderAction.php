@@ -75,7 +75,7 @@ class CreateOrderAction
                     'order_id' => $order->id,
                     'sku' => $cartItem->sku,
                     'product_title' => $cartItem->productName ?? '',
-                    'variant_attributes' => [],
+                    'variant_attributes' => $cartItem->attributes,
                     'quantity' => $cartItem->quantity,
                     'price_per_unit' => $cartItem->basePrice ?? 0,
                     'line_total' => $cartItem->lineTotal,

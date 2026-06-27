@@ -9,3 +9,4 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Schedule::command('orders:cancel-expired')->everyMinute();
+Schedule::command('payments:expire-stale')->everyFiveMinutes();

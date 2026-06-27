@@ -161,6 +161,7 @@ class EloquentCartManager implements CartManagerInterface
                 basePrice: $variant?->basePrice,
                 compareAtPrice: $variant?->compareAtPrice,
                 imageUrl: $variant?->imageUrl,
+                attributes: $variant?->attributes ?? [],
             );
         })->all();
 
