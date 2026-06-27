@@ -167,7 +167,7 @@ Match the surrounding code. Concrete patterns used throughout:
 
 | Module | Status | Notes |
 |---|---|---|
-| **Identity** | ✅ Complete | Passwordless OTP auth, profiles, RBAC, provinces/cities, addresses |
+| **Identity** | ✅ Complete | OTP + password auth (split-auth onboarding), profiles, RBAC, provinces/cities, addresses |
 | **Media** | ✅ Complete | File upload ledger + standalone upload/delete endpoints |
 | **Catalog** | ✅ Complete | Categories, products, galleries, variants, atomic nested create, variant upsert on update, variant `type` (`image`/`color`) — 107 tests |
 | **Inventory** | ✅ Complete | Stock tracking, reservation lifecycle, append-only ledger — 24 tests |
@@ -175,14 +175,21 @@ Match the surrounding code. Concrete patterns used throughout:
 | **Orders** | 🚧 Scaffolded | Directory skeleton exists under `Modules/Orders/`; provider **not yet** in `bootstrap/providers.php` and not documented in README/AGENT_CONTEXT — confirm scope before building |
 | Payment | 📋 Planned | Pending roadmap review |
 
-**Test suite baseline: 215 tests / 581 assertions, all green.**
+**Test suite baseline: 245 tests / 692 assertions, all green.**
 
 ### Identity — key facts
-- **Passwordless OTP, phone-based, unified register+login** (sign-up == login).
+- **OTP + password split-auth, phone-based, unified register+login** (sign-up == login).
+  `POST /api/v1/auth/check-user` (`phone_number`) returns `is_new_user` + `allowed_methods`:
+  unknown phones get `["otp"]` (verify ownership first), known phones get `["password", "otp"]`.
   `POST /api/v1/otp/request` (`phone` `09xxxxxxxxx`, optional `name`) finds-or-creates the
   user (assigns `customer` on first contact) and sends a hashed, short-TTL numeric code.
-  `POST /api/v1/otp/verify` (`phone`, `code`, `device_name`) consumes the single-use code
-  and mints a Sanctum token.
+  `POST /api/v1/otp/verify` (`phone`, `code`, `device_name`, optional `name`/`password`)
+  consumes the single-use code, optionally sets a hashed password, and mints a Sanctum token.
+- **Password login:** `POST /api/v1/auth/login-password` (`phone_number`, `password`,
+  optional `device_name`) verifies via `Hash::check` and mints a token. Unknown phone / wrong
+  password / password-less account all return a generic **401 `Invalid credentials.`**
+  Passwords are hashed (`Hash::make`); `password` is nullable so accounts may stay OTP-only.
+  `throttle:otp` guards the route; `check-user` uses `throttle:public`.
 - OTP is stored **hashed** (`otp_code`, hidden) with `otp_expires_at`; verified via
   `Hash::check`, consumed on success (replay-safe).
 - **Delivery boundary:** `OtpSenderInterface::send(phone, code)`. In production, bound to
