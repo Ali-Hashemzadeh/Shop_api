@@ -26,6 +26,9 @@ class UpdateAddressRequest extends FormRequest
             ],
             'postal_code' => ['sometimes', 'nullable', 'string', 'max:20'],
             'address' => ['sometimes', 'string', 'max:1000'],
+            'latitude' => ['sometimes', 'numeric', 'between:-90,90'],
+            'longitude' => ['sometimes', 'numeric', 'between:-180,180'],
+            'map_address' => ['sometimes', 'nullable', 'string', 'max:1000'],
             'is_default_shipping' => ['sometimes', 'boolean'],
         ];
     }

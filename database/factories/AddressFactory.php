@@ -20,6 +20,9 @@ class AddressFactory extends Factory
             'title' => $this->faker->randomElement(['Home', 'Work']),
             'address' => $this->faker->streetAddress(),
             'postal_code' => $this->faker->postcode(),
+            'latitude' => $this->faker->latitude(),
+            'longitude' => $this->faker->longitude(),
+            'map_address' => $this->faker->address(),
             'is_default_shipping' => false,
             // any other NOT NULL columns in addresses table
         ];

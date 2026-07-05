@@ -68,7 +68,7 @@ Every Action and Repository method that mutates state has matching feature tests
 ### Identity (Complete)
 Handles passwordless OTP authentication, user profiles, multi-role RBAC, shipping provinces/cities, and user delivery addresses.
 
-- **Key entities:** `User`, `Address`, `Province`, `City`
+- **Key entities:** `User`, `Address` (province/city/postal code plus a map pin — `latitude`/`longitude`, required on create, and an optional `map_address` line), `Province`, `City`
 - **Public contract:** `IdentityManagerInterface::isAdmin(int $userId): bool` — the only authorized way for other modules to check user privilege without importing Identity's models.
 - **Auth pattern:** Passwordless OTP over Sanctum tokens + Spatie roles (`admin`, `customer`). `POST /api/v1/otp/request` (phone `09xxxxxxxxx`, optional `name`) finds-or-creates the user and sends a hashed, short-TTL code; `POST /api/v1/otp/verify` (phone, code, device_name) consumes the single-use code and mints a token. Sign-up and login are the same flow.
 - **OTP delivery:** swappable `OtpSenderInterface`, bound to a log-only `LogOtpSender` placeholder until the SMS gateway is connected. Tunables in `config/identity.php` → `otp.length`, `otp.ttl_minutes`.

@@ -2,6 +2,20 @@
 
 ## [Unreleased](https://github.com/laravel/laravel/compare/v12.12.1...12.x)
 
+### Feat — Identity: capture map pin on addresses
+
+**Addresses previously stored `province_id`/`city_id`/`postal_code`/`address` but no geolocation — the exact point a user drops on a map was lost.**
+
+#### Added
+- Migration `add_map_location_to_addresses_table`: adds nullable `latitude`/`longitude` (`decimal(10,7)`) and `map_address` (nullable text) columns to `addresses`.
+- `StoreAddressRequest` requires `latitude`/`longitude` (`numeric`, `between:-90,90` / `between:-180,180`) on create; `map_address` stays optional. `UpdateAddressRequest` treats all three as `sometimes`.
+- `AddressResource` exposes `latitude`, `longitude`, `map_address`.
+
+#### Tests
+- `AddressTest`: +4 tests (coordinates required on create, out-of-range rejection, nullable `map_address`, coordinate update); existing create test updated to assert the new fields.
+
+**Result: test suite is 257/257 green (721 assertions).**
+
 ### Feat — Catalog: admin all-status product index
 
 **Admins can now list products in every status (draft + published) with pagination and filters — previously the only product listings were the public storefront endpoints, which are limited to published products.**

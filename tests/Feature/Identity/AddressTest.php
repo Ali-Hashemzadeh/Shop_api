@@ -60,6 +60,9 @@ class AddressTest extends TestCase
             'city_id' => $city->id,
             'postal_code' => '1234567890',
             'address' => 'Test street, alley 1, plaque 10',
+            'latitude' => 35.6892,
+            'longitude' => 51.3890,
+            'map_address' => 'No. 12, Valiasr St.',
             'is_default_shipping' => true,
         ];
 
@@ -69,6 +72,9 @@ class AddressTest extends TestCase
             ->assertJsonPath('data.title', 'Home')
             ->assertJsonPath('data.province_id', $province->id)
             ->assertJsonPath('data.city_id', $city->id)
+            ->assertJsonPath('data.latitude', '35.6892000')
+            ->assertJsonPath('data.longitude', '51.3890000')
+            ->assertJsonPath('data.map_address', 'No. 12, Valiasr St.')
             ->assertJsonPath('data.is_default_shipping', true);
 
         $this->assertDatabaseHas('addresses', [
@@ -78,7 +84,97 @@ class AddressTest extends TestCase
             'city_id' => $city->id,
             'postal_code' => '1234567890',
             'address' => 'Test street, alley 1, plaque 10',
+            'latitude' => 35.6892,
+            'longitude' => 51.3890,
+            'map_address' => 'No. 12, Valiasr St.',
             'is_default_shipping' => true,
+        ]);
+    }
+
+    public function test_create_address_requires_coordinates(): void
+    {
+        $user = User::factory()->create();
+        $province = Province::factory()->create();
+        $city = City::factory()->create(['province_id' => $province->id]);
+
+        $this->actingAsCustomer($user);
+
+        $this->postJson('/api/v1/addresses', [
+            'province_id' => $province->id,
+            'city_id' => $city->id,
+            'address' => 'Test street, alley 1, plaque 10',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['latitude', 'longitude']);
+    }
+
+    public function test_create_address_rejects_out_of_range_coordinates(): void
+    {
+        $user = User::factory()->create();
+        $province = Province::factory()->create();
+        $city = City::factory()->create(['province_id' => $province->id]);
+
+        $this->actingAsCustomer($user);
+
+        $this->postJson('/api/v1/addresses', [
+            'province_id' => $province->id,
+            'city_id' => $city->id,
+            'address' => 'Test street, alley 1, plaque 10',
+            'latitude' => 200,
+            'longitude' => 500,
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['latitude', 'longitude']);
+    }
+
+    public function test_create_address_allows_null_map_address(): void
+    {
+        $user = User::factory()->create();
+        $province = Province::factory()->create();
+        $city = City::factory()->create(['province_id' => $province->id]);
+
+        $this->actingAsCustomer($user);
+
+        $this->postJson('/api/v1/addresses', [
+            'province_id' => $province->id,
+            'city_id' => $city->id,
+            'address' => 'Test street, alley 1, plaque 10',
+            'latitude' => 35.6892,
+            'longitude' => 51.3890,
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.map_address', null);
+    }
+
+    public function test_user_can_update_address_coordinates(): void
+    {
+        $user = User::factory()->create();
+        $province = Province::factory()->create();
+        $city = City::factory()->create(['province_id' => $province->id]);
+
+        $address = Address::factory()->create([
+            'user_id' => $user->id,
+            'province_id' => $province->id,
+            'city_id' => $city->id,
+        ]);
+
+        $this->actingAsCustomer($user);
+
+        $this->patchJson("/api/v1/addresses/{$address->id}", [
+            'latitude' => 29.5918,
+            'longitude' => 52.5837,
+            'map_address' => 'New pin address',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.latitude', '29.5918000')
+            ->assertJsonPath('data.longitude', '52.5837000')
+            ->assertJsonPath('data.map_address', 'New pin address');
+
+        $this->assertDatabaseHas('addresses', [
+            'id' => $address->id,
+            'latitude' => 29.5918,
+            'longitude' => 52.5837,
+            'map_address' => 'New pin address',
         ]);
     }
 
