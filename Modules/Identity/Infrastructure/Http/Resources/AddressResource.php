@@ -16,6 +16,9 @@ class AddressResource extends JsonResource
             'city_id' => $this->city_id,
             'postal_code' => $this->postal_code,
             'address' => $this->address,
+            'latitude' => $this->latitude,
+            'longitude' => $this->longitude,
+            'map_address' => $this->map_address,
             'is_default_shipping' => (bool) $this->is_default_shipping,
             'province' => $this->whenLoaded('province', fn () => [
                 'id' => $this->province->id,

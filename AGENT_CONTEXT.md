@@ -58,7 +58,8 @@ Modules/
       * Concrete: `EloquentIdentityManager` (bound in `IdentityServiceProvider::register()`). Internally calls `User::find()->hasRole('admin')` — all Spatie internals stay inside Identity.
   * **Route structure:** user-facing address routes registered under `prefix('addresses')` (plural). Admin user management under `prefix('admin/users')`. Profile self-service under `prefix('profile')`.
   * **Known fix applied:** `UpdateAddressRequest` had `city_id` as `required` instead of `sometimes` — corrected so PATCH requests can update partial fields without supplying city.
-  * **Test suite:** `AddressTest` (13), `ProfileTest` (8), `AuthControllerTest` (10 — full OTP request/verify matrix: create-on-request, no-duplicate, invalid phone, verify+token, wrong/expired/unknown code, single-use replay, me, logout), `RolePermissionTest` — all passing.
+  * **Address map pin:** `addresses` carries `latitude`/`longitude` (`decimal(10,7)`) and a nullable `map_address` text line (the map's reverse-geocoded string, distinct from the user-typed `address`). Columns are nullable at the DB level, but `StoreAddressRequest` requires `latitude`/`longitude` (`numeric`, `between:-90,90` / `between:-180,180`) on create; `UpdateAddressRequest` treats all three as `sometimes`. `map_address` is always optional. Exposed on `AddressResource`.
+  * **Test suite:** `AddressTest` (21 — includes map-pin required/range/nullable/update coverage), `ProfileTest` (8), `AuthControllerTest` (10 — full OTP request/verify matrix: create-on-request, no-duplicate, invalid phone, verify+token, wrong/expired/unknown code, single-use replay, me, logout), `RolePermissionTest` — all passing.
 
 ### 📁 2. Media Module (Status: Active & Complete)
 * **Responsibility:** Lightweight, high-performance physical file uploads and tracking ledger.

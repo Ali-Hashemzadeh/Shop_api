@@ -18,11 +18,16 @@ class Address extends Model
         'city_id',
         'postal_code',
         'address',
+        'latitude',
+        'longitude',
+        'map_address',
         'is_default_shipping',
     ];
 
     protected $casts = [
         'is_default_shipping' => 'boolean',
+        'latitude' => 'decimal:7',
+        'longitude' => 'decimal:7',
     ];
 
     public function user(): BelongsTo
