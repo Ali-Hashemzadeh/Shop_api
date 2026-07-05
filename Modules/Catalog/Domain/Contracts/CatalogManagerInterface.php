@@ -49,6 +49,20 @@ interface CatalogManagerInterface
      */
     public function getProducts(array $filters = [], int $perPage = 15): LengthAwarePaginator;
 
+    /**
+     * Fetch products in every status (admin listing).
+     *
+     * Supported keys in $filters:
+     *   - status       (string) — exact match on status (draft|published)
+     *   - category_id  (int)    — exact match on category_id
+     *   - min_price    (int)    — default variant base_price >= value
+     *   - max_price    (int)    — default variant base_price <= value
+     *   - search       (string) — LIKE %value% on title, description, slug, or variant SKU
+     *
+     * @return LengthAwarePaginator<ProductDTO>
+     */
+    public function getProductsAdmin(array $filters = [], int $perPage = 15): LengthAwarePaginator;
+
     public function createProduct(array $data): ProductDTO;
 
     public function addProductImage(int $productId, int $mediaId, int $sortOrder = 0): ProductImageDTO;

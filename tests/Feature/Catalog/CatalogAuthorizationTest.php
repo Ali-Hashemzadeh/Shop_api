@@ -75,6 +75,13 @@ class CatalogAuthorizationTest extends TestCase
     }
 
     /** @test */
+    public function unauthenticated_request_cannot_access_the_admin_product_index(): void
+    {
+        $this->getJson('/api/v1/catalog/products/admin')
+            ->assertUnauthorized();
+    }
+
+    /** @test */
     public function unauthenticated_request_cannot_create_a_variant(): void
     {
         $this->postJson('/api/v1/catalog/products/1/variants', ['sku' => 'X'])
@@ -157,6 +164,15 @@ class CatalogAuthorizationTest extends TestCase
         $this->actingAsCustomer();
 
         $this->getJson('/api/v1/catalog/products/1/admin')
+            ->assertForbidden();
+    }
+
+    /** @test */
+    public function customer_cannot_access_the_admin_product_index(): void
+    {
+        $this->actingAsCustomer();
+
+        $this->getJson('/api/v1/catalog/products/admin')
             ->assertForbidden();
     }
 

@@ -471,4 +471,134 @@ class ProductsTest extends TestCase
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.title', 'Keyboard');
     }
+
+    // ── GET /api/v1/catalog/products/admin ───────────────────────────────────
+
+    /** @test */
+    public function it_lists_products_in_every_status_on_the_admin_index(): void
+    {
+        Product::create(['title' => 'Published A', 'slug' => 'pub-a',   'status' => 'published']);
+        Product::create(['title' => 'Draft B',     'slug' => 'draft-b', 'status' => 'draft']);
+
+        $this->getJson('/api/v1/catalog/products/admin')
+            ->assertOk()
+            ->assertJsonStructure(['data', 'links', 'meta'])
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('meta.total', 2);
+    }
+
+    /** @test */
+    public function it_filters_admin_products_by_status(): void
+    {
+        Product::create(['title' => 'Published A', 'slug' => 'pub-a',   'status' => 'published']);
+        Product::create(['title' => 'Draft B',     'slug' => 'draft-b', 'status' => 'draft']);
+        Product::create(['title' => 'Draft C',     'slug' => 'draft-c', 'status' => 'draft']);
+
+        $this->getJson('/api/v1/catalog/products/admin?status=draft')
+            ->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('data.0.status', 'draft')
+            ->assertJsonPath('data.1.status', 'draft');
+
+        $this->getJson('/api/v1/catalog/products/admin?status=published')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.title', 'Published A');
+    }
+
+    /** @test */
+    public function it_rejects_an_invalid_status_filter_on_the_admin_index(): void
+    {
+        $this->getJson('/api/v1/catalog/products/admin?status=archived')
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['status']);
+    }
+
+    /** @test */
+    public function it_filters_admin_products_by_category(): void
+    {
+        $tech = Category::create(['name' => 'Tech',    'slug' => 'tech',    'is_active' => true]);
+        $fashion = Category::create(['name' => 'Fashion', 'slug' => 'fashion', 'is_active' => true]);
+
+        Product::create(['title' => 'Phone', 'slug' => 'phone', 'status' => 'draft',     'category_id' => $tech->id]);
+        Product::create(['title' => 'Shirt', 'slug' => 'shirt', 'status' => 'published', 'category_id' => $fashion->id]);
+
+        $this->getJson("/api/v1/catalog/products/admin?category_id={$tech->id}")
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.category_id', $tech->id);
+    }
+
+    /** @test */
+    public function it_searches_admin_products_by_title(): void
+    {
+        Product::create(['title' => 'Wireless Headphones', 'slug' => 'wireless-headphones', 'status' => 'draft']);
+        Product::create(['title' => 'Running Shoes',       'slug' => 'running-shoes',       'status' => 'published']);
+
+        $this->getJson('/api/v1/catalog/products/admin?search=Wireless')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.title', 'Wireless Headphones');
+    }
+
+    /** @test */
+    public function it_searches_admin_products_by_variant_sku(): void
+    {
+        $product = Product::create(['title' => 'Mystery Box', 'slug' => 'mystery-box', 'status' => 'draft']);
+        ProductVariant::create(['product_id' => $product->id, 'sku' => 'SPECIAL-SKU-99', 'type' => 'color', 'is_default' => true, 'base_price' => 10000]);
+        Product::create(['title' => 'Other', 'slug' => 'other', 'status' => 'published']);
+
+        $this->getJson('/api/v1/catalog/products/admin?search=SPECIAL-SKU')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.title', 'Mystery Box');
+    }
+
+    /** @test */
+    public function it_filters_admin_products_by_price_using_the_default_variant(): void
+    {
+        $cheap = Product::create(['title' => 'Budget Item', 'slug' => 'budget-item', 'status' => 'draft']);
+        ProductVariant::create(['product_id' => $cheap->id, 'sku' => 'CHEAP-01', 'type' => 'color', 'is_default' => true, 'base_price' => 50000]);
+
+        $expensive = Product::create(['title' => 'Premium Item', 'slug' => 'premium-item', 'status' => 'published']);
+        ProductVariant::create(['product_id' => $expensive->id, 'sku' => 'PREM-01', 'type' => 'color', 'is_default' => true, 'base_price' => 500000]);
+
+        $this->getJson('/api/v1/catalog/products/admin?min_price=100000')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.title', 'Premium Item');
+    }
+
+    /** @test */
+    public function it_paginates_the_admin_index_and_respects_per_page(): void
+    {
+        foreach (range(1, 5) as $i) {
+            Product::create(['title' => "Product {$i}", 'slug' => "product-{$i}", 'status' => 'draft']);
+        }
+
+        $this->getJson('/api/v1/catalog/products/admin?per_page=2')
+            ->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('meta.per_page', 2)
+            ->assertJsonPath('meta.total', 5)
+            ->assertJsonPath('meta.last_page', 3);
+    }
+
+    /** @test */
+    public function it_applies_combined_filters_on_the_admin_index(): void
+    {
+        $tech = Category::create(['name' => 'Tech', 'slug' => 'tech', 'is_active' => true]);
+
+        $keyboard = Product::create(['title' => 'Keyboard', 'slug' => 'keyboard', 'status' => 'draft', 'category_id' => $tech->id]);
+        ProductVariant::create(['product_id' => $keyboard->id, 'sku' => 'KB-01', 'type' => 'color', 'is_default' => true, 'base_price' => 80000]);
+
+        // Same category + price + search term but published — excluded by the status filter.
+        $keyboardPub = Product::create(['title' => 'Keyboard Pro', 'slug' => 'keyboard-pro', 'status' => 'published', 'category_id' => $tech->id]);
+        ProductVariant::create(['product_id' => $keyboardPub->id, 'sku' => 'KB-02', 'type' => 'color', 'is_default' => true, 'base_price' => 80000]);
+
+        $this->getJson("/api/v1/catalog/products/admin?status=draft&category_id={$tech->id}&max_price=100000&search=Key")
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.title', 'Keyboard');
+    }
 }
