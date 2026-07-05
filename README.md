@@ -147,6 +147,7 @@ Base prefix: `/api/v1`
 
 | Method | Endpoint | Description |
 |---|---|---|
+| `GET` | `/catalog/products/admin` | Paginated products in **any** status (admin index) — filters: `status`, `category_id`, `min_price`, `max_price`, `search` (title/description/slug/SKU) |
 | `GET` | `/catalog/products/{id}/admin` | Product by ID regardless of publish status |
 | `POST` | `/catalog/categories` | Create category |
 | `PATCH` | `/catalog/categories/{id}` | Update category |

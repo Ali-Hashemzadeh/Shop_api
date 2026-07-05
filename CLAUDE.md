@@ -169,7 +169,7 @@ Match the surrounding code. Concrete patterns used throughout:
 |---|---|---|
 | **Identity** | ✅ Complete | OTP + password auth (split-auth onboarding), profiles, RBAC, provinces/cities, addresses |
 | **Media** | ✅ Complete | File upload ledger + standalone upload/delete endpoints |
-| **Catalog** | ✅ Complete | Categories, products, galleries, variants, atomic nested create, variant upsert on update, variant `type` (`image`/`color`) — 107 tests |
+| **Catalog** | ✅ Complete | Categories, products, galleries, variants, atomic nested create, variant upsert on update, variant `type` (`image`/`color`), admin all-status product index — 128 tests |
 | **Inventory** | ✅ Complete | Stock tracking, reservation lifecycle, append-only ledger — 24 tests |
 | **Cart** | ✅ Complete | Guest + auth carts, stock-validated add/update, Catalog price enrichment — 15 tests |
 | **Orders** | 🚧 Scaffolded | Directory skeleton exists under `Modules/Orders/`; provider **not yet** in `bootstrap/providers.php` and not documented in README/AGENT_CONTEXT — confirm scope before building |
@@ -224,6 +224,11 @@ Match the surrounding code. Concrete patterns used throughout:
   SKU; variants absent from the array are untouched. Invariant: at most one submitted variant
   may have `is_default: true`. All variant mutations are wrapped in the same `DB::transaction`
   as the product update.
+- **Admin product index:** `GET /api/v1/catalog/products/admin` (auth + `catalog.product.view-admin`)
+  returns products in **every** status (draft + published), newest first, paginated. Filters:
+  `status` (`draft`/`published`), `category_id`, `min_price`/`max_price` (default variant), and
+  `search` (LIKE on title, description, slug, or variant SKU). The public `GET /products/{id}` route
+  is `whereNumber`-constrained so it does not shadow `/products/admin`.
 - **No inline file uploads on product endpoints.** Pass `primary_media_id`,
   `gallery_media_ids`, or `variants.*.media_id` (pre-uploaded via `POST /api/v1/media`).
 - Permissions: `catalog.category.{create,update,delete}`,

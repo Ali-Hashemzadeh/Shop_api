@@ -97,21 +97,21 @@ Modules/
       * Delete triplet: `DeleteCategoryAction`, `DeleteProductAction`, `DeleteProductVariantAction` are thin wrappers.
   * **HTTP Layer (Step 6):**
       * 3 Controllers: `CategoriesController`, `ProductsController`, `ProductVariantsController`.
-      * 8 Form Requests: `StoreCategoryRequest`, `UpdateCategoryRequest`, `IndexCategoriesRequest`, `StoreProductRequest`, `UpdateProductRequest`, `IndexProductsRequest`, `StoreProductVariantRequest`, `UpdateProductVariantRequest`.
+      * 9 Form Requests: `StoreCategoryRequest`, `UpdateCategoryRequest`, `IndexCategoriesRequest`, `StoreProductRequest`, `UpdateProductRequest`, `IndexProductsRequest`, `IndexAdminProductsRequest`, `StoreProductVariantRequest`, `UpdateProductVariantRequest`.
       * 4 API Resources: `CategoryResource`, `ProductResource`, `ProductImageResource`, `ProductVariantResource` — all accept DTOs, no Eloquent models.
   * **Routes & Feature Tests (Step 7):**
-      * 20 RESTful routes: POST/GET/PATCH/DELETE for categories, products, variants.
-      * Pagination: `getActiveRootCategories` and `getProductsByCategory` return `LengthAwarePaginator` (15 items/page, 1–100 configurable via `per_page` query param, `page` for page number). Scramble auto-documents both params.
+      * 21 RESTful routes: POST/GET/PATCH/DELETE for categories, products, variants.
+      * Pagination: `getActiveRootCategories`, `getProductsByCategory`, `getProducts`, and `getProductsAdmin` return `LengthAwarePaginator` (15 items/page, 1–100 configurable via `per_page` query param, `page` for page number). Scramble auto-documents both params.
   * **Authorization Layer (Step 8 — Permission-based Policies):**
       * **Public routes** (no auth): all GET read endpoints (category list/show, product show/by-slug/by-category, variant show/by-sku).
-      * **Protected routes** (`auth:sanctum` only on the route): all write operations (POST/PATCH/DELETE) and `GET /products/{id}/admin`. `auth:sanctum` gives 401 for unauthenticated; policies give 403 for unauthorized.
+      * **Protected routes** (`auth:sanctum` only on the route): all write operations (POST/PATCH/DELETE), `GET /products/admin` (all-status admin index), and `GET /products/{id}/admin`. `auth:sanctum` gives 401 for unauthenticated; policies give 403 for unauthorized. The public `GET /products/{id}` route carries a `whereNumber('id')` constraint so it never shadows `/products/admin`.
       * **Policy files** (`Modules\Catalog\Domain\Policies\`): `CategoryPolicy`, `ProductPolicy`, `ProductVariantPolicy`. Each method delegates to `$user->can('catalog.X.Y')`. Typehinted against `Illuminate\Contracts\Auth\Access\Authorizable` — **never** import `Modules\Identity\Domain\Models\User` across the module boundary.
       * **`CatalogAuthServiceProvider`** (`Modules\Catalog\Infrastructure\Providers\`) registers all three policies via `$policies` + `registerPolicies()`. It is booted from `CatalogServiceProvider::register()` via `$this->app->register(CatalogAuthServiceProvider::class)`.
-      * **Authorization split**: `FormRequest::authorize()` handles store/update (runs before validation → always 403, never 422, for unauthorized users). `$this->authorize()` in controllers handles destroy and showAdmin (no FormRequest involved). Controllers use the `AuthorizesRequests` trait.
+      * **Authorization split**: `FormRequest::authorize()` handles store/update and the admin index (`IndexAdminProductsRequest` checks `catalog.product.view-admin`), all running before validation → always 403, never 422, for unauthorized users. `$this->authorize()` in controllers handles destroy and showAdmin (no FormRequest involved). Controllers use the `AuthorizesRequests` trait.
       * **Permissions** seeded in `RolesAndPermissionsSeeder`: `catalog.category.{create,update,delete}`, `catalog.product.{view-admin,create,update,delete}`, `catalog.variant.{create,update,delete}`. Admin role receives all permissions automatically (syncs all). Customer role receives none of these.
       * Authorization is **permission-based, not role-based** — any user granted a specific permission can perform that action, independent of role.
   * **Test Suite (Step 9 — Final):**
-      * 4 feature test classes: `CategoriesTest`, `ProductsTest`, `ProductVariantsTest`, `CatalogAuthorizationTest` — **95 tests total**.
+      * 4 feature test classes: `CategoriesTest`, `ProductsTest`, `ProductVariantsTest`, `CatalogAuthorizationTest` — **128 tests total**.
       * Full CRUD coverage: all create, update, delete, and read actions tested with happy paths, validation failures, 404 scenarios, and invariant enforcement (Cents Rule, is_default single-true, slug uniqueness).
       * Authorization matrix tested in `CatalogAuthorizationTest`: unauthenticated → 401, customer → 403, public routes → 200/404 (never 401/403), plus two permission-not-role proof tests.
       * Dead code removed: `updateVariantPrice` eliminated from `CatalogManagerInterface` and `EloquentCatalogManager` (superseded by `updateProductVariant`).
@@ -216,7 +216,7 @@ Modules/
 |---|---|---|
 | Identity | ✅ Complete (OTP + password) | AddressTest, ProfileTest, AuthControllerTest (10), PasswordAuthTest (11), RolePermissionTest |
 | Media | ✅ Complete | 12 passing (MediaUploadTest) + existing MediaManagerTest |
-| Catalog | ✅ Complete | 95 passing across 4 test classes |
+| Catalog | ✅ Complete | 128 passing across 4 test classes |
 | Inventory | ✅ Complete | 24 passing across 2 test classes |
 | Cart | ✅ Complete | 22 passing (CartTest) |
 | Order | ✅ Complete | 6 passing (OrderTest) |

@@ -129,43 +129,24 @@ class EloquentCatalogManager implements CatalogManagerInterface
             ->where('status', 'published')
             ->with(['images', 'variants']);
 
-        if (isset($filters['category_id'])) {
-            $query->where('category_id', (int) $filters['category_id']);
+        $this->applyProductFilters($query, $filters);
+
+        return $this->paginateProducts($query, $perPage);
+    }
+
+    public function getProductsAdmin(array $filters = [], int $perPage = 15): LengthAwarePaginator
+    {
+        $query = Product::query()
+            ->with(['images', 'variants'])
+            ->latest('id');
+
+        if (isset($filters['status'])) {
+            $query->where('status', (string) $filters['status']);
         }
 
-        if (isset($filters['min_price'])) {
-            $query->whereHas('variants', fn ($q) => $q
-                ->where('is_default', true)
-                ->where('base_price', '>=', (int) $filters['min_price'])
-            );
-        }
+        $this->applyProductFilters($query, $filters, admin: true);
 
-        if (isset($filters['max_price'])) {
-            $query->whereHas('variants', fn ($q) => $q
-                ->where('is_default', true)
-                ->where('base_price', '<=', (int) $filters['max_price'])
-            );
-        }
-
-        if (isset($filters['search']) && $filters['search'] !== '') {
-            $term = '%'.$filters['search'].'%';
-            $query->where(fn ($q) => $q
-                ->where('title', 'like', $term)
-                ->orWhere('description', 'like', $term)
-            );
-        }
-
-        $paginator = $query->paginate($perPage);
-
-        $mediaIds = $paginator->getCollection()
-            ->flatMap(fn (Product $p) => $this->productMediaIds($p))
-            ->unique()
-            ->values()
-            ->all();
-
-        $mediaMap = $this->buildMediaMap($mediaIds);
-
-        return $paginator->through(fn (Product $p) => $this->hydrateProduct($p, $mediaMap));
+        return $this->paginateProducts($query, $perPage);
     }
 
     public function createProduct(array $data): ProductDTO
@@ -264,6 +245,61 @@ class EloquentCatalogManager implements CatalogManagerInterface
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────
+
+    /**
+     * Apply the shared category/price/search filters to a product query.
+     *
+     * When $admin is true the free-text search also matches slug and variant SKU,
+     * which storefront buyers never search on but catalog managers rely upon.
+     */
+    private function applyProductFilters($query, array $filters, bool $admin = false): void
+    {
+        if (isset($filters['category_id'])) {
+            $query->where('category_id', (int) $filters['category_id']);
+        }
+
+        if (isset($filters['min_price'])) {
+            $query->whereHas('variants', fn ($q) => $q
+                ->where('is_default', true)
+                ->where('base_price', '>=', (int) $filters['min_price'])
+            );
+        }
+
+        if (isset($filters['max_price'])) {
+            $query->whereHas('variants', fn ($q) => $q
+                ->where('is_default', true)
+                ->where('base_price', '<=', (int) $filters['max_price'])
+            );
+        }
+
+        if (isset($filters['search']) && $filters['search'] !== '') {
+            $term = '%'.$filters['search'].'%';
+            $query->where(function ($q) use ($term, $admin) {
+                $q->where('title', 'like', $term)
+                    ->orWhere('description', 'like', $term);
+
+                if ($admin) {
+                    $q->orWhere('slug', 'like', $term)
+                        ->orWhereHas('variants', fn ($vq) => $vq->where('sku', 'like', $term));
+                }
+            });
+        }
+    }
+
+    private function paginateProducts($query, int $perPage): LengthAwarePaginator
+    {
+        $paginator = $query->paginate($perPage);
+
+        $mediaIds = $paginator->getCollection()
+            ->flatMap(fn (Product $p) => $this->productMediaIds($p))
+            ->unique()
+            ->values()
+            ->all();
+
+        $mediaMap = $this->buildMediaMap($mediaIds);
+
+        return $paginator->through(fn (Product $p) => $this->hydrateProduct($p, $mediaMap));
+    }
 
     private function hydrateProduct(Product $product, ?Collection $mediaMap = null): ProductDTO
     {

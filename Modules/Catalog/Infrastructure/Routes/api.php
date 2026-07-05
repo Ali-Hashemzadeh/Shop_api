@@ -15,7 +15,7 @@ Route::middleware('api')->prefix('api/v1/catalog')->group(function () {
 
         Route::get('/products', [ProductsController::class, 'index']);
         Route::get('/products/slug/{slug}', [ProductsController::class, 'showBySlug']);
-        Route::get('/products/{id}', [ProductsController::class, 'show']);
+        Route::get('/products/{id}', [ProductsController::class, 'show'])->whereNumber('id');
         Route::get('/categories/{categoryId}/products', [ProductsController::class, 'indexByCategory']);
 
         Route::get('/variants/sku/{sku}', [ProductVariantsController::class, 'showBySku']);
@@ -31,6 +31,7 @@ Route::middleware('api')->prefix('api/v1/catalog')->group(function () {
         Route::delete('/categories/{id}', [CategoriesController::class, 'destroy']);
 
         // Products
+        Route::get('/products/admin', [ProductsController::class, 'indexAdmin']);
         Route::get('/products/{id}/admin', [ProductsController::class, 'showAdmin']);
         Route::post('/products', [ProductsController::class, 'store']);
         Route::patch('/products/{id}', [ProductsController::class, 'update']);
