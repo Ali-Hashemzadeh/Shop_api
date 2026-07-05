@@ -11,6 +11,7 @@ use Modules\Catalog\Application\Actions\DeleteProductAction;
 use Modules\Catalog\Application\Actions\UpdateProductAction;
 use Modules\Catalog\Domain\Contracts\CatalogManagerInterface;
 use Modules\Catalog\Domain\Models\Product;
+use Modules\Catalog\Infrastructure\Http\Requests\IndexAdminProductsRequest;
 use Modules\Catalog\Infrastructure\Http\Requests\IndexProductsRequest;
 use Modules\Catalog\Infrastructure\Http\Requests\StoreProductRequest;
 use Modules\Catalog\Infrastructure\Http\Requests\UpdateProductRequest;
@@ -96,6 +97,23 @@ class ProductsController extends Controller
 
         return ProductResource::collection(
             $this->catalog->getProducts($filters, $request->integer('per_page', 15))
+        );
+    }
+
+    public function indexAdmin(IndexAdminProductsRequest $request): AnonymousResourceCollection
+    {
+        // Authorization (catalog.product.view-admin) is enforced in the Form Request,
+        // so unauthorized users get 403 before validation runs.
+        $filters = array_filter([
+            'status' => $request->string('status')->trim()->toString() ?: null,
+            'category_id' => $request->integer('category_id') ?: null,
+            'min_price' => $request->has('min_price') ? $request->integer('min_price') : null,
+            'max_price' => $request->has('max_price') ? $request->integer('max_price') : null,
+            'search' => $request->string('search')->trim()->toString() ?: null,
+        ], fn ($v) => $v !== null);
+
+        return ProductResource::collection(
+            $this->catalog->getProductsAdmin($filters, $request->integer('per_page', 15))
         );
     }
 

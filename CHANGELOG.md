@@ -2,6 +2,27 @@
 
 ## [Unreleased](https://github.com/laravel/laravel/compare/v12.12.1...12.x)
 
+### Feat — Catalog: admin all-status product index
+
+**Admins can now list products in every status (draft + published) with pagination and filters — previously the only product listings were the public storefront endpoints, which are limited to published products.**
+
+#### Added
+- `GET /api/v1/catalog/products/admin` — paginated products in **any** status, newest first. Gated behind `auth:sanctum` + `catalog.product.view-admin` (401 unauthenticated / 403 unauthorized). Filters: `status` (`draft`/`published`), `category_id`, `min_price`/`max_price` (default variant `base_price`), and `search` (LIKE on title, description, slug, or variant SKU). `per_page` clamped 1–100 (default 15), `page` for the page number.
+- `CatalogManagerInterface::getProductsAdmin(array $filters = [], int $perPage = 15)` implemented in `EloquentCatalogManager` (shared filter/pagination helpers `applyProductFilters` + `paginateProducts`) and passed through uncached in `CachedCatalogManager` (mirrors `findProductAdmin` — admin views must never serve stale drafts).
+- `IndexAdminProductsRequest` — validates the filter set and enforces `catalog.product.view-admin` in `authorize()` (403 before validation).
+- `ProductsController::indexAdmin()`.
+
+#### Changed
+- Public `GET /api/v1/catalog/products/{id}` route now carries a `whereNumber('id')` constraint so it no longer shadows the new `/products/admin` path.
+
+#### Tests
+- `ProductsTest`: +9 tests (all-status listing, status/category/price/title/SKU search filters, pagination, combined filters, invalid-status rejection).
+- `CatalogAuthorizationTest`: +2 tests (401 unauthenticated, 403 customer).
+
+**Result: test suite is 245/245 green (688 assertions).**
+
+---
+
 ### Feat — Order Module: foundational infrastructure
 
 **A complete, production-ready Order module serving as an immutable financial contract anchor.**
