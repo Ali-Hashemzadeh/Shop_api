@@ -175,7 +175,7 @@ Match the surrounding code. Concrete patterns used throughout:
 | **Orders** | 🚧 Scaffolded | Directory skeleton exists under `Modules/Orders/`; provider **not yet** in `bootstrap/providers.php` and not documented in README/AGENT_CONTEXT — confirm scope before building |
 | Payment | 📋 Planned | Pending roadmap review |
 
-**Test suite baseline: 245 tests / 688 assertions, all green.**
+**Test suite baseline: 260 tests / 748 assertions, all green.**
 
 ### Identity — key facts
 - **OTP + password split-auth, phone-based, unified register+login** (sign-up == login).
