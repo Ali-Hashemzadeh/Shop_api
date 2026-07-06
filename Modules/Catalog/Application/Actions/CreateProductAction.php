@@ -21,7 +21,7 @@ class CreateProductAction
             $product = $this->catalog->createProduct([
                 'category_id' => $data['category_id'] ?? null,
                 'title' => $data['title'],
-                'slug' => $data['slug'] ?? Str::slug($data['title']),
+                'slug' => $data['slug'] ?? Str::slug($data['title'], '-', null),
                 'description' => $data['description'] ?? null,
                 'features' => $data['features'] ?? null,
                 'status' => $data['status'] ?? 'draft',
