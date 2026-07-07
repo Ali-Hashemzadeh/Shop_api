@@ -37,7 +37,7 @@ class CreateProductVariantAction
 
         return DB::transaction(function () use ($productId, $data, $variantImage): ProductVariantDTO {
             $existingCount = ProductVariant::where('product_id', $productId)->lockForUpdate()->count();
-            $sku = 'bdp'.$productId.'-v'.($existingCount + 1);
+            $sku = 'bdp'.$productId.'-'.($existingCount + 1) . random_int(10000, 99999);
 
             $mediaId = $this->resolveMediaId($variantImage, $data['media_id'] ?? null);
             $isDefault = (bool) ($data['is_default'] ?? false);
