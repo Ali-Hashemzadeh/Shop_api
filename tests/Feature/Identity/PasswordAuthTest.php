@@ -4,6 +4,7 @@ namespace Tests\Feature\Identity;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Laravel\Sanctum\Sanctum;
 use Modules\Identity\Domain\Contracts\OtpSenderInterface;
 use Modules\Identity\Domain\Models\User;
 use Tests\TestCase;
@@ -74,33 +75,9 @@ class PasswordAuthTest extends TestCase
             ->assertJsonValidationErrors(['phone_number']);
     }
 
-    // ---- registration with a password ------------------------------------
+    // ---- registration leaves the account password-less -------------------
 
-    public function test_a_new_user_can_register_with_a_password_stored_as_a_hash(): void
-    {
-        $this->postJson('/api/v1/otp/request', ['phone' => '09123456789'])->assertOk();
-
-        $response = $this->postJson('/api/v1/otp/verify', [
-            'phone' => '09123456789',
-            'code' => $this->lastCode(),
-            'device_name' => 'phpunit',
-            'name' => 'Sara Ahmadi',
-            'password' => 'super-secret-pw',
-        ]);
-
-        $response
-            ->assertOk()
-            ->assertJsonStructure(['message', 'user' => ['id', 'phone'], 'token']);
-
-        $user = User::where('phone', '09123456789')->first();
-        $this->assertSame('Sara Ahmadi', $user->name);
-        $this->assertNotNull($user->password);
-        // Stored as a hash, never in cleartext, and verifiable.
-        $this->assertNotSame('super-secret-pw', $user->password);
-        $this->assertTrue(Hash::check('super-secret-pw', $user->password));
-    }
-
-    public function test_registration_without_a_password_leaves_it_null(): void
+    public function test_otp_registration_never_sets_a_password(): void
     {
         $this->postJson('/api/v1/otp/request', ['phone' => '09123456789'])->assertOk();
 
@@ -113,16 +90,102 @@ class PasswordAuthTest extends TestCase
         $this->assertNull(User::where('phone', '09123456789')->first()->password);
     }
 
-    public function test_registration_rejects_a_too_short_password(): void
+    public function test_verify_ignores_a_password_passed_in_the_request(): void
     {
+        // The verify endpoint no longer accepts a password; any password field
+        // in the payload is silently ignored and the account stays password-less.
         $this->postJson('/api/v1/otp/request', ['phone' => '09123456789'])->assertOk();
 
         $this->postJson('/api/v1/otp/verify', [
             'phone' => '09123456789',
             'code' => $this->lastCode(),
             'device_name' => 'phpunit',
+            'password' => 'super-secret-pw',
+        ])->assertOk();
+
+        $this->assertNull(User::where('phone', '09123456789')->first()->password);
+    }
+
+    // ---- set password (authenticated) ------------------------------------
+
+    public function test_an_authenticated_user_can_set_a_password_stored_as_a_hash(): void
+    {
+        $user = User::factory()->create(['password' => null]);
+
+        Sanctum::actingAs($user);
+
+        $response = $this->postJson('/api/v1/auth/set-password', [
+            'password' => 'super-secret-pw',
+            'password_confirmation' => 'super-secret-pw',
+        ]);
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('message', 'Password set successfully.')
+            ->assertJsonStructure(['message', 'user' => ['id', 'phone']]);
+
+        $user->refresh();
+        $this->assertNotNull($user->password);
+        // Stored as a hash, never in cleartext, and verifiable.
+        $this->assertNotSame('super-secret-pw', $user->password);
+        $this->assertTrue(Hash::check('super-secret-pw', $user->password));
+    }
+
+    public function test_setting_a_password_lets_the_user_log_in_with_it(): void
+    {
+        $user = User::factory()->create([
+            'phone' => '09123456789',
+            'password' => null,
+        ]);
+
+        Sanctum::actingAs($user);
+
+        $this->postJson('/api/v1/auth/set-password', [
+            'password' => 'brand-new-pw',
+            'password_confirmation' => 'brand-new-pw',
+        ])->assertOk();
+
+        $this->postJson('/api/v1/auth/login-password', [
+            'phone_number' => '09123456789',
+            'password' => 'brand-new-pw',
+        ])->assertOk()->assertJsonStructure(['message', 'user', 'token']);
+    }
+
+    public function test_set_password_requires_authentication(): void
+    {
+        $this->postJson('/api/v1/auth/set-password', [
+            'password' => 'super-secret-pw',
+            'password_confirmation' => 'super-secret-pw',
+        ])->assertUnauthorized();
+    }
+
+    public function test_set_password_rejects_a_too_short_password(): void
+    {
+        Sanctum::actingAs(User::factory()->create(['password' => null]));
+
+        $this->postJson('/api/v1/auth/set-password', [
             'password' => 'short',
+            'password_confirmation' => 'short',
         ])->assertStatus(422)->assertJsonValidationErrors(['password']);
+    }
+
+    public function test_set_password_rejects_a_mismatched_confirmation(): void
+    {
+        Sanctum::actingAs(User::factory()->create(['password' => null]));
+
+        $this->postJson('/api/v1/auth/set-password', [
+            'password' => 'super-secret-pw',
+            'password_confirmation' => 'different-pw',
+        ])->assertStatus(422)->assertJsonValidationErrors(['password']);
+    }
+
+    public function test_set_password_requires_a_password(): void
+    {
+        Sanctum::actingAs(User::factory()->create(['password' => null]));
+
+        $this->postJson('/api/v1/auth/set-password', [])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['password']);
     }
 
     // ---- password login ---------------------------------------------------

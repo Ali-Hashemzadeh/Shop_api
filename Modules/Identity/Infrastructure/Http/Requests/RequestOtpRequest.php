@@ -15,8 +15,9 @@ class RequestOtpRequest extends FormRequest
     {
         return [
             'phone' => ['required', 'string', 'regex:/^09\d{9}$/'],
-            // Optional display name applied only when the account is created.
+            // Optional names applied only when the account is created.
             'name' => ['nullable', 'string', 'max:120'],
+            'last_name' => ['nullable', 'string', 'max:120'],
         ];
     }
 

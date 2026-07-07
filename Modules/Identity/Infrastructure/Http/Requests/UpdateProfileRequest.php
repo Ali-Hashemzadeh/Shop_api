@@ -23,6 +23,7 @@ class UpdateProfileRequest extends FormRequest
 
         $rules = [
             'name' => ['sometimes', 'string', 'max:120'],
+            'last_name' => ['sometimes', 'nullable', 'string', 'max:120'],
             'email' => [
                 'sometimes',
                 'nullable',

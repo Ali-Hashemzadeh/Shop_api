@@ -181,15 +181,23 @@ Match the surrounding code. Concrete patterns used throughout:
 - **OTP + password split-auth, phone-based, unified register+login** (sign-up == login).
   `POST /api/v1/auth/check-user` (`phone_number`) returns `is_new_user` + `allowed_methods`:
   unknown phones get `["otp"]` (verify ownership first), known phones get `["password", "otp"]`.
-  `POST /api/v1/otp/request` (`phone` `09xxxxxxxxx`, optional `name`) finds-or-creates the
-  user (assigns `customer` on first contact) and sends a hashed, short-TTL numeric code.
-  `POST /api/v1/otp/verify` (`phone`, `code`, `device_name`, optional `name`/`password`)
-  consumes the single-use code, optionally sets a hashed password, and mints a Sanctum token.
+  `POST /api/v1/otp/request` (`phone` `09xxxxxxxxx`, optional `name`/`last_name`) finds-or-creates
+  the user (assigns `customer` on first contact, persisting any supplied names) and sends a
+  hashed, short-TTL numeric code.
+  `POST /api/v1/otp/verify` (`phone`, `code`, `device_name`) consumes the single-use code and
+  mints a Sanctum token — it only proves phone ownership and no longer accepts `name`/`password`.
+- **Set password:** `POST /api/v1/auth/set-password` (`password`, 8–255, `confirmed` +
+  `password_confirmation`) is **authenticated** (`auth:sanctum`) — an existing user adds or replaces
+  their own password (hashed via `Hash::make`); the token proves ownership, so no current password
+  is required. Guests get **401**; mismatched confirmation → **422**.
 - **Password login:** `POST /api/v1/auth/login-password` (`phone_number`, `password`,
   optional `device_name`) verifies via `Hash::check` and mints a token. Unknown phone / wrong
   password / password-less account all return a generic **401 `Invalid credentials.`**
   Passwords are hashed (`Hash::make`); `password` is nullable so accounts may stay OTP-only.
   `throttle:otp` guards the route; `check-user` uses `throttle:public`.
+- **Profile:** `User` has a nullable `last_name` alongside `name`; both are settable at OTP
+  registration and via `PATCH /api/v1/profile` (and admin user update), and appear on
+  `UserResource`/`AuthUserResource`.
 - OTP is stored **hashed** (`otp_code`, hidden) with `otp_expires_at`; verified via
   `Hash::check`, consumed on success (replay-safe).
 - **Delivery boundary:** `OtpSenderInterface::send(phone, code)`. In production, bound to

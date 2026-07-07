@@ -43,13 +43,17 @@ class ProductVariantsTest extends TestCase
 
         $response->assertCreated()
             ->assertJsonStructure(['id', 'sku', 'type', 'is_default', 'base_price', 'compare_at_price', 'attributes', 'image_url'])
-            ->assertJsonPath('sku', 'bdp'.$this->product->id.'-v1')
             ->assertJsonPath('type', 'color')
             ->assertJsonPath('base_price', 4999)
             ->assertJsonPath('is_default', true);
 
+        // SKUs are auto-generated as bdp{productId}-{seq}{random} — assert the
+        // stable prefix and reuse the returned value for the DB assertion.
+        $sku = $response->json('sku');
+        $this->assertStringStartsWith('bdp'.$this->product->id.'-', $sku);
+
         $this->assertDatabaseHas('product_variants', [
-            'sku' => 'bdp'.$this->product->id.'-v1',
+            'sku' => $sku,
             'type' => 'color',
             'base_price' => 4999,
         ]);
@@ -125,13 +129,17 @@ class ProductVariantsTest extends TestCase
     /** @test */
     public function it_generates_unique_skus_for_consecutive_variants(): void
     {
-        $this->postJson("/api/v1/catalog/products/{$this->product->id}/variants", [
+        $first = $this->postJson("/api/v1/catalog/products/{$this->product->id}/variants", [
             'type' => 'color', 'base_price' => 1000,
-        ])->assertCreated()->assertJsonPath('sku', 'bdp'.$this->product->id.'-v1');
+        ])->assertCreated()->json('sku');
 
-        $this->postJson("/api/v1/catalog/products/{$this->product->id}/variants", [
+        $second = $this->postJson("/api/v1/catalog/products/{$this->product->id}/variants", [
             'type' => 'color', 'base_price' => 2000,
-        ])->assertCreated()->assertJsonPath('sku', 'bdp'.$this->product->id.'-v2');
+        ])->assertCreated()->json('sku');
+
+        $this->assertStringStartsWith('bdp'.$this->product->id.'-', $first);
+        $this->assertStringStartsWith('bdp'.$this->product->id.'-', $second);
+        $this->assertNotSame($first, $second);
     }
 
     /** @test */
@@ -182,19 +190,20 @@ class ProductVariantsTest extends TestCase
             'base_price' => 1000,
         ]);
 
-        $this->postJson("/api/v1/catalog/products/{$this->product->id}/variants", [
+        $newSku = $this->postJson("/api/v1/catalog/products/{$this->product->id}/variants", [
             'type' => 'color',
             'base_price' => 2000,
             'is_default' => true,
         ])->assertCreated()
-            ->assertJsonPath('is_default', true);
+            ->assertJsonPath('is_default', true)
+            ->json('sku');
 
         $this->assertDatabaseHas('product_variants', [
             'sku' => 'bdp'.$this->product->id.'-v1',
             'is_default' => false,
         ]);
         $this->assertDatabaseHas('product_variants', [
-            'sku' => 'bdp'.$this->product->id.'-v2',
+            'sku' => $newSku,
             'is_default' => true,
         ]);
     }

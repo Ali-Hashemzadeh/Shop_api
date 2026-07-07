@@ -18,4 +18,6 @@ Route::middleware('throttle:public')->group(function () {
 Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
     Route::post('/logout', [AuthController::class, 'logout']);
+    // Authenticated users add or replace their password; the token proves ownership.
+    Route::post('/auth/set-password', [AuthController::class, 'setPassword']);
 });

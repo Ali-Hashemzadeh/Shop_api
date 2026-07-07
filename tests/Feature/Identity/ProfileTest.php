@@ -20,7 +20,8 @@ class ProfileTest extends TestCase
     public function test_authenticated_user_can_view_profile(): void
     {
         $user = User::factory()->create([
-            'name' => 'Ali Rezaei',
+            'name' => 'Ali',
+            'last_name' => 'Rezaei',
             'email' => 'ali@example.com',
             'phone' => '09120000001',
         ]);
@@ -30,9 +31,31 @@ class ProfileTest extends TestCase
         $this->getJson('/api/v1/profile')
             ->assertOk()
             ->assertJsonPath('data.id', $user->id)
-            ->assertJsonPath('data.name', 'Ali Rezaei')
+            ->assertJsonPath('data.name', 'Ali')
+            ->assertJsonPath('data.last_name', 'Rezaei')
             ->assertJsonPath('data.email', 'ali@example.com')
             ->assertJsonPath('data.phone', '09120000001');
+    }
+
+    public function test_authenticated_user_can_update_last_name(): void
+    {
+        $user = User::factory()->create([
+            'name' => 'Ali',
+            'last_name' => 'Old',
+        ]);
+
+        $this->actingAsCustomer($user);
+
+        $this->patchJson('/api/v1/profile', [
+            'last_name' => 'Rezaei',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.last_name', 'Rezaei');
+
+        $this->assertDatabaseHas('users', [
+            'id' => $user->id,
+            'last_name' => 'Rezaei',
+        ]);
     }
 
     public function test_authenticated_user_can_update_profile(): void

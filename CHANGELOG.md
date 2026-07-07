@@ -2,6 +2,22 @@
 
 ## [Unreleased](https://github.com/laravel/laravel/compare/v12.12.1...12.x)
 
+### Change — Identity: move password-setting off OTP verify + add `last_name`
+
+**OTP verify now only proves phone ownership; passwords are set by an authenticated endpoint, and the profile gains a family name.**
+
+#### Changed
+- `VerifyOtp` action + `VerifyOtpRequest` — no longer accept `name` or `password`. Verify validates and consumes the code and mints a token; that's it. A display name is captured at `POST /api/v1/otp/request`; a password is set via the new set-password endpoint.
+
+#### Added
+- `Modules/Identity/Application/Actions/SetPassword.php` + `SetPasswordRequest.php` — an authenticated user sets or replaces their own password (`required`, 8–255, `confirmed` — needs a matching `password_confirmation`, hashed via `Hash::make`). The Sanctum token proves ownership, so no current password is required.
+- `AuthController::setPassword()` and route `POST /api/v1/auth/set-password` (`auth:sanctum`, `throttle:api`). Guests → `401`.
+- `users.last_name` — nullable family name (migration `2026_07_07_000001_add_last_name_to_users_table`). Mass-assignable on `User`, seeded by `UserFactory`, settable at OTP registration (`POST /api/v1/otp/request`) and via profile update (`PATCH /api/v1/profile`, admin `PATCH /api/v1/admin/users/{user}`), and exposed on `UserResource` + `AuthUserResource`.
+
+#### Tests
+- `PasswordAuthTest` reworked (15 tests): OTP registration leaves the account password-less, verify silently ignores a stray `password`, and the authenticated set-password flow is covered (hash storage, subsequent login, short/missing password → 422, guest → 401).
+- `ProfileTest` (+1) and `AuthControllerTest` extended for `last_name` view/update/registration.
+
 ### Feat — Identity Module: password authentication alongside OTP (split-auth onboarding)
 
 **Returning users can now log in with a password; new users still verify phone ownership via OTP first.**

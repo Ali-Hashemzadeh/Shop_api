@@ -34,23 +34,14 @@ class VerifyOtp
             ]);
         }
 
-        // Consume the code so it cannot be replayed. New users completing
-        // registration may set a display name and a password in the same step;
-        // the password is hashed before it is persisted.
-        $attributes = [
+        // Consume the code so it cannot be replayed. Verification only proves
+        // phone ownership and mints a token; a display name is captured during
+        // the OTP request, and a password is set later via the authenticated
+        // set-password endpoint.
+        $this->users->update($user, [
             'otp_code' => null,
             'otp_expires_at' => null,
-        ];
-
-        if (! empty($data['name'])) {
-            $attributes['name'] = $data['name'];
-        }
-
-        if (! empty($data['password'])) {
-            $attributes['password'] = Hash::make($data['password']);
-        }
-
-        $this->users->update($user, $attributes);
+        ]);
 
         $token = $user->createToken($data['device_name'])->plainTextToken;
 
@@ -58,6 +49,7 @@ class VerifyOtp
             'message' => 'Logged in successfully.',
             'user' => $user,
             'token' => $token,
+            'has_password' => (!empty($user->password)) ? true : false,
         ];
     }
 }

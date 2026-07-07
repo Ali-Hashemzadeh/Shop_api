@@ -19,6 +19,10 @@ class UpdateProfile
             $attributes['name'] = $data['name'];
         }
 
+        if (array_key_exists('last_name', $data)) {
+            $attributes['last_name'] = $data['last_name'];
+        }
+
         if (array_key_exists('email', $data)) {
             $attributes['email'] = $data['email'];
         }

@@ -22,11 +22,15 @@ class CheckUserStatus
      */
     public function handle(array $data): array
     {
-        $isNewUser = $this->users->findByPhone($data['phone_number']) === null;
+        $user = $this->users->findByPhone($data['phone_number']);
+        $isNewUser = $user === null;
+        $hasPassword = ! $isNewUser && ! empty($user->password);
 
         return [
             'is_new_user' => $isNewUser,
-            'allowed_methods' => $isNewUser ? ['otp'] : ['password', 'otp'],
+            'allowed_methods' => $hasPassword
+                ? ['password', 'otp']
+                : ['otp'],
         ];
     }
 }
