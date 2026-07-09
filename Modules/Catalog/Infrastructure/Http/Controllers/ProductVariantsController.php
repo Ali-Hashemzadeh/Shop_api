@@ -9,6 +9,7 @@ use Modules\Catalog\Application\Actions\CreateProductVariantAction;
 use Modules\Catalog\Application\Actions\DeleteProductVariantAction;
 use Modules\Catalog\Application\Actions\UpdateProductVariantAction;
 use Modules\Catalog\Domain\Contracts\CatalogManagerInterface;
+use Modules\Catalog\Domain\Models\Product;
 use Modules\Catalog\Domain\Models\ProductVariant;
 use Modules\Catalog\Infrastructure\Http\Requests\StoreProductVariantRequest;
 use Modules\Catalog\Infrastructure\Http\Requests\UpdateProductVariantRequest;
@@ -25,10 +26,12 @@ class ProductVariantsController extends Controller
         private readonly CatalogManagerInterface $catalog,
     ) {}
 
-    public function store(StoreProductVariantRequest $request, int $productId): JsonResponse
+    public function store(StoreProductVariantRequest $request, string $productUuid): JsonResponse
     {
+        $product = Product::query()->where('uuid', $productUuid)->firstOrFail();
+
         $dto = $this->createAction->handle(
-            $productId,
+            $product->id,
             $request->safe()->except(['variant_image']),
             $request->file('variant_image'),
         );

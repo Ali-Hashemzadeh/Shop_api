@@ -98,9 +98,9 @@ class CatalogSampleDataSeeder extends Seeder
             ['slug' => $slug],
             [
                 'category_id' => $category->id,
-                'title'       => $title,
+                'title' => $title,
                 'description' => $description,
-                'status'      => 'published',
+                'status' => 'published',
             ],
         );
 
@@ -110,13 +110,13 @@ class CatalogSampleDataSeeder extends Seeder
 
         foreach ($variants as $i => $v) {
             ProductVariant::create([
-                'product_id'       => $product->id,
-                'sku'              => 'bdp'.$product->id.'-v'.($i + 1),
-                'type'             => 'color',
-                'is_default'       => $i === 0,
-                'base_price'       => $v['price'],
+                'product_id' => $product->id,
+                'sku' => 'bdp'.$product->id.'-v'.($i + 1),
+                'type' => 'color',
+                'is_default' => $i === 0,
+                'base_price' => $v['price'],
                 'compare_at_price' => $v['compare'],
-                'attributes'       => $v['attrs'],
+                'attributes' => $v['attrs'],
             ]);
         }
     }

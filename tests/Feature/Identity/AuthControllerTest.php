@@ -49,6 +49,7 @@ class AuthControllerTest extends TestCase
         $response = $this->postJson('/api/v1/otp/request', [
             'phone' => '09123456789',
             'name' => 'Hojjat',
+            'last_name' => 'Karimi',
         ]);
 
         $response
@@ -62,6 +63,7 @@ class AuthControllerTest extends TestCase
         $user = User::where('phone', '09123456789')->first();
         $this->assertNotNull($user);
         $this->assertSame('Hojjat', $user->name);
+        $this->assertSame('Karimi', $user->last_name);
         $this->assertTrue($user->hasRole('customer'));
         $this->assertNotNull($user->otp_code);
         $this->assertNotNull($user->otp_expires_at);

@@ -15,7 +15,11 @@ Route::middleware('api')->prefix('api/v1/catalog')->group(function () {
 
         Route::get('/products', [ProductsController::class, 'index']);
         Route::get('/products/slug/{slug}', [ProductsController::class, 'showBySlug']);
-        Route::get('/products/{id}', [ProductsController::class, 'show'])->whereNumber('id');
+        // Accept any UUID-or-numeric segment so a wrong/legacy id resolves to a clean
+        // "Product not found." 404 in the controller instead of a routing 404. The
+        // hex+hyphen pattern still excludes reserved words like `admin`/`slug`, so this
+        // route never shadows `/products/admin` or `/products/slug/{slug}`.
+        Route::get('/products/{uuid}', [ProductsController::class, 'show'])->where('uuid', '[0-9a-fA-F\-]+');
         Route::get('/categories/{categoryId}/products', [ProductsController::class, 'indexByCategory']);
 
         Route::get('/variants/sku/{sku}', [ProductVariantsController::class, 'showBySku']);
@@ -32,17 +36,20 @@ Route::middleware('api')->prefix('api/v1/catalog')->group(function () {
 
         // Products
         Route::get('/products/admin', [ProductsController::class, 'indexAdmin']);
-        Route::get('/products/{id}/admin', [ProductsController::class, 'showAdmin']);
+        // Same UUID-or-numeric constraint as the public show route: a wrong/legacy id
+        // reaches the controller/action for a clean 404 rather than a routing 404/405,
+        // while `admin` (non-hex) is still excluded so it never shadows `/products/admin`.
+        Route::get('/products/{uuid}/admin', [ProductsController::class, 'showAdmin'])->where('uuid', '[0-9a-fA-F\-]+');
         Route::post('/products', [ProductsController::class, 'store']);
-        Route::patch('/products/{id}', [ProductsController::class, 'update']);
-        Route::delete('/products/{id}', [ProductsController::class, 'destroy']);
+        Route::patch('/products/{uuid}', [ProductsController::class, 'update'])->where('uuid', '[0-9a-fA-F\-]+');
+        Route::delete('/products/{uuid}', [ProductsController::class, 'destroy'])->where('uuid', '[0-9a-fA-F\-]+');
 
         // Gallery management
-        Route::post('/products/{productId}/gallery', [ProductGalleryController::class, 'store']);
-        Route::delete('/products/{productId}/gallery/{imageId}', [ProductGalleryController::class, 'destroy']);
+        Route::post('/products/{productUuid}/gallery', [ProductGalleryController::class, 'store'])->where('productUuid', '[0-9a-fA-F\-]+');
+        Route::delete('/products/{productUuid}/gallery/{imageId}', [ProductGalleryController::class, 'destroy'])->where('productUuid', '[0-9a-fA-F\-]+');
 
         // Variants
-        Route::post('/products/{productId}/variants', [ProductVariantsController::class, 'store']);
+        Route::post('/products/{productUuid}/variants', [ProductVariantsController::class, 'store'])->where('productUuid', '[0-9a-fA-F\-]+');
         Route::patch('/variants/{variantId}', [ProductVariantsController::class, 'update']);
         Route::delete('/variants/{variantId}', [ProductVariantsController::class, 'destroy']);
     });

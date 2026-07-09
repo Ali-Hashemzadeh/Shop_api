@@ -181,15 +181,23 @@ Match the surrounding code. Concrete patterns used throughout:
 - **OTP + password split-auth, phone-based, unified register+login** (sign-up == login).
   `POST /api/v1/auth/check-user` (`phone_number`) returns `is_new_user` + `allowed_methods`:
   unknown phones get `["otp"]` (verify ownership first), known phones get `["password", "otp"]`.
-  `POST /api/v1/otp/request` (`phone` `09xxxxxxxxx`, optional `name`) finds-or-creates the
-  user (assigns `customer` on first contact) and sends a hashed, short-TTL numeric code.
-  `POST /api/v1/otp/verify` (`phone`, `code`, `device_name`, optional `name`/`password`)
-  consumes the single-use code, optionally sets a hashed password, and mints a Sanctum token.
+  `POST /api/v1/otp/request` (`phone` `09xxxxxxxxx`, optional `name`/`last_name`) finds-or-creates
+  the user (assigns `customer` on first contact, persisting any supplied names) and sends a
+  hashed, short-TTL numeric code.
+  `POST /api/v1/otp/verify` (`phone`, `code`, `device_name`) consumes the single-use code and
+  mints a Sanctum token — it only proves phone ownership and no longer accepts `name`/`password`.
+- **Set password:** `POST /api/v1/auth/set-password` (`password`, 8–255, `confirmed` +
+  `password_confirmation`) is **authenticated** (`auth:sanctum`) — an existing user adds or replaces
+  their own password (hashed via `Hash::make`); the token proves ownership, so no current password
+  is required. Guests get **401**; mismatched confirmation → **422**.
 - **Password login:** `POST /api/v1/auth/login-password` (`phone_number`, `password`,
   optional `device_name`) verifies via `Hash::check` and mints a token. Unknown phone / wrong
   password / password-less account all return a generic **401 `Invalid credentials.`**
   Passwords are hashed (`Hash::make`); `password` is nullable so accounts may stay OTP-only.
   `throttle:otp` guards the route; `check-user` uses `throttle:public`.
+- **Profile:** `User` has a nullable `last_name` alongside `name`; both are settable at OTP
+  registration and via `PATCH /api/v1/profile` (and admin user update), and appear on
+  `UserResource`/`AuthUserResource`.
 - OTP is stored **hashed** (`otp_code`, hidden) with `otp_expires_at`; verified via
   `Hash::check`, consumed on success (replay-safe).
 - **Delivery boundary:** `OtpSenderInterface::send(phone, code)`. In production, bound to
@@ -208,8 +216,14 @@ Match the surrounding code. Concrete patterns used throughout:
 - **One usage flow:** pre-upload (`POST /api/v1/media` → get `media_id` → pass `primary_media_id` / `gallery_media_ids` / `variants.*.media_id` to a Catalog write endpoint). Catalog product endpoints no longer accept inline file uploads directly.
 
 ### Catalog — key facts
+- **Product public identifier is a UUID.** `Product` carries a unique, server-generated `uuid`
+  (never accepted from client input) that is the API-facing handle: all product-level routes are
+  `{uuid}` (with a `whereUuid` constraint) and the response `id` field is the UUID. The integer
+  primary key stays internal and remains the FK target for variants/images; SKUs still embed the
+  internal integer id. `CatalogManagerInterface` product-aggregate methods (`findProduct`,
+  `findProductAdmin`, `updateProduct`, `deleteProduct`) take the `string $uuid`.
 - Entities: `Category` (infinite nesting via `parent_id`), `Product` (`draft`/`published`,
-  `primary_media_id`), `ProductImage` (gallery, `sort_order`), `ProductVariant` (auto-generated
+  `uuid`, `primary_media_id`), `ProductImage` (gallery, `sort_order`), `ProductVariant` (auto-generated
   `sku` format `bdp{productId}-v{n}` — **never accepted from client input**, integer
   `base_price`/`compare_at_price`, JSON `attributes`, per-variant
   `type` (`image` or `color`, required), `media_id`, `is_default` **single-true invariant enforced at the application layer**).
@@ -218,7 +232,7 @@ Match the surrounding code. Concrete patterns used throughout:
   array. When provided, the product and all variants are created together inside a single
   `DB::transaction`. Validation enforces that exactly one variant has `is_default: true`.
   Omitting `variants` is valid — the standalone variant routes are unchanged.
-- **Variant upsert on update:** `PATCH /api/v1/catalog/products/{id}` also accepts an
+- **Variant upsert on update:** `PATCH /api/v1/catalog/products/{uuid}` also accepts an
   optional `variants` array with upsert-by-ID semantics — known `id` already on this product →
   `updateProductVariant`; missing or unknown `id` → `createProductVariant` with auto-generated
   SKU; variants absent from the array are untouched. Invariant: at most one submitted variant
@@ -227,8 +241,8 @@ Match the surrounding code. Concrete patterns used throughout:
 - **Admin product index:** `GET /api/v1/catalog/products/admin` (auth + `catalog.product.view-admin`)
   returns products in **every** status (draft + published), newest first, paginated. Filters:
   `status` (`draft`/`published`), `category_id`, `min_price`/`max_price` (default variant), and
-  `search` (LIKE on title, description, slug, or variant SKU). The public `GET /products/{id}` route
-  is `whereNumber`-constrained so it does not shadow `/products/admin`.
+  `search` (LIKE on title, description, slug, or variant SKU). Product-level routes are addressed by
+  `uuid` with a `whereUuid` constraint, so `GET /products/{uuid}` never shadows `/products/admin`.
 - **No inline file uploads on product endpoints.** Pass `primary_media_id`,
   `gallery_media_ids`, or `variants.*.media_id` (pre-uploaded via `POST /api/v1/media`).
 - Permissions: `catalog.category.{create,update,delete}`,

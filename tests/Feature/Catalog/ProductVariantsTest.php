@@ -35,7 +35,7 @@ class ProductVariantsTest extends TestCase
     /** @test */
     public function it_can_create_a_variant_with_integer_prices(): void
     {
-        $response = $this->postJson("/api/v1/catalog/products/{$this->product->id}/variants", [
+        $response = $this->postJson("/api/v1/catalog/products/{$this->product->uuid}/variants", [
             'type' => 'color',
             'base_price' => 4999,
             'is_default' => true,
@@ -43,13 +43,17 @@ class ProductVariantsTest extends TestCase
 
         $response->assertCreated()
             ->assertJsonStructure(['id', 'sku', 'type', 'is_default', 'base_price', 'compare_at_price', 'attributes', 'image_url'])
-            ->assertJsonPath('sku', 'bdp'.$this->product->id.'-v1')
             ->assertJsonPath('type', 'color')
             ->assertJsonPath('base_price', 4999)
             ->assertJsonPath('is_default', true);
 
+        // SKUs are auto-generated as bdp{productId}-{seq}{random} — assert the
+        // stable prefix and reuse the returned value for the DB assertion.
+        $sku = $response->json('sku');
+        $this->assertStringStartsWith('bdp'.$this->product->id.'-', $sku);
+
         $this->assertDatabaseHas('product_variants', [
-            'sku' => 'bdp'.$this->product->id.'-v1',
+            'sku' => $sku,
             'type' => 'color',
             'base_price' => 4999,
         ]);
@@ -59,7 +63,7 @@ class ProductVariantsTest extends TestCase
     public function it_accepts_a_whole_number_string_price_from_form_encoded_requests(): void
     {
         $response = $this->post(
-            "/api/v1/catalog/products/{$this->product->id}/variants",
+            "/api/v1/catalog/products/{$this->product->uuid}/variants",
             ['type' => 'color', 'base_price' => '2999'],
             ['Accept' => 'application/json']
         );
@@ -71,7 +75,7 @@ class ProductVariantsTest extends TestCase
     /** @test */
     public function it_rejects_a_float_base_price_enforcing_the_cents_rule(): void
     {
-        $this->postJson("/api/v1/catalog/products/{$this->product->id}/variants", [
+        $this->postJson("/api/v1/catalog/products/{$this->product->uuid}/variants", [
             'type' => 'color',
             'base_price' => 19.99,
         ])->assertUnprocessable()
@@ -82,7 +86,7 @@ class ProductVariantsTest extends TestCase
     public function it_rejects_a_decimal_string_base_price(): void
     {
         $this->post(
-            "/api/v1/catalog/products/{$this->product->id}/variants",
+            "/api/v1/catalog/products/{$this->product->uuid}/variants",
             ['type' => 'color', 'base_price' => '19.99'],
             ['Accept' => 'application/json']
         )->assertUnprocessable()
@@ -92,7 +96,7 @@ class ProductVariantsTest extends TestCase
     /** @test */
     public function it_requires_base_price_and_type_to_create_a_variant(): void
     {
-        $this->postJson("/api/v1/catalog/products/{$this->product->id}/variants", [])
+        $this->postJson("/api/v1/catalog/products/{$this->product->uuid}/variants", [])
             ->assertUnprocessable()
             ->assertJsonValidationErrors(['base_price', 'type']);
     }
@@ -100,7 +104,7 @@ class ProductVariantsTest extends TestCase
     /** @test */
     public function it_rejects_an_invalid_variant_type(): void
     {
-        $this->postJson("/api/v1/catalog/products/{$this->product->id}/variants", [
+        $this->postJson("/api/v1/catalog/products/{$this->product->uuid}/variants", [
             'type' => 'size',
             'base_price' => 1000,
         ])->assertUnprocessable()
@@ -110,7 +114,7 @@ class ProductVariantsTest extends TestCase
     /** @test */
     public function it_can_create_a_variant_with_type_image(): void
     {
-        $this->postJson("/api/v1/catalog/products/{$this->product->id}/variants", [
+        $this->postJson("/api/v1/catalog/products/{$this->product->uuid}/variants", [
             'type' => 'image',
             'base_price' => 5000,
         ])->assertCreated()
@@ -125,19 +129,23 @@ class ProductVariantsTest extends TestCase
     /** @test */
     public function it_generates_unique_skus_for_consecutive_variants(): void
     {
-        $this->postJson("/api/v1/catalog/products/{$this->product->id}/variants", [
+        $first = $this->postJson("/api/v1/catalog/products/{$this->product->uuid}/variants", [
             'type' => 'color', 'base_price' => 1000,
-        ])->assertCreated()->assertJsonPath('sku', 'bdp'.$this->product->id.'-v1');
+        ])->assertCreated()->json('sku');
 
-        $this->postJson("/api/v1/catalog/products/{$this->product->id}/variants", [
+        $second = $this->postJson("/api/v1/catalog/products/{$this->product->uuid}/variants", [
             'type' => 'color', 'base_price' => 2000,
-        ])->assertCreated()->assertJsonPath('sku', 'bdp'.$this->product->id.'-v2');
+        ])->assertCreated()->json('sku');
+
+        $this->assertStringStartsWith('bdp'.$this->product->id.'-', $first);
+        $this->assertStringStartsWith('bdp'.$this->product->id.'-', $second);
+        $this->assertNotSame($first, $second);
     }
 
     /** @test */
     public function it_stores_a_compare_at_price_alongside_the_base_price(): void
     {
-        $this->postJson("/api/v1/catalog/products/{$this->product->id}/variants", [
+        $this->postJson("/api/v1/catalog/products/{$this->product->uuid}/variants", [
             'type' => 'color',
             'base_price' => 1999,
             'compare_at_price' => 2999,
@@ -149,7 +157,7 @@ class ProductVariantsTest extends TestCase
     /** @test */
     public function it_can_create_a_variant_with_attributes(): void
     {
-        $this->postJson("/api/v1/catalog/products/{$this->product->id}/variants", [
+        $this->postJson("/api/v1/catalog/products/{$this->product->uuid}/variants", [
             'type' => 'color',
             'base_price' => 2999,
             'attributes' => ['color' => 'red', 'size' => 'L'],
@@ -161,7 +169,7 @@ class ProductVariantsTest extends TestCase
     /** @test */
     public function it_can_create_a_variant_with_a_variant_image(): void
     {
-        $response = $this->postJson("/api/v1/catalog/products/{$this->product->id}/variants", [
+        $response = $this->postJson("/api/v1/catalog/products/{$this->product->uuid}/variants", [
             'type' => 'image',
             'base_price' => 3999,
             'variant_image' => UploadedFile::fake()->image('variant-blue.jpg'),
@@ -182,19 +190,20 @@ class ProductVariantsTest extends TestCase
             'base_price' => 1000,
         ]);
 
-        $this->postJson("/api/v1/catalog/products/{$this->product->id}/variants", [
+        $newSku = $this->postJson("/api/v1/catalog/products/{$this->product->uuid}/variants", [
             'type' => 'color',
             'base_price' => 2000,
             'is_default' => true,
         ])->assertCreated()
-            ->assertJsonPath('is_default', true);
+            ->assertJsonPath('is_default', true)
+            ->json('sku');
 
         $this->assertDatabaseHas('product_variants', [
             'sku' => 'bdp'.$this->product->id.'-v1',
             'is_default' => false,
         ]);
         $this->assertDatabaseHas('product_variants', [
-            'sku' => 'bdp'.$this->product->id.'-v2',
+            'sku' => $newSku,
             'is_default' => true,
         ]);
     }

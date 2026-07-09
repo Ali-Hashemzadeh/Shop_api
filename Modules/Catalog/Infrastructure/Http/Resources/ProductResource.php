@@ -15,7 +15,8 @@ class ProductResource extends JsonResource
         $dto = $this->resource;
 
         return [
-            'id' => $dto->id,
+            // Public identifier is the opaque UUID; the internal integer id is not exposed.
+            'id' => $dto->uuid,
             'title' => $dto->title,
             'slug' => $dto->slug,
             'description' => $dto->description,

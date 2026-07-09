@@ -2,6 +2,41 @@
 
 ## [Unreleased](https://github.com/laravel/laravel/compare/v12.12.1...12.x)
 
+### Change — Catalog: products addressed by public UUID
+
+**Products now expose an opaque UUID as their public identifier; the API routes and response `id` use the UUID instead of the auto-increment integer.**
+
+#### Added
+- `products.uuid` — unique, indexed, server-generated column (migration `2026_07_08_000000_add_uuid_to_products_table`, backfills existing rows). Auto-assigned on create by the `Product` model's `creating` hook; **never accepted from client input** (mirrors the SKU rule).
+- `ProductDTO` gains a `uuid` field; `ProductResource` now emits the UUID as `id`.
+
+#### Changed
+- Product-level routes are now `{uuid}` with a `whereUuid` constraint: `GET /products/{uuid}`, `GET /products/{uuid}/admin`, `PATCH /products/{uuid}`, `DELETE /products/{uuid}`, `POST /products/{uuid}/gallery`, `DELETE /products/{uuid}/gallery/{imageId}`, `POST /products/{uuid}/variants`. Numeric ids now `404` on these routes; `whereUuid` also prevents `/products/{uuid}` from shadowing `/products/admin` (replaces the old `whereNumber` guard).
+- `CatalogManagerInterface` product-aggregate methods (`findProduct`, `findProductAdmin`, `updateProduct`, `deleteProduct`) take `string $uuid`. The FK-insert helpers (`addProductImage`, `createProductVariant`) keep the internal integer product id; controllers resolve `uuid → product` and pass the integer inward. `UpdateProductRequest` slug-uniqueness now ignores the current product by `uuid`.
+- `CachedCatalogManager` keys the product read-cache by `uuid`; variant/image mutations resolve the owning product's `uuid` to invalidate the right entry.
+
+#### Unchanged
+- The integer primary key remains the internal key and the FK target for `product_variants` / `product_images` (no FK migration). SKUs still embed the internal integer id (`bdp{id}-v{n}`). Cart / Inventory / Order are unaffected — they link to Catalog by SKU.
+
+#### Tests
+- Catalog feature tests route by `$product->uuid` and assert the response `id` is the UUID; added coverage that the UUID is generated and exposed (not the integer) and that a numeric id `404`s. Full suite green.
+
+### Change — Identity: move password-setting off OTP verify + add `last_name`
+
+**OTP verify now only proves phone ownership; passwords are set by an authenticated endpoint, and the profile gains a family name.**
+
+#### Changed
+- `VerifyOtp` action + `VerifyOtpRequest` — no longer accept `name` or `password`. Verify validates and consumes the code and mints a token; that's it. A display name is captured at `POST /api/v1/otp/request`; a password is set via the new set-password endpoint.
+
+#### Added
+- `Modules/Identity/Application/Actions/SetPassword.php` + `SetPasswordRequest.php` — an authenticated user sets or replaces their own password (`required`, 8–255, `confirmed` — needs a matching `password_confirmation`, hashed via `Hash::make`). The Sanctum token proves ownership, so no current password is required.
+- `AuthController::setPassword()` and route `POST /api/v1/auth/set-password` (`auth:sanctum`, `throttle:api`). Guests → `401`.
+- `users.last_name` — nullable family name (migration `2026_07_07_000001_add_last_name_to_users_table`). Mass-assignable on `User`, seeded by `UserFactory`, settable at OTP registration (`POST /api/v1/otp/request`) and via profile update (`PATCH /api/v1/profile`, admin `PATCH /api/v1/admin/users/{user}`), and exposed on `UserResource` + `AuthUserResource`.
+
+#### Tests
+- `PasswordAuthTest` reworked (15 tests): OTP registration leaves the account password-less, verify silently ignores a stray `password`, and the authenticated set-password flow is covered (hash storage, subsequent login, short/missing password → 422, guest → 401).
+- `ProfileTest` (+1) and `AuthControllerTest` extended for `last_name` view/update/registration.
+
 ### Feat — Identity Module: password authentication alongside OTP (split-auth onboarding)
 
 **Returning users can now log in with a password; new users still verify phone ownership via OTP first.**

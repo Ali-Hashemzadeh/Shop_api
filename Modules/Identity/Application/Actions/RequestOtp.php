@@ -25,7 +25,7 @@ class RequestOtp
 
         $existing = $this->users->findByPhone($phone);
         $isNewUser = $existing === null;
-        $user = $existing ?? $this->createUser($phone, $data['name'] ?? null);
+        $user = $existing ?? $this->createUser($phone, $data['name'] ?? null, $data['last_name'] ?? null);
 
         $code = $this->generateCode();
 
@@ -43,11 +43,12 @@ class RequestOtp
         ];
     }
 
-    private function createUser(string $phone, ?string $name): User
+    private function createUser(string $phone, ?string $name, ?string $lastName): User
     {
         $user = $this->users->create([
             'phone' => $phone,
             'name' => $name,
+            'last_name' => $lastName,
         ]);
 
         $user->assignRole('customer');

@@ -22,12 +22,12 @@ class ProductGalleryController extends Controller
         private readonly CatalogManagerInterface $catalog,
     ) {}
 
-    public function store(StoreProductImageRequest $request, int $productId): JsonResponse
+    public function store(StoreProductImageRequest $request, string $productUuid): JsonResponse
     {
-        Product::query()->findOrFail($productId);
+        $product = Product::query()->where('uuid', $productUuid)->firstOrFail();
 
         $dto = $this->addAction->handle(
-            $productId,
+            $product->id,
             $request->safe()->all(),
             $request->file('image'),
         );
@@ -35,7 +35,7 @@ class ProductGalleryController extends Controller
         return response()->json(new ProductImageResource($dto), 201);
     }
 
-    public function destroy(int $productId, int $imageId): JsonResponse
+    public function destroy(string $productUuid, int $imageId): JsonResponse
     {
         $this->authorize('update', Product::class);
 

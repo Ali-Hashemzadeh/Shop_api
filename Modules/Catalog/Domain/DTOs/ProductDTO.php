@@ -12,6 +12,7 @@ class ProductDTO
      */
     public function __construct(
         public readonly int $id,
+        public readonly string $uuid,
         public readonly string $title,
         public readonly string $slug,
         public readonly ?string $description,
@@ -35,6 +36,7 @@ class ProductDTO
     ): self {
         return new self(
             id: $product->id,
+            uuid: $product->uuid,
             title: $product->title,
             slug: $product->slug,
             description: $product->description,

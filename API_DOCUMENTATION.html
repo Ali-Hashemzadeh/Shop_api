@@ -203,8 +203,8 @@ curl -s -X POST http://localhost:8000/api/v1/media \
   <h3 id="auth-flow">Authentication Flow</h3>
   <p>This API uses <strong>split-auth onboarding</strong>: new users verify phone ownership via OTP first, while returning users may choose OTP <em>or</em> a password. The flow is:</p>
   <ol>
-    <li>Call <strong>POST /auth/check-user</strong> with the phone number. The response tells you whether this is a new account and which methods are allowed: a new phone returns <code>{is_new_user: true, allowed_methods: ["otp"]}</code>; an existing phone returns <code>{is_new_user: false, allowed_methods: ["password", "otp"]}</code>. Render the login UI accordingly.</li>
-    <li><strong>OTP path:</strong> Call <strong>POST /otp/request</strong> with the phone — the server sends an OTP code (SMS in production, logged in development). Then call <strong>POST /otp/verify</strong> with the phone, code, and a device name to receive a <strong>Bearer token</strong>. New users may also send <code>name</code> and <code>password</code> on verify to complete registration in one step.</li>
+    <li>Call <strong>POST /auth/check-user</strong> with the phone number. The response tells you whether this is a new account and which methods are allowed: a new phone returns <code>{is_new_user: true, allowed_methods: ["otp"]}</code>; an existing phone that has set a password returns <code>{is_new_user: false, allowed_methods: ["password", "otp"]}</code>, while an existing phone with no password yet returns <code>{is_new_user: false, allowed_methods: ["otp"]}</code>. Render the login UI accordingly.</li>
+    <li><strong>OTP path:</strong> Call <strong>POST /otp/request</strong> with the phone — the server sends an OTP code (SMS in production, logged in development). Then call <strong>POST /otp/verify</strong> with the phone, code, and a device name to receive a <strong>Bearer token</strong>. Verify only proves phone ownership: capture the display name earlier via <code>name</code>/<code>last_name</code> on <strong>/otp/request</strong>, and add a password later via the authenticated <strong>POST /auth/set-password</strong>.</li>
     <li><strong>Password path (returning users only):</strong> Call <strong>POST /auth/login-password</strong> with the phone and password to receive a <strong>Bearer token</strong> directly.</li>
     <li>Store the token and include it as <code>Authorization: Bearer {token}</code> on every subsequent protected request.</li>
     <li>The first time a phone number is used, an account is created automatically — register and login are the same flow.</li>
@@ -324,11 +324,13 @@ curl -s -X POST http://localhost:8000/api/v1/media \
       <table>
         <tr><th>Field</th><th>Type</th><th>Description</th></tr>
         <tr><td>phone</td><td class="req">required</td><td>11-digit mobile number starting with 09. Example: <code>09123456789</code></td></tr>
-        <tr><td>name</td><td class="opt">optional</td><td>Display name. Only applied on account creation (first login). Ignored on return visits. Max 120 chars.</td></tr>
+        <tr><td>name</td><td class="opt">optional</td><td>First / display name. Only applied on account creation (first login). Ignored on return visits. Max 120 chars.</td></tr>
+        <tr><td>last_name</td><td class="opt">optional</td><td>Family name. Only applied on account creation (first login). Ignored on return visits. Max 120 chars.</td></tr>
       </table>
       <pre>{
-  <span class="key">"phone"</span>: <span class="str">"09123456789"</span>,
-  <span class="key">"name"</span>:  <span class="str">"Sara Ahmadi"</span>
+  <span class="key">"phone"</span>:     <span class="str">"09123456789"</span>,
+  <span class="key">"name"</span>:      <span class="str">"Sara"</span>,
+  <span class="key">"last_name"</span>: <span class="str">"Ahmadi"</span>
 }</pre>
       <div class="block-label">Response — 200 OK</div>
       <pre>{
@@ -355,28 +357,28 @@ curl -s -X POST http://localhost:8000/api/v1/media \
         <tr><td>phone</td><td class="req">required</td><td>Same phone number used in /otp/request</td></tr>
         <tr><td>code</td><td class="req">required</td><td>The numeric OTP code received by the user</td></tr>
         <tr><td>device_name</td><td class="req">required</td><td>Label for this login session. Shown in token management. Max 100 chars. E.g. <code>"Chrome on Windows"</code> or <code>"Samsung Galaxy S24"</code></td></tr>
-        <tr><td>name</td><td class="opt">optional</td><td>Display name set during first-time registration. Max 120 chars.</td></tr>
-        <tr><td>password</td><td class="opt">optional</td><td>Sets a password for the account so the user can later log in via <code>/auth/login-password</code>. 8–255 chars. Stored hashed; never required (accounts may stay OTP-only).</td></tr>
       </table>
+      <div class="note">Verify no longer accepts <code>name</code> or <code>password</code>. Set the display name via <code>/otp/request</code>, and add a password later via <code>POST /auth/set-password</code>.</div>
       <pre>{
   <span class="key">"phone"</span>:       <span class="str">"09123456789"</span>,
   <span class="key">"code"</span>:        <span class="str">"481923"</span>,
-  <span class="key">"device_name"</span>: <span class="str">"Chrome on Windows 11"</span>,
-  <span class="key">"name"</span>:        <span class="str">"Sara Ahmadi"</span>,    <span class="comment">// optional — first-time registration</span>
-  <span class="key">"password"</span>:    <span class="str">"super-secret-pw"</span> <span class="comment">// optional — enables password login later</span>
+  <span class="key">"device_name"</span>: <span class="str">"Chrome on Windows 11"</span>
 }</pre>
       <div class="block-label">Response — 200 OK</div>
       <pre>{
-  <span class="key">"message"</span>: <span class="str">"Logged in successfully."</span>,
-  <span class="key">"token"</span>:   <span class="str">"1|AbCdEfGhIjKlMnOpQrStUvWxYz1234567890abcdef"</span>,
+  <span class="key">"message"</span>:      <span class="str">"Logged in successfully."</span>,
+  <span class="key">"token"</span>:        <span class="str">"1|AbCdEfGhIjKlMnOpQrStUvWxYz1234567890abcdef"</span>,
+  <span class="key">"has_password"</span>: <span class="bool">false</span>,       <span class="comment">// true if the account already has a password set</span>
   <span class="key">"user"</span>: {
     <span class="key">"id"</span>:         <span class="num">42</span>,
     <span class="key">"name"</span>:       <span class="null-val">null</span>,        <span class="comment">// null on first login — show profile completion screen</span>
+    <span class="key">"last_name"</span>:  <span class="null-val">null</span>,
     <span class="key">"email"</span>:      <span class="null-val">null</span>,
     <span class="key">"phone"</span>:      <span class="str">"09123456789"</span>,
     <span class="key">"created_at"</span>: <span class="str">"2026-06-17T10:30:00.000000Z"</span>
   }
 }</pre>
+      <div class="note"><strong>has_password:</strong> use this flag after login to decide whether to prompt the user to set a password (via <code>POST /auth/set-password</code>) — e.g. OTP-only accounts return <code>false</code>.</div>
       <div class="note"><strong>New user flow:</strong> When <code>user.name</code> is <code>null</code>, the user has no display name yet. Redirect to a profile screen and call <code>PATCH /profile</code> to set name and email before they proceed to checkout.</div>
       <div class="block-label">Error — 422 Unprocessable</div>
       <pre>{
@@ -394,7 +396,7 @@ curl -s -X POST http://localhost:8000/api/v1/media \
       <span class="badge rate">5/min · per IP</span>
     </div>
     <div class="endpoint-body">
-      <p>Logs an existing user in with their password and returns a Bearer token — no OTP round-trip. Only works for accounts that have set a password (via <code>/otp/verify</code>). New or password-less accounts must use the OTP flow.</p>
+      <p>Logs an existing user in with their password and returns a Bearer token — no OTP round-trip. Only works for accounts that have set a password (via <code>/auth/set-password</code>). New or password-less accounts must use the OTP flow.</p>
       <div class="block-label">Request Body</div>
       <table>
         <tr><th>Field</th><th>Type</th><th>Description</th></tr>
@@ -413,7 +415,8 @@ curl -s -X POST http://localhost:8000/api/v1/media \
   <span class="key">"token"</span>:   <span class="str">"1|AbCdEfGhIjKlMnOpQrStUvWxYz1234567890abcdef"</span>,
   <span class="key">"user"</span>: {
     <span class="key">"id"</span>:         <span class="num">42</span>,
-    <span class="key">"name"</span>:       <span class="str">"Sara Ahmadi"</span>,
+    <span class="key">"name"</span>:       <span class="str">"Sara"</span>,
+    <span class="key">"last_name"</span>:  <span class="str">"Ahmadi"</span>,
     <span class="key">"email"</span>:      <span class="null-val">null</span>,
     <span class="key">"phone"</span>:      <span class="str">"09123456789"</span>,
     <span class="key">"created_at"</span>: <span class="str">"2026-06-17T10:30:00.000000Z"</span>
@@ -424,6 +427,46 @@ curl -s -X POST http://localhost:8000/api/v1/media \
   <span class="key">"message"</span>: <span class="str">"Invalid credentials."</span>
 }</pre>
       <div class="note"><strong>Generic by design:</strong> a wrong password, an unknown phone, and an account with no password set all return the <em>same</em> 401 so the endpoint never reveals whether an account exists.</div>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/auth/set-password</span>
+      <span class="badge auth">Auth Required</span>
+      <span class="badge rate">60/min · per user</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Sets or replaces the authenticated user's password so they can later log in via <code>/auth/login-password</code>. The Bearer token proves ownership, so the current password is <em>not</em> required — this is how an OTP-only account adds a password, or how any user changes theirs.</p>
+      <div class="block-label">Request Body</div>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr><td>password</td><td class="req">required</td><td>New password. 8–255 chars. Stored hashed.</td></tr>
+        <tr><td>password_confirmation</td><td class="req">required</td><td>Must exactly match <code>password</code>. A mismatch returns <strong>422</strong>.</td></tr>
+      </table>
+      <pre>{
+  <span class="key">"password"</span>:              <span class="str">"super-secret-pw"</span>,
+  <span class="key">"password_confirmation"</span>: <span class="str">"super-secret-pw"</span>
+}</pre>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{
+  <span class="key">"message"</span>: <span class="str">"Password set successfully."</span>,
+  <span class="key">"user"</span>: {
+    <span class="key">"id"</span>:         <span class="num">42</span>,
+    <span class="key">"name"</span>:       <span class="str">"Sara"</span>,
+    <span class="key">"last_name"</span>:  <span class="str">"Ahmadi"</span>,
+    <span class="key">"email"</span>:      <span class="null-val">null</span>,
+    <span class="key">"phone"</span>:      <span class="str">"09123456789"</span>,
+    <span class="key">"created_at"</span>: <span class="str">"2026-06-17T10:30:00.000000Z"</span>
+  }
+}</pre>
+      <div class="block-label">Error — 422 Unprocessable</div>
+      <pre>{
+  <span class="key">"message"</span>: <span class="str">"The password field confirmation does not match."</span>,
+  <span class="key">"errors"</span>:  { <span class="key">"password"</span>: [<span class="str">"The password field confirmation does not match."</span>] }
+}</pre>
+      <div class="note"><strong>Guests get 401.</strong> This endpoint requires a valid Bearer token.</div>
     </div>
   </div>
 
@@ -441,7 +484,8 @@ curl -s -X POST http://localhost:8000/api/v1/media \
       <pre>{
   <span class="key">"user"</span>: {
     <span class="key">"id"</span>:         <span class="num">42</span>,
-    <span class="key">"name"</span>:       <span class="str">"Sara Ahmadi"</span>,
+    <span class="key">"name"</span>:       <span class="str">"Sara"</span>,
+    <span class="key">"last_name"</span>:  <span class="str">"Ahmadi"</span>,
     <span class="key">"email"</span>:      <span class="null-val">null</span>,
     <span class="key">"phone"</span>:      <span class="str">"09123456789"</span>,
     <span class="key">"created_at"</span>: <span class="str">"2026-06-16T10:30:00.000000Z"</span>
@@ -478,7 +522,8 @@ curl -s -X POST http://localhost:8000/api/v1/media \
       <pre>{
   <span class="key">"data"</span>: {
     <span class="key">"id"</span>:         <span class="num">42</span>,
-    <span class="key">"name"</span>:       <span class="str">"Sara Ahmadi"</span>,
+    <span class="key">"name"</span>:       <span class="str">"Sara"</span>,
+    <span class="key">"last_name"</span>:  <span class="str">"Ahmadi"</span>,
     <span class="key">"email"</span>:      <span class="str">"sara@example.com"</span>,
     <span class="key">"phone"</span>:      <span class="str">"09123456789"</span>,
     <span class="key">"created_at"</span>: <span class="str">"2026-06-16T10:30:00.000000Z"</span>,
@@ -499,20 +544,23 @@ curl -s -X POST http://localhost:8000/api/v1/media \
       <div class="block-label">Request Body</div>
       <table>
         <tr><th>Field</th><th>Type</th><th>Description</th></tr>
-        <tr><td>name</td><td class="opt">optional string</td><td>Display name. Max 120 chars.</td></tr>
+        <tr><td>name</td><td class="opt">optional string</td><td>First / display name. Max 120 chars.</td></tr>
+        <tr><td>last_name</td><td class="opt">optional string</td><td>Family name. Max 120 chars. Send <code>null</code> to clear.</td></tr>
         <tr><td>email</td><td class="opt">optional string</td><td>Email address. Must be unique. Send <code>null</code> to clear.</td></tr>
         <tr><td>phone</td><td class="opt">optional string</td><td>Phone number. Must be unique. Send <code>null</code> to clear.</td></tr>
       </table>
       <pre>{
-  <span class="key">"name"</span>:  <span class="str">"Sara Mohammadi"</span>,
-  <span class="key">"email"</span>: <span class="str">"sara.m@example.com"</span>
+  <span class="key">"name"</span>:      <span class="str">"Sara"</span>,
+  <span class="key">"last_name"</span>: <span class="str">"Mohammadi"</span>,
+  <span class="key">"email"</span>:     <span class="str">"sara.m@example.com"</span>
 }</pre>
       <div class="block-label">Response — 200 OK</div>
       <pre>{
   <span class="key">"message"</span>: <span class="str">"Profile updated successfully."</span>,
   <span class="key">"data"</span>: {
     <span class="key">"id"</span>:         <span class="num">42</span>,
-    <span class="key">"name"</span>:       <span class="str">"Sara Mohammadi"</span>,
+    <span class="key">"name"</span>:       <span class="str">"Sara"</span>,
+    <span class="key">"last_name"</span>:  <span class="str">"Mohammadi"</span>,
     <span class="key">"email"</span>:      <span class="str">"sara.m@example.com"</span>,
     <span class="key">"phone"</span>:      <span class="str">"09123456789"</span>,
     <span class="key">"created_at"</span>: <span class="str">"2026-06-16T10:30:00.000000Z"</span>,
@@ -817,8 +865,8 @@ curl -s -X POST http://localhost:8000/api/v1/media \
       <div class="block-label">Response — 200 OK</div>
       <pre>{
   <span class="key">"data"</span>: [
-    { <span class="key">"id"</span>: <span class="num">1</span>, <span class="key">"name"</span>: <span class="str">"Admin"</span>, <span class="key">"email"</span>: <span class="null-val">null</span>, <span class="key">"phone"</span>: <span class="str">"09100000000"</span>, <span class="key">"created_at"</span>: <span class="str">"..."</span>, <span class="key">"updated_at"</span>: <span class="str">"..."</span> },
-    { <span class="key">"id"</span>: <span class="num">42</span>, <span class="key">"name"</span>: <span class="str">"Sara Ahmadi"</span>, <span class="key">"email"</span>: <span class="null-val">null</span>, <span class="key">"phone"</span>: <span class="str">"09123456789"</span>, <span class="key">"created_at"</span>: <span class="str">"..."</span>, <span class="key">"updated_at"</span>: <span class="str">"..."</span> }
+    { <span class="key">"id"</span>: <span class="num">1</span>, <span class="key">"name"</span>: <span class="str">"Admin"</span>, <span class="key">"last_name"</span>: <span class="null-val">null</span>, <span class="key">"email"</span>: <span class="null-val">null</span>, <span class="key">"phone"</span>: <span class="str">"09100000000"</span>, <span class="key">"created_at"</span>: <span class="str">"..."</span>, <span class="key">"updated_at"</span>: <span class="str">"..."</span> },
+    { <span class="key">"id"</span>: <span class="num">42</span>, <span class="key">"name"</span>: <span class="str">"Sara"</span>, <span class="key">"last_name"</span>: <span class="str">"Ahmadi"</span>, <span class="key">"email"</span>: <span class="null-val">null</span>, <span class="key">"phone"</span>: <span class="str">"09123456789"</span>, <span class="key">"created_at"</span>: <span class="str">"..."</span>, <span class="key">"updated_at"</span>: <span class="str">"..."</span> }
   ],
   <span class="key">"meta"</span>:  { <span class="key">"current_page"</span>: <span class="num">1</span>, <span class="key">"last_page"</span>: <span class="num">3</span>, <span class="key">"per_page"</span>: <span class="num">15</span>, <span class="key">"total"</span>: <span class="num">38</span>, <span class="key">"from"</span>: <span class="num">1</span>, <span class="key">"to"</span>: <span class="num">15</span> },
   <span class="key">"links"</span>: { <span class="key">"first"</span>: <span class="str">"..."</span>, <span class="key">"last"</span>: <span class="str">"..."</span>, <span class="key">"prev"</span>: <span class="null-val">null</span>, <span class="key">"next"</span>: <span class="str">"..."</span> }
@@ -834,7 +882,7 @@ curl -s -X POST http://localhost:8000/api/v1/media \
     </div>
     <div class="endpoint-body">
       <div class="block-label">Response — 200 OK</div>
-      <pre>{ <span class="key">"data"</span>: { <span class="key">"id"</span>: <span class="num">42</span>, <span class="key">"name"</span>: <span class="str">"Sara Ahmadi"</span>, <span class="key">"email"</span>: <span class="null-val">null</span>, <span class="key">"phone"</span>: <span class="str">"09123456789"</span>, <span class="key">"created_at"</span>: <span class="str">"..."</span>, <span class="key">"updated_at"</span>: <span class="str">"..."</span> } }</pre>
+      <pre>{ <span class="key">"data"</span>: { <span class="key">"id"</span>: <span class="num">42</span>, <span class="key">"name"</span>: <span class="str">"Sara"</span>, <span class="key">"last_name"</span>: <span class="str">"Ahmadi"</span>, <span class="key">"email"</span>: <span class="null-val">null</span>, <span class="key">"phone"</span>: <span class="str">"09123456789"</span>, <span class="key">"created_at"</span>: <span class="str">"..."</span>, <span class="key">"updated_at"</span>: <span class="str">"..."</span> } }</pre>
     </div>
   </div>
 
@@ -857,7 +905,7 @@ curl -s -X POST http://localhost:8000/api/v1/media \
     </div>
     <div class="endpoint-body">
       <p>Update any user's profile. Same fields as <code>PATCH /profile/</code>.</p>
-      <pre>{ <span class="key">"name"</span>: <span class="str">"Sara Ahmadi"</span>, <span class="key">"email"</span>: <span class="str">"sara@newdomain.com"</span> }</pre>
+      <pre>{ <span class="key">"name"</span>: <span class="str">"Sara"</span>, <span class="key">"last_name"</span>: <span class="str">"Ahmadi"</span>, <span class="key">"email"</span>: <span class="str">"sara@newdomain.com"</span> }</pre>
       <div class="block-label">Response — 200 OK</div>
       <pre>{ <span class="key">"message"</span>: <span class="str">"User updated successfully."</span>, <span class="key">"data"</span>: { <span class="comment">/* UserResource */</span> } }</pre>
     </div>
@@ -1332,7 +1380,7 @@ GET /api/v1/catalog/products?category_id=5&amp;min_price=10000000&amp;max_price=
   <div class="endpoint">
     <div class="endpoint-header">
       <span class="method get">GET</span>
-      <span class="endpoint-path">/catalog/products/{id}</span>
+      <span class="endpoint-path">/catalog/products/{uuid}</span>
       <span class="badge">Public</span>
     </div>
     <div class="endpoint-body">
@@ -1417,7 +1465,7 @@ GET /api/v1/catalog/products?category_id=5&amp;min_price=10000000&amp;max_price=
   <div class="endpoint">
     <div class="endpoint-header">
       <span class="method get">GET</span>
-      <span class="endpoint-path">/catalog/products/{id}/admin</span>
+      <span class="endpoint-path">/catalog/products/{uuid}/admin</span>
       <span class="badge admin">Requires catalog.product.view-admin</span>
     </div>
     <div class="endpoint-body">
@@ -1526,12 +1574,12 @@ GET /api/v1/catalog/products?category_id=5&amp;min_price=10000000&amp;max_price=
   <div class="endpoint">
     <div class="endpoint-header">
       <span class="method patch">PATCH</span>
-      <span class="endpoint-path">/catalog/products/{id}</span>
+      <span class="endpoint-path">/catalog/products/{uuid}</span>
       <span class="badge admin">Requires catalog.product.update</span>
     </div>
     <div class="endpoint-body">
       <p>Partial update of a product. Only fields you include are changed. Send as <code>application/json</code>.</p>
-      <div class="note"><strong>Gallery images</strong> are managed separately via <code>POST/DELETE /catalog/products/{id}/gallery</code>. <strong>File uploads</strong> are not accepted directly — use <code>POST /api/v1/media</code> first, then pass the returned <code>media_id</code>.</div>
+      <div class="note"><strong>Gallery images</strong> are managed separately via <code>POST/DELETE /catalog/products/{uuid}/gallery</code>. <strong>File uploads</strong> are not accepted directly — use <code>POST /api/v1/media</code> first, then pass the returned <code>media_id</code>.</div>
       <div class="block-label">Request Body Fields</div>
       <table>
         <tr><th>Field</th><th>Type</th><th>Description</th></tr>
@@ -1605,7 +1653,7 @@ GET /api/v1/catalog/products?category_id=5&amp;min_price=10000000&amp;max_price=
   <div class="endpoint">
     <div class="endpoint-header">
       <span class="method delete">DELETE</span>
-      <span class="endpoint-path">/catalog/products/{id}</span>
+      <span class="endpoint-path">/catalog/products/{uuid}</span>
       <span class="badge admin">Requires catalog.product.delete</span>
     </div>
     <div class="endpoint-body">

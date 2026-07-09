@@ -37,7 +37,7 @@ class CreateProductAction
                 $this->catalog->createProductVariant($product->id, array_merge($variantData, ['sku' => $sku]));
             }
 
-            return $this->catalog->findProductAdmin($product->id)
+            return $this->catalog->findProductAdmin($product->uuid)
                 ?? throw new \RuntimeException("Product #{$product->id} could not be loaded after creation.");
         });
     }
