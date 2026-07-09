@@ -1380,7 +1380,7 @@ GET /api/v1/catalog/products?category_id=5&amp;min_price=10000000&amp;max_price=
   <div class="endpoint">
     <div class="endpoint-header">
       <span class="method get">GET</span>
-      <span class="endpoint-path">/catalog/products/{id}</span>
+      <span class="endpoint-path">/catalog/products/{uuid}</span>
       <span class="badge">Public</span>
     </div>
     <div class="endpoint-body">
@@ -1465,7 +1465,7 @@ GET /api/v1/catalog/products?category_id=5&amp;min_price=10000000&amp;max_price=
   <div class="endpoint">
     <div class="endpoint-header">
       <span class="method get">GET</span>
-      <span class="endpoint-path">/catalog/products/{id}/admin</span>
+      <span class="endpoint-path">/catalog/products/{uuid}/admin</span>
       <span class="badge admin">Requires catalog.product.view-admin</span>
     </div>
     <div class="endpoint-body">
@@ -1574,12 +1574,12 @@ GET /api/v1/catalog/products?category_id=5&amp;min_price=10000000&amp;max_price=
   <div class="endpoint">
     <div class="endpoint-header">
       <span class="method patch">PATCH</span>
-      <span class="endpoint-path">/catalog/products/{id}</span>
+      <span class="endpoint-path">/catalog/products/{uuid}</span>
       <span class="badge admin">Requires catalog.product.update</span>
     </div>
     <div class="endpoint-body">
       <p>Partial update of a product. Only fields you include are changed. Send as <code>application/json</code>.</p>
-      <div class="note"><strong>Gallery images</strong> are managed separately via <code>POST/DELETE /catalog/products/{id}/gallery</code>. <strong>File uploads</strong> are not accepted directly — use <code>POST /api/v1/media</code> first, then pass the returned <code>media_id</code>.</div>
+      <div class="note"><strong>Gallery images</strong> are managed separately via <code>POST/DELETE /catalog/products/{uuid}/gallery</code>. <strong>File uploads</strong> are not accepted directly — use <code>POST /api/v1/media</code> first, then pass the returned <code>media_id</code>.</div>
       <div class="block-label">Request Body Fields</div>
       <table>
         <tr><th>Field</th><th>Type</th><th>Description</th></tr>
@@ -1653,7 +1653,7 @@ GET /api/v1/catalog/products?category_id=5&amp;min_price=10000000&amp;max_price=
   <div class="endpoint">
     <div class="endpoint-header">
       <span class="method delete">DELETE</span>
-      <span class="endpoint-path">/catalog/products/{id}</span>
+      <span class="endpoint-path">/catalog/products/{uuid}</span>
       <span class="badge admin">Requires catalog.product.delete</span>
     </div>
     <div class="endpoint-body">

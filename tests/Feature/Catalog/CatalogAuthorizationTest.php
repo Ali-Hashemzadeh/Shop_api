@@ -56,21 +56,21 @@ class CatalogAuthorizationTest extends TestCase
     /** @test */
     public function unauthenticated_request_cannot_update_a_product(): void
     {
-        $this->patchJson('/api/v1/catalog/products/1', ['title' => 'Test'])
+        $this->patchJson('/api/v1/catalog/products/00000000-0000-4000-8000-000000000000', ['title' => 'Test'])
             ->assertUnauthorized();
     }
 
     /** @test */
     public function unauthenticated_request_cannot_delete_a_product(): void
     {
-        $this->deleteJson('/api/v1/catalog/products/1')
+        $this->deleteJson('/api/v1/catalog/products/00000000-0000-4000-8000-000000000000')
             ->assertUnauthorized();
     }
 
     /** @test */
     public function unauthenticated_request_cannot_access_the_admin_product_endpoint(): void
     {
-        $this->getJson('/api/v1/catalog/products/1/admin')
+        $this->getJson('/api/v1/catalog/products/00000000-0000-4000-8000-000000000000/admin')
             ->assertUnauthorized();
     }
 
@@ -84,7 +84,7 @@ class CatalogAuthorizationTest extends TestCase
     /** @test */
     public function unauthenticated_request_cannot_create_a_variant(): void
     {
-        $this->postJson('/api/v1/catalog/products/1/variants', ['sku' => 'X'])
+        $this->postJson('/api/v1/catalog/products/00000000-0000-4000-8000-000000000000/variants', ['sku' => 'X'])
             ->assertUnauthorized();
     }
 
@@ -145,7 +145,7 @@ class CatalogAuthorizationTest extends TestCase
     {
         $this->actingAsCustomer();
 
-        $this->patchJson('/api/v1/catalog/products/1', ['title' => 'Test'])
+        $this->patchJson('/api/v1/catalog/products/00000000-0000-4000-8000-000000000000', ['title' => 'Test'])
             ->assertForbidden();
     }
 
@@ -154,7 +154,7 @@ class CatalogAuthorizationTest extends TestCase
     {
         $this->actingAsCustomer();
 
-        $this->deleteJson('/api/v1/catalog/products/1')
+        $this->deleteJson('/api/v1/catalog/products/00000000-0000-4000-8000-000000000000')
             ->assertForbidden();
     }
 
@@ -163,7 +163,7 @@ class CatalogAuthorizationTest extends TestCase
     {
         $this->actingAsCustomer();
 
-        $this->getJson('/api/v1/catalog/products/1/admin')
+        $this->getJson('/api/v1/catalog/products/00000000-0000-4000-8000-000000000000/admin')
             ->assertForbidden();
     }
 
@@ -181,7 +181,7 @@ class CatalogAuthorizationTest extends TestCase
     {
         $this->actingAsCustomer();
 
-        $this->postJson('/api/v1/catalog/products/1/variants', ['sku' => 'X'])
+        $this->postJson('/api/v1/catalog/products/00000000-0000-4000-8000-000000000000/variants', ['sku' => 'X'])
             ->assertForbidden();
     }
 
@@ -248,7 +248,7 @@ class CatalogAuthorizationTest extends TestCase
     {
         $product = Product::create(['title' => 'Widget', 'slug' => 'widget', 'status' => 'published']);
 
-        $this->getJson("/api/v1/catalog/products/{$product->id}")
+        $this->getJson("/api/v1/catalog/products/{$product->uuid}")
             ->assertOk();
     }
 

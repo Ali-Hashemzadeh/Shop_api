@@ -29,7 +29,7 @@ class AppServiceProvider extends ServiceProvider
     private function configureRateLimiting(): void
     {
         // OTP endpoints — strict to prevent SMS abuse and brute-force
-        RateLimiter::for('otp', fn (Request $r) => Limit::perMinute(5)->by($r->ip())
+        RateLimiter::for('otp', fn (Request $r) => Limit::perMinute(3)->by($r->ip())
         );
 
         // Open storefront reads — generous enough for real apps, blocks naive floods

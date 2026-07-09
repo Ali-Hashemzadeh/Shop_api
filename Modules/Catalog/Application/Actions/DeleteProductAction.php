@@ -8,8 +8,8 @@ class DeleteProductAction
 {
     public function __construct(private readonly CatalogManagerInterface $catalog) {}
 
-    public function handle(int $id): void
+    public function handle(string $uuid): void
     {
-        $this->catalog->deleteProduct($id);
+        $this->catalog->deleteProduct($uuid);
     }
 }

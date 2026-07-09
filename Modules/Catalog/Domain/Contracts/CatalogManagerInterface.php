@@ -25,13 +25,13 @@ interface CatalogManagerInterface
 
     // ── Products ──────────────────────────────────────────────────────────────
 
-    /** Resolves a single published product by ID with full gallery and variants. */
-    public function findProduct(int $id): ?ProductDTO;
+    /** Resolves a single published product by its public UUID with full gallery and variants. */
+    public function findProduct(string $uuid): ?ProductDTO;
 
     public function findProductBySlug(string $slug): ?ProductDTO;
 
-    /** Fetch a product by ID regardless of publish status (admin use). */
-    public function findProductAdmin(int $id): ?ProductDTO;
+    /** Fetch a product by its public UUID regardless of publish status (admin use). */
+    public function findProductAdmin(string $uuid): ?ProductDTO;
 
     /** @return LengthAwarePaginator<ProductDTO> */
     public function getProductsByCategory(int $categoryId, array $filters = [], int $perPage = 15): LengthAwarePaginator;
@@ -69,9 +69,9 @@ interface CatalogManagerInterface
 
     public function removeProductImage(int $imageId): void;
 
-    public function updateProduct(int $id, array $data): ProductDTO;
+    public function updateProduct(string $uuid, array $data): ProductDTO;
 
-    public function deleteProduct(int $id): void;
+    public function deleteProduct(string $uuid): void;
 
     // ── Product Variants ──────────────────────────────────────────────────────
 

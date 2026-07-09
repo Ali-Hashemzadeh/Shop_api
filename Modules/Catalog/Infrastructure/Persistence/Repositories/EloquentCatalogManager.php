@@ -88,12 +88,13 @@ class EloquentCatalogManager implements CatalogManagerInterface
 
     // ── Products ──────────────────────────────────────────────────────────────
 
-    public function findProduct(int $id): ?ProductDTO
+    public function findProduct(string $uuid): ?ProductDTO
     {
         $product = Product::query()
             ->where('status', 'published')
+            ->where('uuid', $uuid)
             ->with(['images', 'variants'])
-            ->find($id);
+            ->first();
 
         return $product ? $this->hydrateProduct($product) : null;
     }
@@ -109,11 +110,12 @@ class EloquentCatalogManager implements CatalogManagerInterface
         return $product ? $this->hydrateProduct($product) : null;
     }
 
-    public function findProductAdmin(int $id): ?ProductDTO
+    public function findProductAdmin(string $uuid): ?ProductDTO
     {
         $product = Product::query()
+            ->where('uuid', $uuid)
             ->with(['images', 'variants'])
-            ->find($id);
+            ->first();
 
         return $product ? $this->hydrateProduct($product) : null;
     }
@@ -175,17 +177,17 @@ class EloquentCatalogManager implements CatalogManagerInterface
         ProductImage::query()->findOrFail($imageId)->delete();
     }
 
-    public function updateProduct(int $id, array $data): ProductDTO
+    public function updateProduct(string $uuid, array $data): ProductDTO
     {
-        $product = Product::query()->with(['images', 'variants'])->findOrFail($id);
+        $product = Product::query()->with(['images', 'variants'])->where('uuid', $uuid)->firstOrFail();
         $product->update($data);
 
         return $this->hydrateProduct($product->fresh(['images', 'variants']));
     }
 
-    public function deleteProduct(int $id): void
+    public function deleteProduct(string $uuid): void
     {
-        Product::query()->findOrFail($id)->delete();
+        Product::query()->where('uuid', $uuid)->firstOrFail()->delete();
     }
 
     // ── Product Variants ──────────────────────────────────────────────────────

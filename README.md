@@ -138,7 +138,7 @@ Base prefix: `/api/v1`
 | `GET` | `/catalog/categories/roots` | Paginated list of active root categories |
 | `GET` | `/catalog/categories/{id}` | Single category by ID |
 | `GET` | `/catalog/categories/{categoryId}/products` | Paginated published products in a category |
-| `GET` | `/catalog/products/{id}` | Single published product (with gallery + variants) |
+| `GET` | `/catalog/products/{uuid}` | Single published product by its public UUID (with gallery + variants) |
 | `GET` | `/catalog/products/slug/{slug}` | Product by URL slug |
 | `GET` | `/catalog/variants/{variantId}` | Single variant by ID |
 | `GET` | `/catalog/variants/sku/{sku}` | Variant by SKU |
@@ -148,14 +148,14 @@ Base prefix: `/api/v1`
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/catalog/products/admin` | Paginated products in **any** status (admin index) — filters: `status`, `category_id`, `min_price`, `max_price`, `search` (title/description/slug/SKU) |
-| `GET` | `/catalog/products/{id}/admin` | Product by ID regardless of publish status |
+| `GET` | `/catalog/products/{uuid}/admin` | Product by UUID regardless of publish status |
 | `POST` | `/catalog/categories` | Create category |
 | `PATCH` | `/catalog/categories/{id}` | Update category |
 | `DELETE` | `/catalog/categories/{id}` | Delete category |
 | `POST` | `/catalog/products` | Create product |
-| `PATCH` | `/catalog/products/{id}` | Update product |
-| `DELETE` | `/catalog/products/{id}` | Delete product |
-| `POST` | `/catalog/products/{productId}/variants` | Add variant to product |
+| `PATCH` | `/catalog/products/{uuid}` | Update product |
+| `DELETE` | `/catalog/products/{uuid}` | Delete product |
+| `POST` | `/catalog/products/{uuid}/variants` | Add variant to product |
 | `PATCH` | `/catalog/variants/{variantId}` | Update variant |
 | `DELETE` | `/catalog/variants/{variantId}` | Delete variant |
 

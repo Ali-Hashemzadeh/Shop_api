@@ -34,6 +34,32 @@ class ProductsTest extends TestCase
     }
 
     /** @test */
+    public function it_exposes_the_uuid_as_the_public_id_not_the_integer(): void
+    {
+        $response = $this->postJson('/api/v1/catalog/products', ['title' => 'UUID Product'])
+            ->assertCreated();
+
+        $product = Product::where('title', 'UUID Product')->firstOrFail();
+
+        // The response `id` is the opaque UUID, never the internal integer primary key.
+        $response->assertJsonPath('id', $product->uuid);
+        $this->assertMatchesRegularExpression(
+            '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/',
+            $response->json('id'),
+        );
+        $this->assertNotSame((string) $product->id, $response->json('id'));
+    }
+
+    /** @test */
+    public function it_404s_when_fetching_a_product_by_its_integer_id(): void
+    {
+        $product = Product::create(['title' => 'Widget', 'slug' => 'widget', 'status' => 'published']);
+
+        // The public show route is UUID-constrained; the integer id no longer resolves.
+        $this->getJson("/api/v1/catalog/products/{$product->id}")->assertNotFound();
+    }
+
+    /** @test */
     public function it_auto_generates_a_slug_from_the_title(): void
     {
         $this->postJson('/api/v1/catalog/products', ['title' => 'My Awesome Product'])
@@ -99,7 +125,8 @@ class ProductsTest extends TestCase
             ->assertJsonStructure(['id', 'title', 'variants'])
             ->assertJsonCount(2, 'variants');
 
-        $productId = $response->json('id');
+        // Response `id` is the public UUID; SKUs embed the internal integer id.
+        $productId = Product::where('uuid', $response->json('id'))->value('id');
         $this->assertDatabaseHas('products', ['title' => 'Laptop Pro']);
         $this->assertDatabaseHas('product_variants', ['sku' => 'bdp'.$productId.'-v1', 'type' => 'color', 'is_default' => 1]);
         $this->assertDatabaseHas('product_variants', ['sku' => 'bdp'.$productId.'-v2', 'type' => 'color', 'is_default' => 0]);
@@ -151,7 +178,7 @@ class ProductsTest extends TestCase
     {
         $product = Product::create(['title' => 'Old Title', 'slug' => 'old-title', 'status' => 'draft']);
 
-        $this->patchJson("/api/v1/catalog/products/{$product->id}", ['title' => 'New Title'])
+        $this->patchJson("/api/v1/catalog/products/{$product->uuid}", ['title' => 'New Title'])
             ->assertOk()
             ->assertJsonPath('title', 'New Title');
 
@@ -163,7 +190,7 @@ class ProductsTest extends TestCase
     {
         $product = Product::create(['title' => 'Pending', 'slug' => 'pending', 'status' => 'draft']);
 
-        $this->patchJson("/api/v1/catalog/products/{$product->id}", ['status' => 'published'])
+        $this->patchJson("/api/v1/catalog/products/{$product->uuid}", ['status' => 'published'])
             ->assertOk()
             ->assertJsonPath('status', 'published');
     }
@@ -173,7 +200,7 @@ class ProductsTest extends TestCase
     {
         $product = Product::create(['title' => 'Product', 'slug' => 'product', 'status' => 'draft']);
 
-        $this->patchJson("/api/v1/catalog/products/{$product->id}", ['status' => 'archived'])
+        $this->patchJson("/api/v1/catalog/products/{$product->uuid}", ['status' => 'archived'])
             ->assertUnprocessable()
             ->assertJsonValidationErrors(['status']);
     }
@@ -183,7 +210,7 @@ class ProductsTest extends TestCase
     {
         $product = Product::create(['title' => 'Product', 'slug' => 'my-prod', 'status' => 'draft']);
 
-        $this->patchJson("/api/v1/catalog/products/{$product->id}", ['slug' => 'my-prod'])->assertOk();
+        $this->patchJson("/api/v1/catalog/products/{$product->uuid}", ['slug' => 'my-prod'])->assertOk();
     }
 
     /** @test */
@@ -192,7 +219,7 @@ class ProductsTest extends TestCase
         Product::create(['title' => 'Product A', 'slug' => 'product-a', 'status' => 'draft']);
         $product = Product::create(['title' => 'Product B', 'slug' => 'product-b', 'status' => 'draft']);
 
-        $this->patchJson("/api/v1/catalog/products/{$product->id}", ['slug' => 'product-a'])
+        $this->patchJson("/api/v1/catalog/products/{$product->uuid}", ['slug' => 'product-a'])
             ->assertUnprocessable()
             ->assertJsonValidationErrors(['slug']);
     }
@@ -209,7 +236,7 @@ class ProductsTest extends TestCase
         $product = Product::create(['title' => 'Phone', 'slug' => 'phone', 'status' => 'draft']);
         $variant = ProductVariant::create(['product_id' => $product->id, 'sku' => 'bdp'.$product->id.'-v1', 'type' => 'color', 'is_default' => true, 'base_price' => 10000000]);
 
-        $this->patchJson("/api/v1/catalog/products/{$product->id}", [
+        $this->patchJson("/api/v1/catalog/products/{$product->uuid}", [
             'variants' => [
                 ['id' => $variant->id, 'type' => 'color', 'base_price' => 12000000, 'is_default' => true,  'attributes' => []],
                 ['type' => 'color', 'base_price' => 11000000, 'is_default' => false, 'attributes' => ['color' => 'White']],
@@ -231,7 +258,7 @@ class ProductsTest extends TestCase
         $product = Product::create(['title' => 'Tablet', 'slug' => 'tablet', 'status' => 'draft']);
         ProductVariant::create(['product_id' => $product->id, 'sku' => 'TAB-01', 'type' => 'color', 'is_default' => true, 'base_price' => 5000000]);
 
-        $this->patchJson("/api/v1/catalog/products/{$product->id}", ['title' => 'Tablet Pro'])
+        $this->patchJson("/api/v1/catalog/products/{$product->uuid}", ['title' => 'Tablet Pro'])
             ->assertOk()
             ->assertJsonPath('title', 'Tablet Pro')
             ->assertJsonCount(1, 'variants');
@@ -244,7 +271,7 @@ class ProductsTest extends TestCase
     {
         $product = Product::create(['title' => 'Watch', 'slug' => 'watch', 'status' => 'draft']);
 
-        $this->patchJson("/api/v1/catalog/products/{$product->id}", [
+        $this->patchJson("/api/v1/catalog/products/{$product->uuid}", [
             'variants' => [
                 ['type' => 'color', 'base_price' => 5000000, 'is_default' => true,  'attributes' => []],
                 ['type' => 'color', 'base_price' => 5000000, 'is_default' => true,  'attributes' => []],
@@ -261,7 +288,7 @@ class ProductsTest extends TestCase
     {
         $product = Product::create(['title' => 'To Delete', 'slug' => 'to-delete', 'status' => 'draft']);
 
-        $this->deleteJson("/api/v1/catalog/products/{$product->id}")->assertNoContent();
+        $this->deleteJson("/api/v1/catalog/products/{$product->uuid}")->assertNoContent();
         $this->assertDatabaseMissing('products', ['id' => $product->id]);
     }
 
@@ -278,9 +305,9 @@ class ProductsTest extends TestCase
     {
         $product = Product::create(['title' => 'Smart Watch', 'slug' => 'smart-watch', 'status' => 'published']);
 
-        $this->getJson("/api/v1/catalog/products/{$product->id}")
+        $this->getJson("/api/v1/catalog/products/{$product->uuid}")
             ->assertOk()
-            ->assertJsonPath('id', $product->id)
+            ->assertJsonPath('id', $product->uuid)
             ->assertJsonPath('title', 'Smart Watch');
     }
 
@@ -289,7 +316,7 @@ class ProductsTest extends TestCase
     {
         $product = Product::create(['title' => 'Unreleased', 'slug' => 'unreleased', 'status' => 'draft']);
 
-        $this->getJson("/api/v1/catalog/products/{$product->id}")->assertNotFound();
+        $this->getJson("/api/v1/catalog/products/{$product->uuid}")->assertNotFound();
     }
 
     /** @test */
@@ -303,7 +330,7 @@ class ProductsTest extends TestCase
     {
         $product = Product::create(['title' => 'Draft Product', 'slug' => 'draft-product', 'status' => 'draft']);
 
-        $this->getJson("/api/v1/catalog/products/{$product->id}/admin")
+        $this->getJson("/api/v1/catalog/products/{$product->uuid}/admin")
             ->assertOk()
             ->assertJsonPath('status', 'draft');
     }

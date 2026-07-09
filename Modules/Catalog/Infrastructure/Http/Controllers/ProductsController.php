@@ -35,9 +35,9 @@ class ProductsController extends Controller
         return response()->json(new ProductResource($dto), 201);
     }
 
-    public function show(int $id): JsonResponse
+    public function show(string $uuid): JsonResponse
     {
-        $dto = $this->catalog->findProduct($id);
+        $dto = $this->catalog->findProduct($uuid);
 
         if ($dto === null) {
             return response()->json(['message' => 'Product not found.'], 404);
@@ -46,11 +46,11 @@ class ProductsController extends Controller
         return response()->json(new ProductResource($dto));
     }
 
-    public function showAdmin(int $id): JsonResponse
+    public function showAdmin(string $uuid): JsonResponse
     {
         $this->authorize('viewAdmin', Product::class);
 
-        $dto = $this->catalog->findProductAdmin($id);
+        $dto = $this->catalog->findProductAdmin($uuid);
 
         if ($dto === null) {
             return response()->json(['message' => 'Product not found.'], 404);
@@ -70,18 +70,18 @@ class ProductsController extends Controller
         return response()->json(new ProductResource($dto));
     }
 
-    public function update(UpdateProductRequest $request, int $id): JsonResponse
+    public function update(UpdateProductRequest $request, string $uuid): JsonResponse
     {
-        $dto = $this->updateAction->handle($id, $request->validated());
+        $dto = $this->updateAction->handle($uuid, $request->validated());
 
         return response()->json(new ProductResource($dto));
     }
 
-    public function destroy(int $id): JsonResponse
+    public function destroy(string $uuid): JsonResponse
     {
         $this->authorize('delete', Product::class);
 
-        $this->deleteAction->handle($id);
+        $this->deleteAction->handle($uuid);
 
         return response()->json(null, 204);
     }

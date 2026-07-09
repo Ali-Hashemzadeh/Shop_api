@@ -216,8 +216,14 @@ Match the surrounding code. Concrete patterns used throughout:
 - **One usage flow:** pre-upload (`POST /api/v1/media` → get `media_id` → pass `primary_media_id` / `gallery_media_ids` / `variants.*.media_id` to a Catalog write endpoint). Catalog product endpoints no longer accept inline file uploads directly.
 
 ### Catalog — key facts
+- **Product public identifier is a UUID.** `Product` carries a unique, server-generated `uuid`
+  (never accepted from client input) that is the API-facing handle: all product-level routes are
+  `{uuid}` (with a `whereUuid` constraint) and the response `id` field is the UUID. The integer
+  primary key stays internal and remains the FK target for variants/images; SKUs still embed the
+  internal integer id. `CatalogManagerInterface` product-aggregate methods (`findProduct`,
+  `findProductAdmin`, `updateProduct`, `deleteProduct`) take the `string $uuid`.
 - Entities: `Category` (infinite nesting via `parent_id`), `Product` (`draft`/`published`,
-  `primary_media_id`), `ProductImage` (gallery, `sort_order`), `ProductVariant` (auto-generated
+  `uuid`, `primary_media_id`), `ProductImage` (gallery, `sort_order`), `ProductVariant` (auto-generated
   `sku` format `bdp{productId}-v{n}` — **never accepted from client input**, integer
   `base_price`/`compare_at_price`, JSON `attributes`, per-variant
   `type` (`image` or `color`, required), `media_id`, `is_default` **single-true invariant enforced at the application layer**).
@@ -226,7 +232,7 @@ Match the surrounding code. Concrete patterns used throughout:
   array. When provided, the product and all variants are created together inside a single
   `DB::transaction`. Validation enforces that exactly one variant has `is_default: true`.
   Omitting `variants` is valid — the standalone variant routes are unchanged.
-- **Variant upsert on update:** `PATCH /api/v1/catalog/products/{id}` also accepts an
+- **Variant upsert on update:** `PATCH /api/v1/catalog/products/{uuid}` also accepts an
   optional `variants` array with upsert-by-ID semantics — known `id` already on this product →
   `updateProductVariant`; missing or unknown `id` → `createProductVariant` with auto-generated
   SKU; variants absent from the array are untouched. Invariant: at most one submitted variant
@@ -235,8 +241,8 @@ Match the surrounding code. Concrete patterns used throughout:
 - **Admin product index:** `GET /api/v1/catalog/products/admin` (auth + `catalog.product.view-admin`)
   returns products in **every** status (draft + published), newest first, paginated. Filters:
   `status` (`draft`/`published`), `category_id`, `min_price`/`max_price` (default variant), and
-  `search` (LIKE on title, description, slug, or variant SKU). The public `GET /products/{id}` route
-  is `whereNumber`-constrained so it does not shadow `/products/admin`.
+  `search` (LIKE on title, description, slug, or variant SKU). Product-level routes are addressed by
+  `uuid` with a `whereUuid` constraint, so `GET /products/{uuid}` never shadows `/products/admin`.
 - **No inline file uploads on product endpoints.** Pass `primary_media_id`,
   `gallery_media_ids`, or `variants.*.media_id` (pre-uploaded via `POST /api/v1/media`).
 - Permissions: `catalog.category.{create,update,delete}`,
