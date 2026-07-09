@@ -27,7 +27,7 @@ class CreateCategoryAction
 
         return $this->catalog->createCategory([
             'name' => $data['name'],
-            'slug' => $data['slug'] ?? Str::slug($data['name']),
+            'slug' => $data['slug'] ?? Str::slug($data['name'], '-', null),
             'parent_id' => $data['parent_id'] ?? null,
             'media_id' => $mediaId,
             'is_active' => $data['is_active'] ?? true,
