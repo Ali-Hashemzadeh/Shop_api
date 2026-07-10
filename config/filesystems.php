@@ -85,9 +85,7 @@ return [
     */
 
     'links' => [
-        // Updated to explicitly map to the absolute cPanel public_html directory
-        // Make sure 'elemano' matches your actual cPanel username
-        '/home2/elemano/public_html/storage' => storage_path('app/public'),
+        env('PUBLIC_STORAGE_PATH', public_path('storage')) => storage_path('app/public'),
     ],
 
 ];
