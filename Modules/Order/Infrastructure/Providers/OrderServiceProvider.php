@@ -3,6 +3,7 @@
 namespace Modules\Order\Infrastructure\Providers;
 
 use App\Console\Commands\OrdersCancelExpiredCommand;
+use App\Console\Commands\OrdersSyncSalesCountsCommand;
 use Illuminate\Support\ServiceProvider;
 use Modules\Order\Domain\Contracts\OrderManagerInterface;
 use Modules\Order\Infrastructure\Persistence\Repositories\EloquentOrderManager;
@@ -18,6 +19,9 @@ class OrderServiceProvider extends ServiceProvider
     {
         $this->loadRoutesFrom(__DIR__.'/../Routes/api.php');
         $this->loadMigrationsFrom(__DIR__.'/../Persistence/Migrations');
-        $this->commands([OrdersCancelExpiredCommand::class]);
+        $this->commands([
+            OrdersCancelExpiredCommand::class,
+            OrdersSyncSalesCountsCommand::class,
+        ]);
     }
 }
