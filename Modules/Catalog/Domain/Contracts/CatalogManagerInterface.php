@@ -44,6 +44,7 @@ interface CatalogManagerInterface
      *   - min_price    (int)    — default variant base_price >= value
      *   - max_price    (int)    — default variant base_price <= value
      *   - search       (string) — LIKE %value% on title OR description
+     *   - sort         (string) — cheapest | most_expensive (default variant base_price) | most_sold (sales_count desc)
      *
      * @return LengthAwarePaginator<ProductDTO>
      */
@@ -58,6 +59,7 @@ interface CatalogManagerInterface
      *   - min_price    (int)    — default variant base_price >= value
      *   - max_price    (int)    — default variant base_price <= value
      *   - search       (string) — LIKE %value% on title, description, slug, or variant SKU
+     *   - sort         (string) — cheapest | most_expensive (default variant base_price) | most_sold (sales_count desc)
      *
      * @return LengthAwarePaginator<ProductDTO>
      */
@@ -72,6 +74,18 @@ interface CatalogManagerInterface
     public function updateProduct(string $uuid, array $data): ProductDTO;
 
     public function deleteProduct(string $uuid): void;
+
+    /**
+     * Replace the denormalized best-seller counters from an authoritative,
+     * absolute per-SKU tally (owned by the Order module).
+     *
+     * Each SKU is resolved to its owning product and the totals are summed per
+     * product (multiple variants of one product accumulate). Products absent
+     * from the tally are reset to 0. SKUs unknown to Catalog are ignored.
+     *
+     * @param  array<string, int>  $skuTotals  sku => total units sold
+     */
+    public function syncSalesCounts(array $skuTotals): void;
 
     // ── Product Variants ──────────────────────────────────────────────────────
 

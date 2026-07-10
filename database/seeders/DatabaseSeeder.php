@@ -11,6 +11,9 @@ use Modules\Inventory\Infrastructure\Persistence\Seeders\InventoryPermissionsSee
 use Modules\Inventory\Infrastructure\Persistence\Seeders\InventorySampleDataSeeder;
 use Modules\Media\Infrastructure\Persistence\Seeders\MediaModuleSeeder;
 use Modules\Order\Infrastructure\Persistence\Seeders\OrderPermissionsSeeder;
+use Modules\Order\Infrastructure\Persistence\Seeders\OrderSampleDataSeeder;
+use Modules\Payment\Infrastructure\Persistence\Seeders\PaymentPermissionsSeeder;
+use Modules\Payment\Infrastructure\Persistence\Seeders\PaymentSampleDataSeeder;
 
 class DatabaseSeeder extends Seeder
 {
@@ -27,8 +30,11 @@ class DatabaseSeeder extends Seeder
             MediaModuleSeeder::class,
             InventoryPermissionsSeeder::class,
             OrderPermissionsSeeder::class,
+            PaymentPermissionsSeeder::class,
             CatalogSampleDataSeeder::class,
             InventorySampleDataSeeder::class,
+            OrderSampleDataSeeder::class,
+            PaymentSampleDataSeeder::class,
         ]);
     }
 }

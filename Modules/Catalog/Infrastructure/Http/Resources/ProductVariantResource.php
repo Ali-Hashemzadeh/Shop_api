@@ -23,6 +23,8 @@ class ProductVariantResource extends JsonResource
             'compare_at_price' => $dto->compareAtPrice,
             'attributes' => $dto->attributes,
             'image_url' => $dto->imageUrl,
+            // Available units for this variant (physical − reserved), from Inventory.
+            'stock' => $dto->availableStock,
         ];
     }
 }

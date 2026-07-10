@@ -6,6 +6,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Modules\Catalog\Domain\Models\Category;
 use Modules\Catalog\Domain\Models\Product;
 use Modules\Catalog\Domain\Models\ProductVariant;
+use Modules\Inventory\Domain\Models\InventoryStock;
 use Tests\TestCase;
 
 class ProductsTest extends TestCase
@@ -41,13 +42,50 @@ class ProductsTest extends TestCase
 
         $product = Product::where('title', 'UUID Product')->firstOrFail();
 
-        // The response `id` is the opaque UUID, never the internal integer primary key.
+        // The response `id` is the opaque public code, never the internal integer primary key.
         $response->assertJsonPath('id', $product->uuid);
-        $this->assertMatchesRegularExpression(
-            '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/',
-            $response->json('id'),
-        );
+        $this->assertMatchesRegularExpression('/^[0-9a-f]{7}$/', $response->json('id'));
         $this->assertNotSame((string) $product->id, $response->json('id'));
+    }
+
+    /** @test */
+    public function it_exposes_available_stock_per_variant_on_the_product_resource(): void
+    {
+        $product = Product::create(['title' => 'Stocked', 'slug' => 'stocked', 'status' => 'published']);
+        ProductVariant::create([
+            'product_id' => $product->id,
+            'sku' => 'STOCK-1',
+            'type' => 'color',
+            'is_default' => true,
+            'base_price' => 1000,
+            'attributes' => [],
+        ]);
+
+        // 20 physical − 5 reserved = 15 available.
+        InventoryStock::create(['sku' => 'STOCK-1', 'quantity' => 20, 'reserved_quantity' => 5]);
+
+        $this->getJson("/api/v1/catalog/products/{$product->uuid}")
+            ->assertOk()
+            ->assertJsonPath('variants.0.sku', 'STOCK-1')
+            ->assertJsonPath('variants.0.stock', 15);
+    }
+
+    /** @test */
+    public function it_reports_zero_stock_for_a_variant_with_no_inventory_record(): void
+    {
+        $product = Product::create(['title' => 'Unstocked', 'slug' => 'unstocked', 'status' => 'published']);
+        ProductVariant::create([
+            'product_id' => $product->id,
+            'sku' => 'NOSTOCK-1',
+            'type' => 'color',
+            'is_default' => true,
+            'base_price' => 1000,
+            'attributes' => [],
+        ]);
+
+        $this->getJson("/api/v1/catalog/products/{$product->uuid}")
+            ->assertOk()
+            ->assertJsonPath('variants.0.stock', 0);
     }
 
     /** @test */

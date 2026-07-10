@@ -1344,6 +1344,7 @@ const res = await fetch(<span class="str">'/api/v1/media'</span>, {
         <tr><td>min_price</td><td class="opt">optional integer</td><td>Minimum price in rials. Compares against the default variant's <code>base_price</code>. Must be ≥ 0.</td></tr>
         <tr><td>max_price</td><td class="opt">optional integer</td><td>Maximum price in rials. Compares against the default variant's <code>base_price</code>. Must be ≥ 0.</td></tr>
         <tr><td>search</td><td class="opt">optional string</td><td>Free-text search. Matches against <code>title</code> OR <code>description</code> (case-insensitive contains). Max 255 chars.</td></tr>
+        <tr><td>sort</td><td class="opt">optional string</td><td>Sort order. One of <code>cheapest</code> / <code>most_expensive</code> (by the default variant's <code>base_price</code>) or <code>most_sold</code> (by <code>sales_count</code>, best-sellers first). Omitted → newest first. Any other value → 422.</td></tr>
       </table>
       <div class="block-label">Example Requests</div>
       <pre><span class="comment">// All published products (page 1, 15 per page)</span>
@@ -1458,6 +1459,7 @@ GET /api/v1/catalog/products?category_id=5&amp;min_price=10000000&amp;max_price=
         <tr><td>min_price</td><td class="opt">optional integer</td><td>Minimum price in rials (default variant). Must be ≥ 0.</td></tr>
         <tr><td>max_price</td><td class="opt">optional integer</td><td>Maximum price in rials (default variant). Must be ≥ 0.</td></tr>
         <tr><td>search</td><td class="opt">optional string</td><td>Free-text search on <code>title</code> or <code>description</code>. Max 255 chars.</td></tr>
+        <tr><td>sort</td><td class="opt">optional string</td><td>Sort order: <code>cheapest</code> / <code>most_expensive</code> (default variant <code>base_price</code>) or <code>most_sold</code> (<code>sales_count</code>). Omitted → newest first. Any other value → 422.</td></tr>
       </table>
     </div>
   </div>

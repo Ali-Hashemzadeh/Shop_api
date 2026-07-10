@@ -94,9 +94,13 @@ class CatalogSampleDataSeeder extends Seeder
     /** @param array<int,array{price:int,compare:int,attrs:array<string,string>}> $variants */
     private function seedProduct(Category $category, string $title, string $slug, string $description, array $variants): void
     {
+        // Generate the public code through the same model helper the `creating` hook
+        // uses on a real `POST /products` create. Seeders run under WithoutModelEvents,
+        // which mutes that hook, so we invoke the generator explicitly here.
         $product = Product::firstOrCreate(
             ['slug' => $slug],
             [
+                'uuid' => Product::generateUniqueUuid(),
                 'category_id' => $category->id,
                 'title' => $title,
                 'description' => $description,

@@ -93,6 +93,7 @@ class ProductsController extends Controller
             'min_price' => $request->has('min_price') ? $request->integer('min_price') : null,
             'max_price' => $request->has('max_price') ? $request->integer('max_price') : null,
             'search' => $request->string('search')->trim()->toString() ?: null,
+            'sort' => $request->string('sort')->trim()->toString() ?: null,
         ], fn ($v) => $v !== null);
 
         return ProductResource::collection(
@@ -110,6 +111,7 @@ class ProductsController extends Controller
             'min_price' => $request->has('min_price') ? $request->integer('min_price') : null,
             'max_price' => $request->has('max_price') ? $request->integer('max_price') : null,
             'search' => $request->string('search')->trim()->toString() ?: null,
+            'sort' => $request->string('sort')->trim()->toString() ?: null,
         ], fn ($v) => $v !== null);
 
         return ProductResource::collection(
@@ -123,6 +125,7 @@ class ProductsController extends Controller
             'min_price' => $request->has('min_price') ? $request->integer('min_price') : null,
             'max_price' => $request->has('max_price') ? $request->integer('max_price') : null,
             'search' => $request->string('search')->trim()->toString() ?: null,
+            'sort' => $request->string('sort')->trim()->toString() ?: null,
         ], fn ($v) => $v !== null);
 
         return ProductResource::collection(

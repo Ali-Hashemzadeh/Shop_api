@@ -16,12 +16,16 @@ use Modules\Catalog\Domain\Models\Category;
 use Modules\Catalog\Domain\Models\Product;
 use Modules\Catalog\Domain\Models\ProductImage;
 use Modules\Catalog\Domain\Models\ProductVariant;
+use Modules\Inventory\Domain\Contracts\InventoryManagerInterface;
 use Modules\Media\Domain\Contracts\MediaManagerInterface;
 use Modules\Media\Domain\DTOs\MediaDTO;
 
 class EloquentCatalogManager implements CatalogManagerInterface
 {
-    public function __construct(private readonly MediaManagerInterface $media) {}
+    public function __construct(
+        private readonly MediaManagerInterface $media,
+        private readonly InventoryManagerInterface $inventory,
+    ) {}
 
     // ── Categories ────────────────────────────────────────────────────────────
 
@@ -132,6 +136,7 @@ class EloquentCatalogManager implements CatalogManagerInterface
             ->with(['images', 'variants']);
 
         $this->applyProductFilters($query, $filters);
+        $this->applyProductSort($query, $filters['sort'] ?? null);
 
         return $this->paginateProducts($query, $perPage);
     }
@@ -139,14 +144,14 @@ class EloquentCatalogManager implements CatalogManagerInterface
     public function getProductsAdmin(array $filters = [], int $perPage = 15): LengthAwarePaginator
     {
         $query = Product::query()
-            ->with(['images', 'variants'])
-            ->latest('id');
+            ->with(['images', 'variants']);
 
         if (isset($filters['status'])) {
             $query->where('status', (string) $filters['status']);
         }
 
         $this->applyProductFilters($query, $filters, admin: true);
+        $this->applyProductSort($query, $filters['sort'] ?? null);
 
         return $this->paginateProducts($query, $perPage);
     }
@@ -190,6 +195,40 @@ class EloquentCatalogManager implements CatalogManagerInterface
         Product::query()->where('uuid', $uuid)->firstOrFail()->delete();
     }
 
+    public function syncSalesCounts(array $skuTotals): void
+    {
+        // Resolve the Order module's sku => total tally into product_id => summed
+        // total, entirely within Catalog's own tables (SKUs map to variants,
+        // multiple variants of one product accumulate). Unknown SKUs are dropped.
+        $productTotals = [];
+
+        if (! empty($skuTotals)) {
+            $variantMap = ProductVariant::query()
+                ->whereIn('sku', array_keys($skuTotals))
+                ->pluck('product_id', 'sku');
+
+            foreach ($skuTotals as $sku => $total) {
+                $productId = $variantMap[$sku] ?? null;
+
+                if ($productId === null) {
+                    continue;
+                }
+
+                $productTotals[$productId] = ($productTotals[$productId] ?? 0) + (int) $total;
+            }
+        }
+
+        DB::transaction(function () use ($productTotals) {
+            // Reset first so products whose sales dropped to zero are corrected,
+            // then stamp the fresh absolute totals.
+            Product::query()->where('sales_count', '!=', 0)->update(['sales_count' => 0]);
+
+            foreach ($productTotals as $productId => $total) {
+                Product::query()->whereKey($productId)->update(['sales_count' => $total]);
+            }
+        });
+    }
+
     // ── Product Variants ──────────────────────────────────────────────────────
 
     public function findVariant(int $variantId): ?ProductVariantDTO
@@ -197,7 +236,7 @@ class EloquentCatalogManager implements CatalogManagerInterface
         $variant = ProductVariant::with('product')->find($variantId);
 
         return $variant
-            ? ProductVariantDTO::fromModel($variant, $this->resolveUrl((int) $variant->media_id), $variant->product?->title)
+            ? ProductVariantDTO::fromModel($variant, $this->resolveUrl((int) $variant->media_id), $variant->product?->title, $this->availableStockFor($variant->sku))
             : null;
     }
 
@@ -206,7 +245,7 @@ class EloquentCatalogManager implements CatalogManagerInterface
         $variant = ProductVariant::with('product')->where('sku', $sku)->first();
 
         return $variant
-            ? ProductVariantDTO::fromModel($variant, $this->resolveUrl((int) $variant->media_id), $variant->product?->title)
+            ? ProductVariantDTO::fromModel($variant, $this->resolveUrl((int) $variant->media_id), $variant->product?->title, $this->availableStockFor($variant->sku))
             : null;
     }
 
@@ -218,7 +257,7 @@ class EloquentCatalogManager implements CatalogManagerInterface
 
         $variant->load('product');
 
-        return ProductVariantDTO::fromModel($variant, $this->resolveUrl((int) $variant->media_id), $variant->product?->title);
+        return ProductVariantDTO::fromModel($variant, $this->resolveUrl((int) $variant->media_id), $variant->product?->title, $this->availableStockFor($variant->sku));
     }
 
     public function updateProductVariant(int $variantId, array $data): ProductVariantDTO
@@ -237,7 +276,7 @@ class EloquentCatalogManager implements CatalogManagerInterface
             $variant->refresh();
             $variant->load('product');
 
-            return ProductVariantDTO::fromModel($variant, $this->resolveUrl((int) $variant->media_id), $variant->product?->title);
+            return ProductVariantDTO::fromModel($variant, $this->resolveUrl((int) $variant->media_id), $variant->product?->title, $this->availableStockFor($variant->sku));
         });
     }
 
@@ -288,6 +327,38 @@ class EloquentCatalogManager implements CatalogManagerInterface
         }
     }
 
+    /**
+     * Apply the requested storefront ordering.
+     *
+     * Price sorts order by the *default* variant's base_price via a correlated
+     * subquery (prices live on ProductVariant). `most_sold` uses the denormalized
+     * products.sales_count. Absent/unknown sort falls back to newest-first so
+     * pagination stays deterministic. All modes carry an id tiebreak.
+     */
+    private function applyProductSort($query, ?string $sort): void
+    {
+        switch ($sort) {
+            case 'most_sold':
+                $query->orderByDesc('sales_count')->orderByDesc('id');
+                break;
+
+            case 'cheapest':
+            case 'most_expensive':
+                $defaultPrice = ProductVariant::query()
+                    ->select('base_price')
+                    ->whereColumn('product_id', 'products.id')
+                    ->where('is_default', true)
+                    ->limit(1);
+
+                $query->orderBy($defaultPrice, $sort === 'cheapest' ? 'asc' : 'desc')
+                    ->orderByDesc('id');
+                break;
+
+            default:
+                $query->latest('id');
+        }
+    }
+
     private function paginateProducts($query, int $perPage): LengthAwarePaginator
     {
         $paginator = $query->paginate($perPage);
@@ -300,14 +371,23 @@ class EloquentCatalogManager implements CatalogManagerInterface
 
         $mediaMap = $this->buildMediaMap($mediaIds);
 
-        return $paginator->through(fn (Product $p) => $this->hydrateProduct($p, $mediaMap));
+        // Page-wide available-stock lookup in a single Inventory batch call, so a list
+        // of products never fans out into one stock query per product.
+        $stockMap = $this->availableStockMap(
+            $paginator->getCollection()
+                ->flatMap(fn (Product $p) => $p->variants->pluck('sku'))
+                ->all()
+        );
+
+        return $paginator->through(fn (Product $p) => $this->hydrateProduct($p, $mediaMap, $stockMap));
     }
 
-    private function hydrateProduct(Product $product, ?Collection $mediaMap = null): ProductDTO
+    private function hydrateProduct(Product $product, ?Collection $mediaMap = null, ?array $stockMap = null): ProductDTO
     {
-        // Single-item callers omit the map and get one built for this product;
-        // list callers pass a shared, page-wide map built in a single fetch.
+        // Single-item callers omit the maps and get them built for this product;
+        // list callers pass shared, page-wide maps each built in a single fetch.
         $mediaMap ??= $this->buildMediaMap($this->productMediaIds($product));
+        $stockMap ??= $this->availableStockMap($product->variants->pluck('sku')->all());
 
         $primaryImageUrl = $product->primary_media_id
             ? $mediaMap->get($product->primary_media_id)?->url
@@ -325,10 +405,40 @@ class EloquentCatalogManager implements CatalogManagerInterface
                 $v,
                 $mediaMap->get($v->media_id)?->url,
                 $product->title,
+                $stockMap[$v->sku] ?? 0,
             ))
             ->all();
 
         return ProductDTO::fromModel($product, $primaryImageUrl, $images, $variants);
+    }
+
+    /**
+     * Available units keyed by SKU, resolved from the Inventory module via its
+     * contract (no cross-module table access). SKUs with no stock record are
+     * simply absent from the map — callers treat that as 0.
+     *
+     * @param  array<int, string>  $skus
+     * @return array<string, int>
+     */
+    private function availableStockMap(array $skus): array
+    {
+        $skus = array_values(array_unique(array_filter($skus)));
+
+        if ($skus === []) {
+            return [];
+        }
+
+        $map = [];
+        foreach ($this->inventory->getBatchStockBySkus($skus) as $sku => $stock) {
+            $map[$sku] = $stock->availableQuantity;
+        }
+
+        return $map;
+    }
+
+    private function availableStockFor(string $sku): int
+    {
+        return $this->availableStockMap([$sku])[$sku] ?? 0;
     }
 
     /**
