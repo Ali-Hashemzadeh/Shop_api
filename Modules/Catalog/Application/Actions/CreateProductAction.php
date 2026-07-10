@@ -33,7 +33,7 @@ class CreateProductAction
             }
 
             foreach ($data['variants'] ?? [] as $i => $variantData) {
-                $sku = 'bdp'.$product->id.'-v'.($i + 1);
+                $sku = 'bdp'.$product->id.'-'.($i + 1);
                 $this->catalog->createProductVariant($product->id, array_merge($variantData, ['sku' => $sku]));
             }
 
