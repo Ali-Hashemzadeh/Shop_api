@@ -27,9 +27,6 @@ class UpdateProfile
             $attributes['email'] = $data['email'];
         }
 
-        if (array_key_exists('phone', $data)) {
-            $attributes['phone'] = $data['phone'];
-        }
 
         if (! empty($attributes)) {
             $this->users->update($user, $attributes);

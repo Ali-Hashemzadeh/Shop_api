@@ -31,13 +31,6 @@ class UpdateProfileRequest extends FormRequest
                 'max:255',
                 Rule::unique('users', 'email')->ignore($userId),
             ],
-            'phone' => [
-                'sometimes',
-                'nullable',
-                'string',
-                'max:30',
-                Rule::unique('users', 'phone')->ignore($userId),
-            ],
         ];
 
         if ($mode === 'email') {
