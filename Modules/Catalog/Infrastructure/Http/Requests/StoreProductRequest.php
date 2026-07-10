@@ -31,6 +31,7 @@ class StoreProductRequest extends FormRequest
             'features' => ['nullable', 'array'],
             'features.*.title' => ['required', 'string', 'max:255'],
             'features.*.value' => ['required', 'string', 'max:255'],
+            'features.*.is_important' => ['required', 'boolean'],
             'status' => ['nullable', 'in:draft,published'],
             'category_id' => ['nullable', 'integer', 'exists:categories,id'],
             'primary_media_id' => ['nullable', 'integer'],
