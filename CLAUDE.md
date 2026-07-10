@@ -175,7 +175,7 @@ Match the surrounding code. Concrete patterns used throughout:
 | **Orders** | 🚧 Scaffolded | Directory skeleton exists under `Modules/Orders/`; provider **not yet** in `bootstrap/providers.php` and not documented in README/AGENT_CONTEXT — confirm scope before building |
 | Payment | 📋 Planned | Pending roadmap review |
 
-**Test suite baseline: 260 tests / 748 assertions, all green.**
+**Test suite baseline: 288 tests / 811 assertions, all green.**
 
 ### Identity — key facts
 - **OTP + password split-auth, phone-based, unified register+login** (sign-up == login).
@@ -245,6 +245,15 @@ Match the surrounding code. Concrete patterns used throughout:
   `uuid` with a `whereUuid` constraint, so `GET /products/{uuid}` never shadows `/products/admin`.
 - **No inline file uploads on product endpoints.** Pass `primary_media_id`,
   `gallery_media_ids`, or `variants.*.media_id` (pre-uploaded via `POST /api/v1/media`).
+- **Product sort:** all listing endpoints (`/products`, `/categories/{id}/products`,
+  `/products/admin`) accept `?sort=` ∈ {`cheapest`, `most_expensive`, `most_sold`}. Price sorts
+  order by the **default variant's** `base_price`; `most_sold` orders by a denormalized, indexed
+  `products.sales_count` (exposed as `sales_count`, never client-accepted). Absent/invalid → newest-first
+  default (invalid → 422). `sales_count` is kept current by the **Order** module: the hourly
+  `orders:sync-sales-counts` command aggregates realized orders (`OrderStatus::soldStatuses()` =
+  paid/processing/shipped) and pushes an absolute per-SKU tally through
+  `CatalogManagerInterface::syncSalesCounts()` — Catalog resolves SKU→variant→product internally,
+  so no cross-module join.
 - Permissions: `catalog.category.{create,update,delete}`,
   `catalog.product.{view-admin,create,update,delete}`, `catalog.variant.{create,update,delete}`.
 

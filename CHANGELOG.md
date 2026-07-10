@@ -2,6 +2,46 @@
 
 ## [Unreleased](https://github.com/laravel/laravel/compare/v12.12.1...12.x)
 
+### Feature — Catalog: per-variant available stock on the product resource
+
+**Product read responses now report how many units of each variant are available.**
+
+#### Added
+- `ProductVariantResource` emits `stock` — available units (`physical − reserved`) for the variant's SKU. Present on every product read (`GET /products`, `/products/{uuid}`, `/products/{uuid}/admin`, `/categories/{id}/products`, `/products/admin`) and the standalone `/variants/*` endpoints.
+- `ProductVariantDTO::$availableStock` (nullable int) carries the figure.
+
+#### Changed
+- `EloquentCatalogManager` now depends on `InventoryManagerInterface` and enriches variant DTOs via `getBatchStockBySkus()` — a single page-wide batch call for lists (no per-product fan-out), a single lookup for standalone variant reads. Respects module isolation (contract + DTO, no cross-module join). SKUs with no inventory record report `0`.
+
+#### Tests
+- `ProductsTest` (+2): available stock exposed per variant; a variant with no inventory record reports `0`.
+
+### Removed — Catalog: caching layer (deferred)
+
+**The Catalog read-cache decorator is removed for now; caching will be reintroduced later as a deliberate, standalone piece of work.**
+
+#### Removed
+- `CachedCatalogManager` (read-through cache + version-bump invalidation decorator), `config/catalog.php` (the `cache.enabled` / `cache.ttl` block and its `CATALOG_CACHE_*` env keys), and `CatalogCacheTest`.
+- `CatalogServiceProvider` now binds `CatalogManagerInterface` straight to `EloquentCatalogManager` unconditionally — no cache branch, no config merge.
+
+> Earlier Unreleased notes that mentioned the cache decorator have been reconciled to match; it was never part of a tagged release.
+
+### Feature — Catalog: product sort (`cheapest` / `most_expensive` / `most_sold`)
+
+**Product listing endpoints accept a `?sort=` param; best-seller ordering is powered by a denormalized counter kept in sync from the Order module.**
+
+#### Added
+- `products.sales_count` — indexed, denormalized best-seller counter (migration `2026_07_09_000000_add_sales_count_to_products_table`, default 0). Never client-accepted; exposed as `sales_count` on `ProductResource`.
+- `CatalogManagerInterface::syncSalesCounts(array $skuTotals)` — absolute per-SKU tally (`sku => units`) pushed across the module boundary. Catalog resolves SKU → variant → product, sums per product, and resets products with no sales to 0. Unknown SKUs are ignored.
+- `OrderStatus::soldStatuses()` — `[paid, processing, shipped]`, the statuses that count as a realized sale.
+- Order module: `SyncSalesCountsAction` (aggregates `order_items.quantity` by SKU for realized orders, entirely within Order's own tables) + `orders:sync-sales-counts` console command, scheduled **hourly** in `routes/console.php`.
+
+#### Changed
+- `GET /catalog/products`, `GET /catalog/categories/{id}/products`, and `GET /catalog/products/admin` accept `sort` ∈ {`cheapest`, `most_expensive`, `most_sold`}. Price sorts order by the **default variant's** `base_price` (correlated subquery); `most_sold` orders by `sales_count`. Absent/invalid `sort` → newest-first default (invalid value → 422). Admin index default ordering unchanged (newest-first).
+
+#### Tests
+- `ProductSortTest` (10) covers the three sorts, admin sort, `sales_count` exposure, invalid-value 422, and `syncSalesCounts` semantics; `SalesCountSyncTest` (2) covers the cross-module artisan recompute (realized-only, zeroing). Suite: 288 green.
+
 ### Change — Catalog: products addressed by public UUID
 
 **Products now expose an opaque UUID as their public identifier; the API routes and response `id` use the UUID instead of the auto-increment integer.**
@@ -13,7 +53,6 @@
 #### Changed
 - Product-level routes are now `{uuid}` with a `whereUuid` constraint: `GET /products/{uuid}`, `GET /products/{uuid}/admin`, `PATCH /products/{uuid}`, `DELETE /products/{uuid}`, `POST /products/{uuid}/gallery`, `DELETE /products/{uuid}/gallery/{imageId}`, `POST /products/{uuid}/variants`. Numeric ids now `404` on these routes; `whereUuid` also prevents `/products/{uuid}` from shadowing `/products/admin` (replaces the old `whereNumber` guard).
 - `CatalogManagerInterface` product-aggregate methods (`findProduct`, `findProductAdmin`, `updateProduct`, `deleteProduct`) take `string $uuid`. The FK-insert helpers (`addProductImage`, `createProductVariant`) keep the internal integer product id; controllers resolve `uuid → product` and pass the integer inward. `UpdateProductRequest` slug-uniqueness now ignores the current product by `uuid`.
-- `CachedCatalogManager` keys the product read-cache by `uuid`; variant/image mutations resolve the owning product's `uuid` to invalidate the right entry.
 
 #### Unchanged
 - The integer primary key remains the internal key and the FK target for `product_variants` / `product_images` (no FK migration). SKUs still embed the internal integer id (`bdp{id}-v{n}`). Cart / Inventory / Order are unaffected — they link to Catalog by SKU.
@@ -79,7 +118,7 @@
 
 #### Added
 - `GET /api/v1/catalog/products/admin` — paginated products in **any** status, newest first. Gated behind `auth:sanctum` + `catalog.product.view-admin` (401 unauthenticated / 403 unauthorized). Filters: `status` (`draft`/`published`), `category_id`, `min_price`/`max_price` (default variant `base_price`), and `search` (LIKE on title, description, slug, or variant SKU). `per_page` clamped 1–100 (default 15), `page` for the page number.
-- `CatalogManagerInterface::getProductsAdmin(array $filters = [], int $perPage = 15)` implemented in `EloquentCatalogManager` (shared filter/pagination helpers `applyProductFilters` + `paginateProducts`) and passed through uncached in `CachedCatalogManager` (mirrors `findProductAdmin` — admin views must never serve stale drafts).
+- `CatalogManagerInterface::getProductsAdmin(array $filters = [], int $perPage = 15)` implemented in `EloquentCatalogManager` (shared filter/pagination helpers `applyProductFilters` + `paginateProducts`).
 - `IndexAdminProductsRequest` — validates the filter set and enforces `catalog.product.view-admin` in `authorize()` (403 before validation).
 - `ProductsController::indexAdmin()`.
 

@@ -88,6 +88,7 @@ Controls the storefront presentation layer: hierarchical categories, products wi
 - **Key contract:** `CatalogManagerInterface` — full read/write surface consumed by higher-level modules (e.g. Orders, Inventory)
 - **Authorization:** Public read endpoints require no auth. Write endpoints and the admin product view require `auth:sanctum`; authorization is permission-based (`catalog.category.*`, `catalog.product.*`, `catalog.variant.*`) enforced via Laravel policies — any user granted a specific permission can act, independent of role.
 - **Pagination:** List endpoints return `LengthAwarePaginator` with a `{data, links, meta}` envelope. `per_page` (1–100) and `page` are documented automatically by Scramble.
+- **Product sort:** listing endpoints accept `?sort=cheapest|most_expensive|most_sold`. Price sorts use the default variant's `base_price`; `most_sold` uses a denormalized `sales_count` kept in sync hourly from realized orders (Order module's `orders:sync-sales-counts` → `CatalogManagerInterface::syncSalesCounts()`). Invalid values → 422.
 - **Image input:** Write endpoints accept images two ways — either send a `media_id` (pre-uploaded via the Media endpoint) or attach the file inline as `multipart/form-data`. The two are mutually exclusive per field. Inline fields: `image` on category create, `primary_image` + `gallery[]` (index sets sort order) on product create/update, and `variant_image` on variant create/update. These multipart fields are documented in Scramble via `#[BodyParameter]` attributes.
 
 ### Inventory (Complete)
@@ -147,7 +148,7 @@ Base prefix: `/api/v1`
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/catalog/products/admin` | Paginated products in **any** status (admin index) — filters: `status`, `category_id`, `min_price`, `max_price`, `search` (title/description/slug/SKU) |
+| `GET` | `/catalog/products/admin` | Paginated products in **any** status (admin index) — filters: `status`, `category_id`, `min_price`, `max_price`, `search` (title/description/slug/SKU), `sort` (`cheapest`/`most_expensive`/`most_sold`) |
 | `GET` | `/catalog/products/{uuid}/admin` | Product by UUID regardless of publish status |
 | `POST` | `/catalog/categories` | Create category |
 | `PATCH` | `/catalog/categories/{id}` | Update category |
