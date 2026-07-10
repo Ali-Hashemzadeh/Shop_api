@@ -20,7 +20,8 @@ class Media extends Model
      */
     public function getUrlAttribute(): string
     {
-        // Extracts 'public/path' into an accessible URL stream
-        return Storage::disk()->url($this->file_path);
+        // Files are stored on the 'public' disk, whose configured url base
+        // (APP_URL/storage) yields a fully qualified, domain-prefixed URL.
+        return Storage::disk('public')->url($this->file_path);
     }
 }
