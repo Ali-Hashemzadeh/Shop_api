@@ -26,6 +26,30 @@
 
 > Earlier Unreleased notes that mentioned the cache decorator have been reconciled to match; it was never part of a tagged release.
 
+### Change — Catalog: shorten the product public code to 7 chars
+
+**The product public identifier is now a short 7-char hex code (with a real DB uniqueness check), not a v4 UUID — shorter, friendlier URLs while staying opaque and non-enumerable.**
+
+#### Changed
+- `Product::generateUniqueUuid()` generates the code as `substr(bin2hex(random_bytes(4)), 0, 7)` and **loops against a DB uniqueness check** (`where('uuid', $code)->exists()`) until unique. Used by the model hook on `POST /products` create.
+- `products.uuid` column retyped from the native `uuid`/`char(36)` to `string(16)` (migration `2026_07_08_000000_add_uuid_to_products_table`), so short codes are valid on Postgres. The backfill loop generates the same 7-char codes with a uniqueness check.
+- Product-level route constraints changed from `whereUuid` to `->where('uuid', '[0-9a-fA-F\-]+')` — 7-char hex still matches, reserved segments (`admin`, `slug`) are still excluded, so no route shadows.
+- Seeders: `CatalogSampleDataSeeder` calls `Product::generateUniqueUuid()` explicitly (seeders run under `WithoutModelEvents`, which mutes the model hook), so seeded products get codes the same way a real create does.
+
+#### Tests
+- `ProductsTest` UUID assertion tightened to match `^[0-9a-f]{7}$`.
+
+### Chore — demo data seeders across Catalog, Inventory, Orders & Payments
+
+**`php artisan db:seed` now populates realistic sample data end-to-end so the API has something to show.**
+
+#### Added
+- `CatalogSampleDataSeeder` — 5 products (Galaxy S25, iPhone 16, MacBook Pro 14, AirPods Pro 2, USB-C Hub) with variants across 3 categories, each with a generated 7-char public code.
+- `InventorySampleDataSeeder` — seeds an opening `restock` ledger entry (50 units) per SKU via `adjustStock`, so ledger history is accurate from the start.
+- `OrderSampleDataSeeder` — 3 demo customers + addresses, an active user cart and a guest cart, and 9 orders spanning every status. Drives the **real** Inventory reservation lifecycle (reserve on create; commit for paid/processing/shipped; release for cancelled/failed; pending keeps its hold), then runs `SyncSalesCountsAction` so `sales_count` / `?sort=most_sold` has data. Idempotent (`[demo]` note marker), backdated `created_at`.
+- `PaymentSampleDataSeeder` — a `Payment` per realized order matching its status: in-person (`CASH-` ref) → `pending_cash`; online (`REF-` ref) → `captured`; failed → `failed`; pending → `initiated`.
+- All four registered in `database/seeders/DatabaseSeeder.php` after the permission seeders.
+
 ### Feature — Catalog: product sort (`cheapest` / `most_expensive` / `most_sold`)
 
 **Product listing endpoints accept a `?sort=` param; best-seller ordering is powered by a denormalized counter kept in sync from the Order module.**
@@ -47,11 +71,13 @@
 **Products now expose an opaque UUID as their public identifier; the API routes and response `id` use the UUID instead of the auto-increment integer.**
 
 #### Added
-- `products.uuid` — unique, indexed, server-generated column (migration `2026_07_08_000000_add_uuid_to_products_table`, backfills existing rows). Auto-assigned on create by the `Product` model's `creating` hook; **never accepted from client input** (mirrors the SKU rule).
+- `products.uuid` — unique, indexed, server-generated column (migration `2026_07_08_000000_add_uuid_to_products_table`, backfills existing rows). Auto-assigned on create by the `Product` model hook; **never accepted from client input** (mirrors the SKU rule).
 - `ProductDTO` gains a `uuid` field; `ProductResource` now emits the UUID as `id`.
 
+> **Superseded within Unreleased** by "shorten the product public code to 7 chars" below: the code is now a 7-char hex string (not a v4 UUID), the column is `string(16)`, and the route constraint is `->where('uuid', '[0-9a-fA-F\-]+')` (not `whereUuid`). The route set and "never client-accepted" contract are unchanged.
+
 #### Changed
-- Product-level routes are now `{uuid}` with a `whereUuid` constraint: `GET /products/{uuid}`, `GET /products/{uuid}/admin`, `PATCH /products/{uuid}`, `DELETE /products/{uuid}`, `POST /products/{uuid}/gallery`, `DELETE /products/{uuid}/gallery/{imageId}`, `POST /products/{uuid}/variants`. Numeric ids now `404` on these routes; `whereUuid` also prevents `/products/{uuid}` from shadowing `/products/admin` (replaces the old `whereNumber` guard).
+- Product-level routes are now `{uuid}`: `GET /products/{uuid}`, `GET /products/{uuid}/admin`, `PATCH /products/{uuid}`, `DELETE /products/{uuid}`, `POST /products/{uuid}/gallery`, `DELETE /products/{uuid}/gallery/{imageId}`, `POST /products/{uuid}/variants`. Numeric ids now `404` on these routes; the constraint also prevents `/products/{uuid}` from shadowing `/products/admin` (replaces the old `whereNumber` guard).
 - `CatalogManagerInterface` product-aggregate methods (`findProduct`, `findProductAdmin`, `updateProduct`, `deleteProduct`) take `string $uuid`. The FK-insert helpers (`addProductImage`, `createProductVariant`) keep the internal integer product id; controllers resolve `uuid → product` and pass the integer inward. `UpdateProductRequest` slug-uniqueness now ignores the current product by `uuid`.
 
 #### Unchanged
