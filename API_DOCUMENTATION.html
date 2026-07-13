@@ -119,6 +119,7 @@
 
   <div class="section-label">Catalog</div>
   <a href="#categories">Categories</a>
+  <a href="#brands">Brands</a>
   <a href="#products">Products</a>
   <a href="#gallery">Product Gallery</a>
   <a href="#variants">Product Variants</a>
@@ -140,6 +141,12 @@
   <a href="#order-overview">Overview</a>
   <a href="#order-create">Place Order</a>
   <a href="#order-list">My Orders</a>
+  <a href="#order-cancel">Cancel Order</a>
+
+  <div class="section-label">Payments</div>
+  <a href="#payment-overview">Overview</a>
+  <a href="#payment-initialize">Initialize Payment</a>
+  <a href="#payment-callback">Zarinpal Callback</a>
 </nav>
 
 <main>
@@ -1321,9 +1328,171 @@ const res = await fetch(<span class="str">'/api/v1/media'</span>, {
   </div>
 
 
+  <!-- ═══ BRANDS ═══ -->
+  <h2 id="brands">Catalog — Brands</h2>
+  <p>Brands are a flat catalog lookup that products may belong to (a product's <code>brand_id</code> is nullable). Public reads are open; create / update / delete require authentication plus the matching <code>catalog.brand.*</code> permission. A brand may carry a logo image, referenced through the Media module.</p>
+  <div class="note"><strong>Image handling.</strong> Attach a logo either by uploading a file inline (<code>image</code>, multipart/form-data) <em>or</em> by passing a pre-uploaded <code>media_id</code> — the two are mutually exclusive (sending both → 422). The response exposes the resolved public URL as <code>image_url</code>.</div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/catalog/brands</span>
+      <span class="badge">Public</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Paginated list of active brands, newest first.</p>
+      <div class="block-label">Query Parameters</div>
+      <table>
+        <tr><th>Param</th><th>Type</th><th>Description</th></tr>
+        <tr><td>per_page</td><td class="opt">optional integer</td><td>Items per page. 1–100. Default: 15.</td></tr>
+        <tr><td>page</td><td class="opt">optional integer</td><td>Page number. Default: 1.</td></tr>
+        <tr><td>search</td><td class="opt">optional string</td><td>Free-text match on the brand <code>name</code> (case-insensitive contains). Max 255 chars.</td></tr>
+      </table>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{
+  <span class="key">"data"</span>: [
+    {
+      <span class="key">"id"</span>:        <span class="num">3</span>,
+      <span class="key">"name"</span>:      <span class="str">"Samsung"</span>,
+      <span class="key">"slug"</span>:      <span class="str">"samsung"</span>,
+      <span class="key">"is_active"</span>: <span class="bool">true</span>,
+      <span class="key">"image_url"</span>: <span class="str">"http://localhost:8000/storage/brands/samsung-logo.webp"</span>
+    }
+  ],
+  <span class="key">"links"</span>: { <span class="comment">/* first, last, prev, next */</span> },
+  <span class="key">"meta"</span>:  { <span class="key">"current_page"</span>: <span class="num">1</span>, <span class="key">"last_page"</span>: <span class="num">1</span>, <span class="key">"per_page"</span>: <span class="num">15</span>, <span class="key">"total"</span>: <span class="num">7</span> }
+}</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/catalog/brands/{id}</span>
+      <span class="badge">Public</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Returns a single brand by its integer ID.</p>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{
+  <span class="key">"id"</span>:        <span class="num">3</span>,
+  <span class="key">"name"</span>:      <span class="str">"Samsung"</span>,
+  <span class="key">"slug"</span>:      <span class="str">"samsung"</span>,
+  <span class="key">"is_active"</span>: <span class="bool">true</span>,
+  <span class="key">"image_url"</span>: <span class="str">"http://localhost:8000/storage/brands/samsung-logo.webp"</span>
+}</pre>
+      <div class="block-label">Error Responses</div>
+      <table>
+        <tr><th>Status</th><th>Condition</th></tr>
+        <tr><td>404</td><td class="opt">Brand not found</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/catalog/brands</span>
+      <span class="badge auth">Requires auth:sanctum</span>
+      <span class="badge admin">Requires catalog.brand.create</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Creates a brand. The <code>slug</code> is auto-generated from <code>name</code> when omitted.</p>
+      <div class="block-label">Request Body Fields</div>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr><td>name</td><td class="req">required · string</td><td>Brand name, max 255 chars.</td></tr>
+        <tr><td>slug</td><td class="opt">optional · string</td><td>URL slug, max 255. Must be unique across brands. Auto-derived from <code>name</code> when omitted.</td></tr>
+        <tr><td>is_active</td><td class="opt">optional · boolean</td><td>Defaults to <code>true</code>.</td></tr>
+        <tr><td>media_id</td><td class="opt">optional · integer</td><td>Pre-uploaded logo (via <code>POST /media</code>). Mutually exclusive with <code>image</code>.</td></tr>
+        <tr><td>image</td><td class="opt">optional · file</td><td>Logo upload (JPEG/PNG/WebP, max 4 MB), multipart/form-data. Mutually exclusive with <code>media_id</code>.</td></tr>
+      </table>
+      <pre>{
+  <span class="key">"name"</span>:      <span class="str">"Samsung"</span>,
+  <span class="key">"is_active"</span>: <span class="bool">true</span>,
+  <span class="key">"media_id"</span>:  <span class="num">88</span>
+}</pre>
+      <div class="block-label">Response — 201 Created</div>
+      <pre>{
+  <span class="key">"id"</span>:        <span class="num">3</span>,
+  <span class="key">"name"</span>:      <span class="str">"Samsung"</span>,
+  <span class="key">"slug"</span>:      <span class="str">"samsung"</span>,
+  <span class="key">"is_active"</span>: <span class="bool">true</span>,
+  <span class="key">"image_url"</span>: <span class="str">"http://localhost:8000/storage/brands/samsung-logo.webp"</span>
+}</pre>
+      <div class="block-label">Error Responses</div>
+      <table>
+        <tr><th>Status</th><th>Condition</th></tr>
+        <tr><td>401</td><td class="opt">No Bearer token provided</td></tr>
+        <tr><td>403</td><td class="opt">User lacks <code>catalog.brand.create</code> permission</td></tr>
+        <tr><td>422</td><td class="opt">Validation failure (missing <code>name</code>, duplicate <code>slug</code>, or both <code>image</code> and <code>media_id</code> sent)</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method patch">PATCH</span>
+      <span class="endpoint-path">/catalog/brands/{id}</span>
+      <span class="badge auth">Requires auth:sanctum</span>
+      <span class="badge admin">Requires catalog.brand.update</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Partially updates a brand. All fields are optional; only supplied fields change.</p>
+      <div class="block-label">Request Body Fields</div>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr><td>name</td><td class="opt">optional · string</td><td>Brand name, max 255 chars.</td></tr>
+        <tr><td>slug</td><td class="opt">optional · string</td><td>Unique across brands (the current brand is ignored in the uniqueness check).</td></tr>
+        <tr><td>is_active</td><td class="opt">optional · boolean</td><td>Toggle brand visibility.</td></tr>
+        <tr><td>media_id</td><td class="opt">optional · integer</td><td>Replace the logo with a pre-uploaded media. Mutually exclusive with <code>image</code>.</td></tr>
+        <tr><td>image</td><td class="opt">optional · file</td><td>Replace the logo with an upload (max 4 MB). Mutually exclusive with <code>media_id</code>.</td></tr>
+      </table>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{
+  <span class="key">"id"</span>:        <span class="num">3</span>,
+  <span class="key">"name"</span>:      <span class="str">"Samsung Electronics"</span>,
+  <span class="key">"slug"</span>:      <span class="str">"samsung"</span>,
+  <span class="key">"is_active"</span>: <span class="bool">true</span>,
+  <span class="key">"image_url"</span>: <span class="str">"http://localhost:8000/storage/brands/samsung-logo.webp"</span>
+}</pre>
+      <div class="block-label">Error Responses</div>
+      <table>
+        <tr><th>Status</th><th>Condition</th></tr>
+        <tr><td>401</td><td class="opt">No Bearer token provided</td></tr>
+        <tr><td>403</td><td class="opt">User lacks <code>catalog.brand.update</code> permission</td></tr>
+        <tr><td>404</td><td class="opt">Brand not found</td></tr>
+        <tr><td>422</td><td class="opt">Validation failure (duplicate <code>slug</code>, or both <code>image</code> and <code>media_id</code> sent)</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method delete">DELETE</span>
+      <span class="endpoint-path">/catalog/brands/{id}</span>
+      <span class="badge auth">Requires auth:sanctum</span>
+      <span class="badge admin">Requires catalog.brand.delete</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Deletes a brand. Products that referenced it keep existing — their <code>brand_id</code> is set to <code>null</code> (the FK uses <code>nullOnDelete</code>).</p>
+      <div class="block-label">Response — 204 No Content</div>
+      <pre><span class="comment">// Empty body</span></pre>
+      <div class="block-label">Error Responses</div>
+      <table>
+        <tr><th>Status</th><th>Condition</th></tr>
+        <tr><td>401</td><td class="opt">No Bearer token provided</td></tr>
+        <tr><td>403</td><td class="opt">User lacks <code>catalog.brand.delete</code> permission</td></tr>
+        <tr><td>404</td><td class="opt">Brand not found</td></tr>
+      </table>
+    </div>
+  </div>
+
+
   <!-- ═══ PRODUCTS ═══ -->
   <h2 id="products">Catalog — Products</h2>
-  <p>Products can be <code>draft</code> (admin-only) or <code>published</code> (public). Public routes only return published products. Each product response includes a nested <code>images</code> gallery array and a <code>variants</code> array.</p>
+  <p>Products can be <code>draft</code> (admin-only) or <code>published</code> (public). Public routes only return published products. Each product response includes a nested <code>images</code> gallery array and a <code>variants</code> array (each variant carries a read-only <code>stock</code> count).</p>
+  <div class="note"><strong>Read-only fields.</strong> A product's <code>id</code> is the short public code (a 7-char hex string, e.g. <code>"a3f9c1b"</code>) used in every <code>/products/{uuid}</code> route — <strong>not</strong> the internal integer key. <code>sales_count</code> is a denormalized best-seller tally (units from realized orders), kept current by an hourly background sync. Both are server-computed and never accepted from client input.</div>
   <p>The <code>features</code> field is an ordered array of <code>{"title": "...", "value": "..."}</code> objects — useful for displaying product specification tables.</p>
   <p>Price filters (<code>min_price</code> / <code>max_price</code>) target the product's <strong>default variant</strong> (<code>is_default: true</code>) only, so the comparison reflects the storefront display price rather than any secondary variant.</p>
 
@@ -1341,6 +1510,7 @@ const res = await fetch(<span class="str">'/api/v1/media'</span>, {
         <tr><td>per_page</td><td class="opt">optional integer</td><td>Items per page. 1–100. Default: 15.</td></tr>
         <tr><td>page</td><td class="opt">optional integer</td><td>Page number. Default: 1.</td></tr>
         <tr><td>category_id</td><td class="opt">optional integer</td><td>Filter by category ID. Must be a valid existing category — returns 422 otherwise.</td></tr>
+        <tr><td>brand_id</td><td class="opt">optional integer</td><td>Filter by brand ID. Must be a valid existing brand — returns 422 otherwise.</td></tr>
         <tr><td>min_price</td><td class="opt">optional integer</td><td>Minimum price in rials. Compares against the default variant's <code>base_price</code>. Must be ≥ 0.</td></tr>
         <tr><td>max_price</td><td class="opt">optional integer</td><td>Maximum price in rials. Compares against the default variant's <code>base_price</code>. Must be ≥ 0.</td></tr>
         <tr><td>search</td><td class="opt">optional string</td><td>Free-text search. Matches against <code>title</code> OR <code>description</code> (case-insensitive contains). Max 255 chars.</td></tr>
@@ -1359,13 +1529,15 @@ GET /api/v1/catalog/products?category_id=5&amp;min_price=10000000&amp;max_price=
       <pre>{
   <span class="key">"data"</span>: [
     {
-      <span class="key">"id"</span>:                <span class="num">101</span>,
+      <span class="key">"id"</span>:                <span class="str">"a3f9c1b"</span>,
       <span class="key">"title"</span>:             <span class="str">"Samsung Galaxy S25 Ultra"</span>,
       <span class="key">"slug"</span>:              <span class="str">"samsung-galaxy-s25-ultra"</span>,
       <span class="key">"description"</span>:      <span class="str">"پیشرفته‌ترین گوشی سامسونگ با دوربین ۲۰۰ مگاپیکسلی و قلم S Pen."</span>,
       <span class="key">"features"</span>:         [<span class="comment">/* array of {title, value} */</span>],
       <span class="key">"status"</span>:            <span class="str">"published"</span>,
+      <span class="key">"sales_count"</span>:       <span class="num">128</span>,
       <span class="key">"category_id"</span>:       <span class="num">5</span>,
+      <span class="key">"brand_id"</span>:          <span class="num">3</span>,
       <span class="key">"primary_image_url"</span>: <span class="str">"http://localhost:8000/storage/products/s25-hero.webp"</span>,
       <span class="key">"images"</span>:            [<span class="comment">/* array of gallery image objects */</span>],
       <span class="key">"variants"</span>:          [<span class="comment">/* array of variant objects */</span>]
@@ -1388,7 +1560,7 @@ GET /api/v1/catalog/products?category_id=5&amp;min_price=10000000&amp;max_price=
       <p>Returns a published product by ID with full gallery and variants.</p>
       <div class="block-label">Response — 200 OK</div>
       <pre>{
-  <span class="key">"id"</span>:                <span class="num">101</span>,
+  <span class="key">"id"</span>:                <span class="str">"a3f9c1b"</span>,
   <span class="key">"title"</span>:             <span class="str">"Samsung Galaxy S25 Ultra"</span>,
   <span class="key">"slug"</span>:              <span class="str">"samsung-galaxy-s25-ultra"</span>,
   <span class="key">"description"</span>:      <span class="str">"پیشرفته‌ترین گوشی سامسونگ با دوربین ۲۰۰ مگاپیکسلی و قلم S Pen."</span>,
@@ -1400,7 +1572,9 @@ GET /api/v1/catalog/products?category_id=5&amp;min_price=10000000&amp;max_price=
     { <span class="key">"title"</span>: <span class="str">"رم"</span>,        <span class="key">"value"</span>: <span class="str">"۱۲ گیگابایت"</span> }
   ],
   <span class="key">"status"</span>:            <span class="str">"published"</span>,
+  <span class="key">"sales_count"</span>:       <span class="num">128</span>,
   <span class="key">"category_id"</span>:       <span class="num">5</span>,
+  <span class="key">"brand_id"</span>:          <span class="num">3</span>,
   <span class="key">"primary_image_url"</span>: <span class="str">"http://localhost:8000/storage/products/s25-hero.webp"</span>,
   <span class="key">"images"</span>: [
     { <span class="key">"id"</span>: <span class="num">34</span>, <span class="key">"media_id"</span>: <span class="num">22</span>, <span class="key">"url"</span>: <span class="str">"http://localhost:8000/storage/products/gallery/s25-front.webp"</span>, <span class="key">"sort_order"</span>: <span class="num">0</span> },
@@ -1415,7 +1589,8 @@ GET /api/v1/catalog/products?category_id=5&amp;min_price=10000000&amp;max_price=
       <span class="key">"base_price"</span>:     <span class="num">89000000</span>,
       <span class="key">"compare_at_price"</span>: <span class="num">95000000</span>,
       <span class="key">"attributes"</span>:    { <span class="key">"رنگ"</span>: <span class="str">"مشکی تیتانیومی"</span>, <span class="key">"حافظه"</span>: <span class="str">"۲۵۶ گیگابایت"</span> },
-      <span class="key">"image_url"</span>:     <span class="null-val">null</span>
+      <span class="key">"image_url"</span>:     <span class="null-val">null</span>,
+      <span class="key">"stock"</span>:         <span class="num">42</span>
     },
     {
       <span class="key">"id"</span>:               <span class="num">202</span>,
@@ -1425,7 +1600,8 @@ GET /api/v1/catalog/products?category_id=5&amp;min_price=10000000&amp;max_price=
       <span class="key">"base_price"</span>:     <span class="num">99000000</span>,
       <span class="key">"compare_at_price"</span>: <span class="null-val">null</span>,
       <span class="key">"attributes"</span>:    { <span class="key">"رنگ"</span>: <span class="str">"مشکی تیتانیومی"</span>, <span class="key">"حافظه"</span>: <span class="str">"۵۱۲ گیگابایت"</span> },
-      <span class="key">"image_url"</span>:     <span class="null-val">null</span>
+      <span class="key">"image_url"</span>:     <span class="null-val">null</span>,
+      <span class="key">"stock"</span>:         <span class="num">17</span>
     }
   ]
 }</pre>
@@ -1467,6 +1643,33 @@ GET /api/v1/catalog/products?category_id=5&amp;min_price=10000000&amp;max_price=
   <div class="endpoint">
     <div class="endpoint-header">
       <span class="method get">GET</span>
+      <span class="endpoint-path">/catalog/products/admin</span>
+      <span class="badge auth">Requires auth:sanctum</span>
+      <span class="badge admin">Requires catalog.product.view-admin</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Paginated admin listing of products in <strong>every</strong> status (both <code>draft</code> and <code>published</code>), newest first. Same product response shape as the public endpoints (including <code>sales_count</code> and per-variant <code>stock</code>).</p>
+      <div class="note">Addressed by the literal path <code>/products/admin</code>. Because the public <code>/products/{uuid}</code> route only matches hex/hyphen segments, <code>admin</code> never shadows it.</div>
+      <div class="block-label">Query Parameters</div>
+      <table>
+        <tr><th>Param</th><th>Type</th><th>Description</th></tr>
+        <tr><td>per_page</td><td class="opt">optional integer</td><td>1–100. Default: 15.</td></tr>
+        <tr><td>page</td><td class="opt">optional integer</td><td>Page number. Default: 1.</td></tr>
+        <tr><td>status</td><td class="opt">optional string</td><td>Filter by <code>draft</code> or <code>published</code>. Omitted → both.</td></tr>
+        <tr><td>category_id</td><td class="opt">optional integer</td><td>Filter by category ID. Must exist — 422 otherwise.</td></tr>
+        <tr><td>min_price</td><td class="opt">optional integer</td><td>Minimum default-variant <code>base_price</code> in rials. ≥ 0.</td></tr>
+        <tr><td>max_price</td><td class="opt">optional integer</td><td>Maximum default-variant <code>base_price</code> in rials. ≥ 0.</td></tr>
+        <tr><td>search</td><td class="opt">optional string</td><td>Free-text on <code>title</code>, <code>description</code>, <code>slug</code>, or variant <code>sku</code>. Max 255 chars.</td></tr>
+        <tr><td>sort</td><td class="opt">optional string</td><td><code>cheapest</code> / <code>most_expensive</code> (default variant <code>base_price</code>) or <code>most_sold</code> (<code>sales_count</code>). Omitted → newest first. Any other value → 422.</td></tr>
+      </table>
+      <div class="block-label">Response — 200 OK</div>
+      <p>Standard paginated envelope (<code>{ data, links, meta }</code>) with the same product objects as <code>GET /catalog/products</code>, but including <code>draft</code> items.</p>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
       <span class="endpoint-path">/catalog/products/{uuid}/admin</span>
       <span class="badge admin">Requires catalog.product.view-admin</span>
     </div>
@@ -1474,13 +1677,15 @@ GET /api/v1/catalog/products?category_id=5&amp;min_price=10000000&amp;max_price=
       <p>Returns a product regardless of status (<code>draft</code> or <code>published</code>). Use in the admin panel to preview or edit unpublished products. Response shape is identical to the public product endpoint including full <code>images</code> and <code>variants</code> arrays.</p>
       <div class="block-label">Response — 200 OK</div>
       <pre>{
-  <span class="key">"id"</span>:                <span class="num">101</span>,
+  <span class="key">"id"</span>:                <span class="str">"a3f9c1b"</span>,
   <span class="key">"title"</span>:             <span class="str">"Samsung Galaxy S25 Ultra"</span>,
   <span class="key">"slug"</span>:              <span class="str">"samsung-galaxy-s25-ultra"</span>,
   <span class="key">"description"</span>:      <span class="str">"پیشرفته‌ترین گوشی سامسونگ..."</span>,
   <span class="key">"features"</span>:         [<span class="comment">/* array of {title, value} */</span>],
   <span class="key">"status"</span>:            <span class="str">"draft"</span>,   <span class="comment">// may be draft — this is the admin view</span>
+  <span class="key">"sales_count"</span>:       <span class="num">128</span>,
   <span class="key">"category_id"</span>:       <span class="num">5</span>,
+  <span class="key">"brand_id"</span>:          <span class="num">3</span>,
   <span class="key">"primary_image_url"</span>: <span class="str">"http://localhost:8000/storage/products/s25-hero.webp"</span>,
   <span class="key">"images"</span>:            [<span class="comment">/* gallery images */</span>],
   <span class="key">"variants"</span>:          [<span class="comment">/* variants */</span>]
@@ -1506,6 +1711,7 @@ GET /api/v1/catalog/products?category_id=5&amp;min_price=10000000&amp;max_price=
         <tr><td>features</td><td class="opt">optional array</td><td>Ordered array of <code>{"title":"...","value":"..."}</code> objects for the spec table.</td></tr>
         <tr><td>status</td><td class="opt">optional string</td><td><code>draft</code> (default) or <code>published</code>.</td></tr>
         <tr><td>category_id</td><td class="opt">optional integer</td><td>ID of the category this product belongs to.</td></tr>
+        <tr><td>brand_id</td><td class="opt">optional integer</td><td>ID of the brand this product belongs to. Must exist — 422 otherwise.</td></tr>
         <tr><td>primary_media_id</td><td class="opt">optional integer</td><td>Pre-uploaded media ID for the hero/thumbnail. Mutually exclusive with <code>primary_image</code>.</td></tr>
         <tr><td>primary_image</td><td class="opt">optional file</td><td>Hero image file (inline upload). JPEG/PNG/WebP, max 4 MB. Mutually exclusive with <code>primary_media_id</code>.</td></tr>
         <tr><td>gallery_media_ids</td><td class="opt">optional integer[]</td><td>Array of pre-uploaded media IDs to add to the gallery. Array index sets sort order. Mutually exclusive with <code>gallery</code>.</td></tr>
@@ -1553,16 +1759,17 @@ GET /api/v1/catalog/products?category_id=5&amp;min_price=10000000&amp;max_price=
 }</pre>
       <div class="block-label">Response — 201 Created</div>
       <pre>{
-  <span class="key">"id"</span>:                <span class="num">101</span>,
+  <span class="key">"id"</span>:                <span class="str">"a3f9c1b"</span>,
   <span class="key">"title"</span>:             <span class="str">"Samsung Galaxy S25 Ultra"</span>,
   <span class="key">"slug"</span>:              <span class="str">"samsung-galaxy-s25-ultra"</span>,
   <span class="key">"status"</span>:            <span class="str">"published"</span>,
+  <span class="key">"sales_count"</span>:       <span class="num">0</span>,
   <span class="key">"category_id"</span>:       <span class="num">5</span>,
   <span class="key">"primary_image_url"</span>: <span class="null-val">null</span>,
   <span class="key">"images"</span>:            [],
   <span class="key">"variants"</span>: [
-    { <span class="key">"id"</span>: <span class="num">201</span>, <span class="key">"sku"</span>: <span class="str">"S25U-TBK-256"</span>, <span class="key">"type"</span>: <span class="str">"color"</span>, <span class="key">"is_default"</span>: <span class="bool">true</span>,  <span class="key">"base_price"</span>: <span class="num">89000000</span>, <span class="key">"compare_at_price"</span>: <span class="num">95000000</span>, <span class="key">"attributes"</span>: { <span class="comment">/* … */</span> }, <span class="key">"image_url"</span>: <span class="null-val">null</span> },
-    { <span class="key">"id"</span>: <span class="num">202</span>, <span class="key">"sku"</span>: <span class="str">"S25U-TBK-512"</span>, <span class="key">"type"</span>: <span class="str">"color"</span>, <span class="key">"is_default"</span>: <span class="bool">false</span>, <span class="key">"base_price"</span>: <span class="num">99000000</span>, <span class="key">"compare_at_price"</span>: <span class="null-val">null</span>,     <span class="key">"attributes"</span>: { <span class="comment">/* … */</span> }, <span class="key">"image_url"</span>: <span class="null-val">null</span> }
+    { <span class="key">"id"</span>: <span class="num">201</span>, <span class="key">"sku"</span>: <span class="str">"S25U-TBK-256"</span>, <span class="key">"type"</span>: <span class="str">"color"</span>, <span class="key">"is_default"</span>: <span class="bool">true</span>,  <span class="key">"base_price"</span>: <span class="num">89000000</span>, <span class="key">"compare_at_price"</span>: <span class="num">95000000</span>, <span class="key">"attributes"</span>: { <span class="comment">/* … */</span> }, <span class="key">"image_url"</span>: <span class="null-val">null</span>, <span class="key">"stock"</span>: <span class="num">0</span> },
+    { <span class="key">"id"</span>: <span class="num">202</span>, <span class="key">"sku"</span>: <span class="str">"S25U-TBK-512"</span>, <span class="key">"type"</span>: <span class="str">"color"</span>, <span class="key">"is_default"</span>: <span class="bool">false</span>, <span class="key">"base_price"</span>: <span class="num">99000000</span>, <span class="key">"compare_at_price"</span>: <span class="null-val">null</span>,     <span class="key">"attributes"</span>: { <span class="comment">/* … */</span> }, <span class="key">"image_url"</span>: <span class="null-val">null</span>, <span class="key">"stock"</span>: <span class="num">0</span> }
   ]
 }</pre>
       <div class="block-label">Validation error — zero or multiple defaults</div>
@@ -1591,6 +1798,7 @@ GET /api/v1/catalog/products?category_id=5&amp;min_price=10000000&amp;max_price=
         <tr><td>features</td><td class="opt">optional array</td><td>Replaces the full spec table. Send <code>null</code> to clear. Each item: <code>{"title":"...","value":"..."}</code>.</td></tr>
         <tr><td>status</td><td class="opt">optional string</td><td><code>draft</code> or <code>published</code>.</td></tr>
         <tr><td>category_id</td><td class="opt">optional integer</td><td>Re-assign to a different category. Send <code>null</code> to unlink.</td></tr>
+        <tr><td>brand_id</td><td class="opt">optional integer</td><td>Re-assign to a different brand. Send <code>null</code> to unlink. Must exist — 422 otherwise.</td></tr>
         <tr><td>primary_media_id</td><td class="opt">optional integer</td><td>Replace the hero image using a pre-uploaded media ID. Send <code>null</code> to clear.</td></tr>
         <tr><td>variants</td><td class="opt">optional array</td><td>Upsert variants by <code>id</code>. Omit entirely to leave existing variants untouched. Must contain ≥ 1 item when provided.</td></tr>
         <tr><td>variants.*.id</td><td class="opt">optional per item</td><td>Existing variant ID. If it already belongs to this product the variant is updated; if omitted (or unknown) a new variant is created with a server-generated SKU. Never send a <code>sku</code> — it is assigned automatically.</td></tr>
@@ -1632,16 +1840,18 @@ GET /api/v1/catalog/products?category_id=5&amp;min_price=10000000&amp;max_price=
 }</pre>
       <div class="block-label">Response — 200 OK</div>
       <pre>{
-  <span class="key">"id"</span>:                <span class="num">101</span>,
+  <span class="key">"id"</span>:                <span class="str">"a3f9c1b"</span>,
   <span class="key">"title"</span>:             <span class="str">"Samsung Galaxy S25 Ultra"</span>,
   <span class="key">"slug"</span>:              <span class="str">"samsung-galaxy-s25-ultra"</span>,
   <span class="key">"status"</span>:            <span class="str">"published"</span>,
+  <span class="key">"sales_count"</span>:       <span class="num">128</span>,
   <span class="key">"category_id"</span>:       <span class="num">5</span>,
+  <span class="key">"brand_id"</span>:          <span class="num">3</span>,
   <span class="key">"primary_image_url"</span>: <span class="str">"http://localhost:8000/storage/products/s25-hero.webp"</span>,
   <span class="key">"images"</span>: [ <span class="comment">/* … */</span> ],
   <span class="key">"variants"</span>: [
-    { <span class="key">"id"</span>: <span class="num">201</span>, <span class="key">"sku"</span>: <span class="str">"S25U-TBK-256"</span>, <span class="key">"type"</span>: <span class="str">"color"</span>, <span class="key">"is_default"</span>: <span class="bool">true</span>,  <span class="key">"base_price"</span>: <span class="num">92000000</span>,  <span class="key">"compare_at_price"</span>: <span class="num">95000000</span>, <span class="key">"attributes"</span>: { <span class="comment">/* … */</span> }, <span class="key">"image_url"</span>: <span class="null-val">null</span> },
-    { <span class="key">"id"</span>: <span class="num">205</span>, <span class="key">"sku"</span>: <span class="str">"S25U-TBK-1T"</span>,  <span class="key">"type"</span>: <span class="str">"color"</span>, <span class="key">"is_default"</span>: <span class="bool">false</span>, <span class="key">"base_price"</span>: <span class="num">115000000</span>, <span class="key">"compare_at_price"</span>: <span class="null-val">null</span>,     <span class="key">"attributes"</span>: { <span class="comment">/* … */</span> }, <span class="key">"image_url"</span>: <span class="null-val">null</span> }
+    { <span class="key">"id"</span>: <span class="num">201</span>, <span class="key">"sku"</span>: <span class="str">"S25U-TBK-256"</span>, <span class="key">"type"</span>: <span class="str">"color"</span>, <span class="key">"is_default"</span>: <span class="bool">true</span>,  <span class="key">"base_price"</span>: <span class="num">92000000</span>,  <span class="key">"compare_at_price"</span>: <span class="num">95000000</span>, <span class="key">"attributes"</span>: { <span class="comment">/* … */</span> }, <span class="key">"image_url"</span>: <span class="null-val">null</span>, <span class="key">"stock"</span>: <span class="num">36</span> },
+    { <span class="key">"id"</span>: <span class="num">205</span>, <span class="key">"sku"</span>: <span class="str">"S25U-TBK-1T"</span>,  <span class="key">"type"</span>: <span class="str">"color"</span>, <span class="key">"is_default"</span>: <span class="bool">false</span>, <span class="key">"base_price"</span>: <span class="num">115000000</span>, <span class="key">"compare_at_price"</span>: <span class="null-val">null</span>,     <span class="key">"attributes"</span>: { <span class="comment">/* … */</span> }, <span class="key">"image_url"</span>: <span class="null-val">null</span>, <span class="key">"stock"</span>: <span class="num">8</span> }
   ]
 }</pre>
       <div class="block-label">Validation error — multiple defaults</div>
@@ -1672,7 +1882,7 @@ GET /api/v1/catalog/products?category_id=5&amp;min_price=10000000&amp;max_price=
   <div class="endpoint">
     <div class="endpoint-header">
       <span class="method post">POST</span>
-      <span class="endpoint-path">/catalog/products/{product_id}/gallery</span>
+      <span class="endpoint-path">/catalog/products/{uuid}/gallery</span>
       <span class="badge admin">Requires catalog.product.update</span>
     </div>
     <div class="endpoint-body">
@@ -1706,7 +1916,7 @@ GET /api/v1/catalog/products?category_id=5&amp;min_price=10000000&amp;max_price=
   <div class="endpoint">
     <div class="endpoint-header">
       <span class="method delete">DELETE</span>
-      <span class="endpoint-path">/catalog/products/{product_id}/gallery/{image_id}</span>
+      <span class="endpoint-path">/catalog/products/{uuid}/gallery/{image_id}</span>
       <span class="badge admin">Requires catalog.product.update</span>
     </div>
     <div class="endpoint-body">
@@ -1721,6 +1931,7 @@ GET /api/v1/catalog/products?category_id=5&amp;min_price=10000000&amp;max_price=
   <h2 id="variants">Catalog — Product Variants</h2>
   <p>Variants are the purchasable options of a product (e.g. color/size combinations). Each variant has a unique SKU and a price in rials. Exactly one variant per product has <code>is_default: true</code> — this is the variant shown by default.</p>
   <div class="warn"><strong>Prices are integers in rials.</strong> Never send floats. Send <code>"base_price": 89000000</code> for 89,000,000 rials (8,900,000 tomans).</div>
+  <div class="note"><strong>Read-only <code>stock</code> field.</strong> Every variant object (here and inside a product's <code>variants</code> array) carries a <code>stock</code> integer = available units for that SKU (physical − reserved), sourced from the Inventory module. It is computed server-side and never accepted from client input. A SKU with no inventory record reports <code>0</code>.</div>
 
   <div class="endpoint">
     <div class="endpoint-header">
@@ -1741,7 +1952,8 @@ GET /api/v1/catalog/products?category_id=5&amp;min_price=10000000&amp;max_price=
     <span class="key">"رنگ"</span>:    <span class="str">"مشکی تیتانیومی"</span>,
     <span class="key">"حافظه"</span>: <span class="str">"۲۵۶ گیگابایت"</span>
   },
-  <span class="key">"image_url"</span>: <span class="null-val">null</span>
+  <span class="key">"image_url"</span>: <span class="null-val">null</span>,
+  <span class="key">"stock"</span>:     <span class="num">42</span>
 }</pre>
     </div>
   </div>
@@ -1760,7 +1972,7 @@ GET /api/v1/catalog/products?category_id=5&amp;min_price=10000000&amp;max_price=
   <div class="endpoint">
     <div class="endpoint-header">
       <span class="method post">POST</span>
-      <span class="endpoint-path">/catalog/products/{product_id}/variants</span>
+      <span class="endpoint-path">/catalog/products/{uuid}/variants</span>
       <span class="badge admin">Requires catalog.variant.create</span>
     </div>
     <div class="endpoint-body">
@@ -1796,7 +2008,8 @@ GET /api/v1/catalog/products?category_id=5&amp;min_price=10000000&amp;max_price=
   <span class="key">"base_price"</span>:     <span class="num">89000000</span>,
   <span class="key">"compare_at_price"</span>: <span class="num">95000000</span>,
   <span class="key">"attributes"</span>: { <span class="key">"رنگ"</span>: <span class="str">"مشکی تیتانیومی"</span>, <span class="key">"حافظه"</span>: <span class="str">"۲۵۶ گیگابایت"</span> },
-  <span class="key">"image_url"</span>:     <span class="str">"http://localhost:8000/storage/variants/s25-black.webp"</span>
+  <span class="key">"image_url"</span>:     <span class="str">"http://localhost:8000/storage/variants/s25-black.webp"</span>,
+  <span class="key">"stock"</span>:         <span class="num">0</span>
 }</pre>
     </div>
   </div>
@@ -1822,7 +2035,8 @@ GET /api/v1/catalog/products?category_id=5&amp;min_price=10000000&amp;max_price=
   <span class="key">"base_price"</span>:     <span class="num">85000000</span>,
   <span class="key">"compare_at_price"</span>: <span class="num">95000000</span>,
   <span class="key">"attributes"</span>: { <span class="key">"رنگ"</span>: <span class="str">"مشکی تیتانیومی"</span>, <span class="key">"حافظه"</span>: <span class="str">"۲۵۶ گیگابایت"</span> },
-  <span class="key">"image_url"</span>:     <span class="null-val">null</span>
+  <span class="key">"image_url"</span>:     <span class="null-val">null</span>,
+  <span class="key">"stock"</span>:         <span class="num">36</span>
 }</pre>
     </div>
   </div>
@@ -2411,6 +2625,141 @@ await guestCartRequest('GET',  '/');
         <tr><td><code>shipped</code></td><td>Dispatched to the carrier.</td></tr>
         <tr><td><code>cancelled</code></td><td>Cancelled (by user, by TTL expiry, or by a new checkout).</td></tr>
         <tr><td><code>failed</code></td><td>Payment or fulfilment failure.</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- POST /api/v1/orders/{order}/cancel -->
+  <h3 id="order-cancel">Cancel Order</h3>
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/orders/{order}/cancel</span>
+      <span class="badge auth">Requires auth:sanctum</span>
+      <span class="badge rate">throttle:api</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Cancels one of the authenticated user's own <strong>pending</strong> orders. Every reserved unit on the order is released back to available stock, and the order moves to <code>cancelled</code>. The order ID goes in the URL; there is no request body.</p>
+      <div class="note"><strong>Ownership &amp; state.</strong> You may only cancel an order you own (403 otherwise). Only <code>pending</code> orders can be cancelled — once an order is <code>paid</code>/<code>processing</code>/<code>shipped</code> this endpoint returns 422 (refund/return is a separate future flow).</div>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{
+  <span class="key">"id"</span>:                  <span class="num">42</span>,
+  <span class="key">"status"</span>:              <span class="str">"cancelled"</span>,
+  <span class="key">"total_amount"</span>:        <span class="num">267000000</span>,
+  <span class="key">"shipping_cost"</span>:       <span class="num">0</span>,
+  <span class="key">"tax_amount"</span>:          <span class="num">0</span>,
+  <span class="key">"shipment_method_id"</span>:  <span class="num">1</span>,
+  <span class="key">"shipping_address"</span>:    { <span class="comment">/* snapshotted address object */</span> },
+  <span class="key">"transaction_ref"</span>:     <span class="null-val">null</span>,
+  <span class="key">"notes"</span>:               <span class="null-val">null</span>,
+  <span class="key">"created_at"</span>:          <span class="str">"2026-06-26T12:34:56.000000Z"</span>,
+  <span class="key">"items"</span>:               [ <span class="comment">/* same shape as POST /orders response items */</span> ]
+}</pre>
+      <div class="block-label">Error Responses</div>
+      <table>
+        <tr><th>Status</th><th>Condition</th></tr>
+        <tr><td>401</td><td class="opt">No Bearer token provided</td></tr>
+        <tr><td>403</td><td class="opt">Order belongs to another user</td></tr>
+        <tr><td>404</td><td class="opt">Order not found</td></tr>
+        <tr><td>422</td><td class="opt">Order is not in <code>pending</code> status</td></tr>
+        <tr><td>429</td><td class="opt">Rate limit exceeded — see <code>Retry-After</code> header</td></tr>
+      </table>
+    </div>
+  </div>
+
+
+  <!-- ═══ PAYMENTS ═══ -->
+  <h2 id="payment-overview">Payments</h2>
+  <p>Payments settle a <strong>pending</strong> order. Two method types are supported:</p>
+  <ul>
+    <li><strong><code>online</code></strong> — creates a gateway payment (Zarinpal by default), returns a <code>redirect_url</code> to send the shopper to. The order stays <code>pending</code> until the gateway calls back and the payment is verified/captured.</li>
+    <li><strong><code>in_person</code></strong> — cash/counter payment. No redirect; the order is marked <code>paid</code> immediately and a <code>pending_cash</code> payment record is written (settled at the counter).</li>
+  </ul>
+  <div class="note"><strong>Money is integer rials.</strong> The payment <code>amount</code> is taken from the order's <code>total_amount</code> — you never send an amount. Payment status values: <code>initiated</code>, <code>captured</code>, <code>failed</code>, <code>refunded</code>, <code>pending_cash</code>.</div>
+
+  <!-- POST /api/v1/payments/initialize -->
+  <h3 id="payment-initialize">Initialize Payment</h3>
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/payments/initialize</span>
+      <span class="badge auth">Requires auth:sanctum</span>
+      <span class="badge admin">Requires payment.create</span>
+      <span class="badge rate">throttle:api</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Starts payment for an existing order. For <code>online</code> it returns a gateway <code>redirect_url</code>; for <code>in_person</code> it records the cash payment and marks the order paid.</p>
+      <div class="block-label">Request Body Fields</div>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr><td>order_id</td><td class="req">required integer</td><td>The order to pay. Must belong to the authenticated user (403 otherwise). Returns 404 if it does not exist.</td></tr>
+        <tr><td>method_type</td><td class="req">required string</td><td><code>online</code> or <code>in_person</code>. Any other value → 422.</td></tr>
+        <tr><td>gateway</td><td class="opt">optional string</td><td>Online gateway key. Defaults to <code>payment.default_gateway</code> config (<code>zarinpal</code>). Ignored for <code>in_person</code>.</td></tr>
+      </table>
+      <div class="block-label">Request — online</div>
+      <pre>{
+  <span class="key">"order_id"</span>:    <span class="num">42</span>,
+  <span class="key">"method_type"</span>: <span class="str">"online"</span>
+}</pre>
+      <div class="block-label">Response — 200 OK (online)</div>
+      <pre>{
+  <span class="key">"type"</span>:         <span class="str">"online"</span>,
+  <span class="key">"payment_id"</span>:   <span class="num">7</span>,
+  <span class="key">"status"</span>:       <span class="str">"initiated"</span>,
+  <span class="key">"redirect_url"</span>: <span class="str">"https://www.zarinpal.com/pg/StartPay/A0000000000000000000000000000012345"</span>
+}</pre>
+      <div class="block-label">Response — 200 OK (in_person)</div>
+      <pre>{
+  <span class="key">"type"</span>:         <span class="str">"in_person"</span>,
+  <span class="key">"payment_id"</span>:   <span class="num">8</span>,
+  <span class="key">"status"</span>:       <span class="str">"pending_cash"</span>,
+  <span class="key">"redirect_url"</span>: <span class="null-val">null</span>
+}</pre>
+      <div class="block-label">Error Responses</div>
+      <table>
+        <tr><th>Status</th><th>Condition</th></tr>
+        <tr><td>401</td><td class="opt">No Bearer token provided</td></tr>
+        <tr><td>403</td><td class="opt">User lacks <code>payment.create</code> permission, or the order belongs to another user</td></tr>
+        <tr><td>404</td><td class="opt">Order not found</td></tr>
+        <tr><td>422</td><td class="opt">Validation failure (missing <code>order_id</code>, invalid <code>method_type</code>)</td></tr>
+        <tr><td>429</td><td class="opt">Rate limit exceeded — see <code>Retry-After</code> header</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- GET /api/v1/payments/zarinpal/callback -->
+  <h3 id="payment-callback">Zarinpal Callback</h3>
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/payments/zarinpal/callback</span>
+      <span class="badge">Public</span>
+      <span class="badge rate">120/min · per IP</span>
+    </div>
+    <div class="endpoint-body">
+      <p>The gateway redirects the shopper back here after payment. It is <strong>called by Zarinpal</strong>, not by your frontend — it verifies the transaction and captures (or fails) the payment. Public (no token) because the caller is the gateway.</p>
+      <div class="block-label">Query Parameters</div>
+      <table>
+        <tr><th>Param</th><th>Type</th><th>Description</th></tr>
+        <tr><td>Authority</td><td class="req">required string</td><td>Gateway transaction reference. Missing → 400.</td></tr>
+        <tr><td>Status</td><td class="opt">string</td><td><code>OK</code> when the shopper approved payment; anything else is treated as a cancellation.</td></tr>
+      </table>
+      <div class="block-label">Response — 200 OK (captured)</div>
+      <pre>{
+  <span class="key">"success"</span>:    <span class="bool">true</span>,
+  <span class="key">"message"</span>:    <span class="str">"Payment captured successfully."</span>,
+  <span class="key">"payment_id"</span>: <span class="num">7</span>
+}</pre>
+      <div class="block-label">Response — 422 (verification failed / cancelled)</div>
+      <pre>{
+  <span class="key">"success"</span>: <span class="bool">false</span>,
+  <span class="key">"message"</span>: <span class="str">"Payment verification failed."</span>
+}</pre>
+      <div class="block-label">Error Responses</div>
+      <table>
+        <tr><th>Status</th><th>Condition</th></tr>
+        <tr><td>400</td><td class="opt">Missing <code>Authority</code> query parameter</td></tr>
+        <tr><td>422</td><td class="opt">Payment record not found, cancelled by user, or gateway verification failed</td></tr>
       </table>
     </div>
   </div>

@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Modules\Catalog\Infrastructure\Http\Controllers\BrandsController;
 use Modules\Catalog\Infrastructure\Http\Controllers\CategoriesController;
 use Modules\Catalog\Infrastructure\Http\Controllers\ProductGalleryController;
 use Modules\Catalog\Infrastructure\Http\Controllers\ProductsController;
@@ -12,6 +13,9 @@ Route::middleware('api')->prefix('api/v1/catalog')->group(function () {
     Route::middleware('throttle:public')->group(function () {
         Route::get('/categories/roots', [CategoriesController::class, 'indexRoots']);
         Route::get('/categories/{id}', [CategoriesController::class, 'show']);
+
+        Route::get('/brands', [BrandsController::class, 'index']);
+        Route::get('/brands/{id}', [BrandsController::class, 'show']);
 
         Route::get('/products', [ProductsController::class, 'index']);
         Route::get('/products/slug/{slug}', [ProductsController::class, 'showBySlug']);
@@ -33,6 +37,11 @@ Route::middleware('api')->prefix('api/v1/catalog')->group(function () {
         Route::post('/categories', [CategoriesController::class, 'store']);
         Route::patch('/categories/{id}', [CategoriesController::class, 'update']);
         Route::delete('/categories/{id}', [CategoriesController::class, 'destroy']);
+
+        // Brands
+        Route::post('/brands', [BrandsController::class, 'store']);
+        Route::patch('/brands/{id}', [BrandsController::class, 'update']);
+        Route::delete('/brands/{id}', [BrandsController::class, 'destroy']);
 
         // Products
         Route::get('/products/admin', [ProductsController::class, 'indexAdmin']);

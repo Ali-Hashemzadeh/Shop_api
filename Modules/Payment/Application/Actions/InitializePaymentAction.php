@@ -18,7 +18,7 @@ class InitializePaymentAction
         private readonly PaymentGatewayFactory $gatewayFactory,
     ) {}
 
-    public function handle(int $orderId, string $methodType, ?string $gateway = null): array
+    public function handle(int $orderId, int $userId, string $methodType, ?string $gateway = null): array
     {
         $order = $this->orderManager->findOrder($orderId);
 
@@ -26,8 +26,11 @@ class InitializePaymentAction
             abort(404, 'Order not found.');
         }
 
-        $method = PaymentMethodType::from($methodType);
+        if ($order->userId !== $userId) {
+            abort(403, 'This order does not belong to you.');
+        }
 
+        $method = PaymentMethodType::from($methodType);
 
         if ($method === PaymentMethodType::IN_PERSON) {
             return DB::transaction(function () use ($orderId, $order) {

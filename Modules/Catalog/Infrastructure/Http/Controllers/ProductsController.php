@@ -90,6 +90,7 @@ class ProductsController extends Controller
     {
         $filters = array_filter([
             'category_id' => $request->integer('category_id') ?: null,
+            'brand_id' => $request->integer('brand_id') ?: null,
             'min_price' => $request->has('min_price') ? $request->integer('min_price') : null,
             'max_price' => $request->has('max_price') ? $request->integer('max_price') : null,
             'search' => $request->string('search')->trim()->toString() ?: null,
@@ -108,6 +109,7 @@ class ProductsController extends Controller
         $filters = array_filter([
             'status' => $request->string('status')->trim()->toString() ?: null,
             'category_id' => $request->integer('category_id') ?: null,
+            'brand_id' => $request->integer('brand_id') ?: null,
             'min_price' => $request->has('min_price') ? $request->integer('min_price') : null,
             'max_price' => $request->has('max_price') ? $request->integer('max_price') : null,
             'search' => $request->string('search')->trim()->toString() ?: null,

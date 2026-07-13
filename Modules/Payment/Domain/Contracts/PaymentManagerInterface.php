@@ -6,5 +6,5 @@ namespace Modules\Payment\Domain\Contracts;
 
 interface PaymentManagerInterface
 {
-    public function initializePayment(int $orderId, string $methodType, ?string $gateway = null): array;
+    public function initializePayment(int $orderId, int $userId, string $methodType, ?string $gateway = null): array;
 }

@@ -8,4 +8,5 @@ Route::middleware(['api', 'auth:sanctum', 'throttle:api'])
     ->group(function () {
         Route::post('/', [OrderController::class, 'store']);
         Route::get('/', [OrderController::class, 'index']);
+        Route::post('/{order}/cancel', [OrderController::class, 'cancel'])->whereNumber('order');
     });

@@ -20,6 +20,7 @@ class CreateProductAction
         return DB::transaction(function () use ($data): ProductDTO {
             $product = $this->catalog->createProduct([
                 'category_id' => $data['category_id'] ?? null,
+                'brand_id' => $data['brand_id'] ?? null,
                 'title' => $data['title'],
                 'slug' => $data['slug'] ?? Str::slug($data['title'], '-', null),
                 'description' => $data['description'] ?? null,

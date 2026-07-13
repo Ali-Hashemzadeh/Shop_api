@@ -34,6 +34,7 @@ class UpdateProductRequest extends FormRequest
             'features.*.value' => ['required', 'string', 'max:255'],
             'status' => ['sometimes', 'in:draft,published'],
             'category_id' => ['nullable', 'integer', 'exists:categories,id'],
+            'brand_id' => ['nullable', 'integer', 'exists:brands,id'],
             'primary_media_id' => ['nullable', 'integer'],
             'variants' => ['nullable', 'array', 'min:1'],
             'variants.*.id' => ['nullable', 'integer', 'distinct'],

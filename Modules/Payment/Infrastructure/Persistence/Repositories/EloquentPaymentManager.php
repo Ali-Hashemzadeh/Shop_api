@@ -9,8 +9,8 @@ use Modules\Payment\Domain\Contracts\PaymentManagerInterface;
 
 class EloquentPaymentManager implements PaymentManagerInterface
 {
-    public function initializePayment(int $orderId, string $methodType, ?string $gateway = null): array
+    public function initializePayment(int $orderId, int $userId, string $methodType, ?string $gateway = null): array
     {
-        return app(InitializePaymentAction::class)->handle($orderId, $methodType, $gateway);
+        return app(InitializePaymentAction::class)->handle($orderId, $userId, $methodType, $gateway);
     }
 }

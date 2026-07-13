@@ -3,6 +3,7 @@
 namespace Tests\Feature\Payment;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Modules\Identity\Domain\Models\User;
 use Modules\Order\Domain\Models\Order;
 use Modules\Payment\Domain\Models\Payment;
 use Modules\Payment\Infrastructure\Gateways\MockGatewayDriver;
@@ -249,6 +250,23 @@ class PaymentTest extends TestCase
     {
         $this->getJson('/api/v1/payments/zarinpal/callback?Status=OK')
             ->assertStatus(400);
+    }
+
+    /** @test */
+    public function it_forbids_initializing_payment_for_another_users_order(): void
+    {
+        $owner = User::factory()->create();
+        $order = $this->createPendingOrder($owner->id, 100000);
+
+        $this->actingAsCustomer(); // a different authenticated user
+
+        $this->postJson('/api/v1/payments/initialize', [
+            'order_id' => $order->id,
+            'method_type' => 'in_person',
+        ])->assertStatus(403);
+
+        $this->assertDatabaseHas('orders', ['id' => $order->id, 'status' => 'pending']);
+        $this->assertDatabaseMissing('payments', ['order_id' => $order->id]);
     }
 
     /** @test */

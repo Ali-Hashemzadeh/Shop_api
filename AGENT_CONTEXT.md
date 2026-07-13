@@ -109,10 +109,11 @@ Modules/
   * **Authorization Layer (Step 8 — Permission-based Policies):**
       * **Public routes** (no auth): all GET read endpoints (category list/show, product show/by-slug/by-category, variant show/by-sku).
       * **Protected routes** (`auth:sanctum` only on the route): all write operations (POST/PATCH/DELETE), `GET /products/admin` (all-status admin index), and `GET /products/{uuid}/admin`. `auth:sanctum` gives 401 for unauthenticated; policies give 403 for unauthorized. All product-level routes are addressed by the product's `uuid` and carry a `whereUuid` constraint, so numeric ids 404 and `/products/{uuid}` never shadows `/products/admin`. (Variants and images stay addressed by integer id / SKU.)
-      * **Policy files** (`Modules\Catalog\Domain\Policies\`): `CategoryPolicy`, `ProductPolicy`, `ProductVariantPolicy`. Each method delegates to `$user->can('catalog.X.Y')`. Typehinted against `Illuminate\Contracts\Auth\Access\Authorizable` — **never** import `Modules\Identity\Domain\Models\User` across the module boundary.
+      * **Brands:** flat lookup (`brands` table: `name`, unique `slug`, loose `media_id`, `is_active`) that products optionally belong to via a nullable `products.brand_id` FK (`nullOnDelete` — deleting a brand unlinks its products). Public reads `GET /catalog/brands` (paginated, `search` on name) + `GET /catalog/brands/{id}`; admin writes `POST`/`PATCH`/`DELETE /catalog/brands/{id}` behind `auth:sanctum` + `catalog.brand.*`. Logo via inline `image` upload OR pre-uploaded `media_id` (mutually exclusive via `prohibits`); `BrandDTO`/`BrandResource` expose the resolved `image_url`. Products carry `brand_id` on read, accept it on create/update, and the list/admin endpoints filter by `brand_id`; free-text `search` also matches brand name (`orWhereHas('brand')`). Contract methods on `CatalogManagerInterface`: `findBrand`, `getBrands`, `createBrand`, `updateBrand`, `deleteBrand`.
+      * **Policy files** (`Modules\Catalog\Domain\Policies\`): `CategoryPolicy`, `BrandPolicy`, `ProductPolicy`, `ProductVariantPolicy`. Each method delegates to `$user->can('catalog.X.Y')`. Typehinted against `Illuminate\Contracts\Auth\Access\Authorizable` — **never** import `Modules\Identity\Domain\Models\User` across the module boundary.
       * **`CatalogAuthServiceProvider`** (`Modules\Catalog\Infrastructure\Providers\`) registers all three policies via `$policies` + `registerPolicies()`. It is booted from `CatalogServiceProvider::register()` via `$this->app->register(CatalogAuthServiceProvider::class)`.
       * **Authorization split**: `FormRequest::authorize()` handles store/update and the admin index (`IndexAdminProductsRequest` checks `catalog.product.view-admin`), all running before validation → always 403, never 422, for unauthorized users. `$this->authorize()` in controllers handles destroy and showAdmin (no FormRequest involved). Controllers use the `AuthorizesRequests` trait.
-      * **Permissions** seeded in `RolesAndPermissionsSeeder`: `catalog.category.{create,update,delete}`, `catalog.product.{view-admin,create,update,delete}`, `catalog.variant.{create,update,delete}`. Admin role receives all permissions automatically (syncs all). Customer role receives none of these.
+      * **Permissions** seeded in `CatalogPermissionsSeeder`: `catalog.category.{create,update,delete}`, `catalog.brand.{create,update,delete}`, `catalog.product.{view-admin,create,update,delete}`, `catalog.variant.{create,update,delete}`. Admin role receives all permissions automatically (syncs all). Customer role receives none of these.
       * Authorization is **permission-based, not role-based** — any user granted a specific permission can perform that action, independent of role.
   * **Test Suite (Step 9 — Final):**
       * 4 feature test classes: `CategoriesTest`, `ProductsTest`, `ProductVariantsTest`, `CatalogAuthorizationTest` — **128 tests total**.
@@ -189,28 +190,30 @@ Modules/
       4. Create `Order` + `OrderItem` records (prices snapshotted from CartItemDTO).
       5. `reserveStock(sku, qty, orderId)` per item.
       6. `clearCart(cartId)`.
-  * **`CancelExpiredOrdersAction`** — dep: `InventoryManagerInterface`. Finds pending orders with `created_at < now() - 15 min`, releases reservations, cancels. Run every minute by `orders:cancel-expired` Artisan command scheduled in `routes/console.php`.
+  * **`CancelOrderAction`** — dep: `InventoryManagerInterface`. Owns the single "release reservations + mark cancelled" primitive (`releaseAndCancel(Order)`, caller-transactional) reused by `CreateOrderAction` (pending replacement) and `CancelExpiredOrdersAction`. `handle(orderId, userId)` is the user-facing cancel: 404 if missing, **403 if the order is not owned by `userId`**, 422 unless status is `pending`; otherwise releases every item's reservation and sets `cancelled` inside a transaction.
+  * **`CancelExpiredOrdersAction`** — dep: `CancelOrderAction`. Finds pending orders with `created_at < now() - 15 min` and calls `releaseAndCancel` per order (each wrapped in its own transaction). Run every minute by `orders:cancel-expired` Artisan command scheduled in `routes/console.php`.
   * **HTTP Endpoints:**
       * `POST /api/v1/orders` — body `{address_id, shipment_method_id, notes?}`; requires `auth:sanctum` + `order.create`; returns 201 OrderResource. 422 on empty cart or invalid address.
       * `GET /api/v1/orders` — paginated order history for the authenticated user; requires `auth:sanctum`; returns paginated OrderResource collection.
-  * **Authorization:** `StoreOrderRequest::authorize()` checks `order.create` → 403 before validation. No `OrderPolicy` yet — admin order management is a future concern.
+      * `POST /api/v1/orders/{order}/cancel` — user cancels **their own** pending order; releases reserved stock and returns 200 OrderResource. `auth:sanctum`; 403 for another user's order, 404 if missing, 422 if not `pending`.
+  * **Authorization:** `StoreOrderRequest::authorize()` checks `order.create` → 403 before validation. Cancellation is ownership-gated in `CancelOrderAction` (self-service, like Cart). No `OrderPolicy` yet — admin order management is a future concern.
   * **Permissions:** `order.create`, `order.view-own`, `order.view-admin` — admin receives all three; customer receives `order.create` + `order.view-own`.
-  * **Test suite:** `OrderTest` — **6 tests, 20 assertions**: price snapshot + stock reservation + cart-cleared, auto-cancel pending, TTL expiry command, 401/422 auth matrix.
+  * **Test suite:** `OrderTest` — **11 tests**: price snapshot + stock reservation + cart-cleared, auto-cancel pending, TTL expiry command, user cancel releases stock, cancel ownership 403 / 404 / non-pending 422, 401/422 auth matrix.
 
 ### 💳 7. Payment Module (Status: Active & Complete)
 * **Responsibility:** Hybrid payment processing — cash/offline (`in_person`) and online gateway (`online`) via the Strategy Pattern.
   * **Tables:** `payments`: id, order_id (indexed bigint, no cascade FK), method_type (string), gateway (string nullable), transaction_reference (string unique nullable), amount (int — Cents Rule), status (string), gateway_response (json nullable), timestamps.
   * **Domain Enums:** `PaymentMethodType` (ONLINE, IN_PERSON), `PaymentStatus` (INITIATED, CAPTURED, FAILED, REFUNDED, PENDING_CASH).
-  * **Contracts:** `PaymentGatewayDriverInterface` (requestPayment, verifyPayment), `PaymentManagerInterface` (initializePayment).
+  * **Contracts:** `PaymentGatewayDriverInterface` (requestPayment, verifyPayment), `PaymentManagerInterface` (`initializePayment(orderId, userId, methodType, gateway?)` — `userId` threads the caller through for the ownership check).
   * **Gateway Drivers (Strategy):** `ZarinpalGatewayDriver` (production — Zarinpal REST API v4), `MockGatewayDriver` (test-only, `shouldVerifySucceed` flag), `PaymentGatewayFactory` (singleton, resolves name → driver via `app()`).
-  * **Actions:** `InitializePaymentAction` (in_person → pending_cash + markAsPaid; online → gateway redirect + initiated row), `HandleZarinpalCallbackAction` (idempotency guard, verify, capture/fail, markAsPaid).
+  * **Actions:** `InitializePaymentAction` — **aborts 403 unless the order belongs to the calling `userId`** (checked right after the 404 guard), then in_person → pending_cash + markAsPaid; online → gateway redirect + initiated row. `HandleZarinpalCallbackAction` (idempotency guard, verify, capture/fail, markAsPaid).
   * **HTTP Endpoints:**
-      * `POST /api/v1/payments/initialize` — auth:sanctum + throttle:api. Requires `payment.create`. Returns `{type, payment_id, status, redirect_url}`.
+      * `POST /api/v1/payments/initialize` — auth:sanctum + throttle:api. Requires `payment.create` **and** ownership of the target order (403 otherwise). Returns `{type, payment_id, status, redirect_url}`.
       * `GET /api/v1/payments/zarinpal/callback` — PUBLIC + throttle:public. Returns `{success, message, payment_id?, reference_id?}`.
   * **Config:** `config/payment.php` — `PAYMENT_DEFAULT_GATEWAY`, `ZARINPAL_MERCHANT_ID`, `ZARINPAL_SANDBOX`.
   * **Permissions:** `payment.create` — granted to admin + customer.
   * **Cross-module:** `OrderManagerInterface` only (contract boundary, no Order model imported).
-  * **Test suite:** `PaymentTest` — **11 tests, 36 assertions** covering both flows, callback success/cancel/verify-fail, idempotency, auth matrix.
+  * **Test suite:** `PaymentTest` — **12 tests** covering both flows, callback success/cancel/verify-fail, idempotency, ownership 403, auth matrix.
 
 ---
 
@@ -223,8 +226,8 @@ Modules/
 | Catalog | ✅ Complete | 128 passing across 4 test classes |
 | Inventory | ✅ Complete | 24 passing across 2 test classes |
 | Cart | ✅ Complete | 22 passing (CartTest) |
-| Order | ✅ Complete | 6 passing (OrderTest) |
-| Payment | ✅ Complete | 11 passing (PaymentTest) |
+| Order | ✅ Complete | 11 passing (OrderTest) |
+| Payment | ✅ Complete | 12 passing (PaymentTest) |
 
 **Total test suite: 234 tests, 650 assertions — all green.**
 
