@@ -34,6 +34,7 @@ class StoreProductRequest extends FormRequest
             'features.*.is_important' => ['required', 'boolean'],
             'status' => ['nullable', 'in:draft,published'],
             'category_id' => ['nullable', 'integer', 'exists:categories,id'],
+            'brand_id' => ['nullable', 'integer', 'exists:brands,id'],
             'primary_media_id' => ['nullable', 'integer'],
             'gallery_media_ids' => ['nullable', 'array'],
             'gallery_media_ids.*' => ['integer'],

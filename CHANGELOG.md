@@ -2,6 +2,25 @@
 
 ## [Unreleased](https://github.com/laravel/laravel/compare/v12.12.1...12.x)
 
+### Feature — Catalog: Brands
+
+**Products can now belong to a brand.** Brands are a flat catalog lookup with public reads and permission-gated admin writes.
+
+#### Added
+- `brands` table (`name`, unique `slug`, loose `media_id`, `is_active`) + nullable `products.brand_id` FK (`nullOnDelete` — deleting a brand unlinks its products rather than deleting them).
+- Endpoints: `GET /api/v1/catalog/brands` (paginated, `search` on name), `GET /api/v1/catalog/brands/{id}`, and admin `POST` / `PATCH` / `DELETE /api/v1/catalog/brands/{id}` behind `auth:sanctum` + `catalog.brand.{create,update,delete}`. Logo attaches via inline `image` upload OR pre-uploaded `media_id` (mutually exclusive).
+- `Brand` model + `BrandPolicy`, `BrandDTO` / `BrandResource` (exposes resolved `image_url`), `Create`/`Update`/`DeleteBrandAction`, and `CatalogManagerInterface` methods `findBrand` / `getBrands` / `createBrand` / `updateBrand` / `deleteBrand`.
+- Product surface: read responses carry `brand_id`; create/update accept `brand_id` (`exists:brands,id`); public + admin product lists accept a `brand_id` filter; free-text product `search` also matches brand name.
+
+#### Fixed
+- Seeded the `catalog.brand.{create,update,delete}` permissions in `CatalogPermissionsSeeder` (granted to `admin`). Without this the brand write endpoints would have returned 403 for everyone, since the policy/form-requests reference permissions that were never created.
+
+#### Tests
+- `BrandTest` (14): public list/search/show + 404, admin create (slug auto-gen) / update / delete, delete unlinks referring products, validation (missing name, duplicate slug), full auth matrix (401/403), and product `brand_id` filtering.
+
+#### Docs
+- `API_DOCUMENTATION.html` gains a **Catalog — Brands** section and `brand_id` on the product filter/body/response docs.
+
 ### Fix — Order & Payment: enforce ownership and release stock on cancel
 
 **A customer could pay for (and, via `in_person`, mark paid) another user's order, and there was no user-facing way to cancel an order — so reserved stock was only ever freed by the 15-min expiry sweep.**

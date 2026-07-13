@@ -8,10 +8,12 @@ use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Modules\Catalog\Domain\Contracts\CatalogManagerInterface;
+use Modules\Catalog\Domain\DTOs\BrandDTO;
 use Modules\Catalog\Domain\DTOs\CategoryDTO;
 use Modules\Catalog\Domain\DTOs\ProductDTO;
 use Modules\Catalog\Domain\DTOs\ProductImageDTO;
 use Modules\Catalog\Domain\DTOs\ProductVariantDTO;
+use Modules\Catalog\Domain\Models\Brand;
 use Modules\Catalog\Domain\Models\Category;
 use Modules\Catalog\Domain\Models\Product;
 use Modules\Catalog\Domain\Models\ProductImage;
@@ -88,6 +90,60 @@ class EloquentCatalogManager implements CatalogManagerInterface
     public function deleteCategory(int $id): void
     {
         Category::query()->findOrFail($id)->delete();
+    }
+
+    // ── Brands ────────────────────────────────────────────────────────────────
+
+    public function findBrand(int $id): ?BrandDTO
+    {
+        $brand = Brand::query()->find($id);
+
+        return $brand ? BrandDTO::fromModel($brand, $this->resolveUrl((int) $brand->media_id)) : null;
+    }
+
+    public function getBrands(array $filters = [], int $perPage = 15): LengthAwarePaginator
+    {
+        $query = Brand::query();
+
+        if (isset($filters['is_active'])) {
+            $query->where('is_active', (bool) $filters['is_active']);
+        }
+
+        if (isset($filters['search']) && $filters['search'] !== '') {
+            $term = '%'.$filters['search'].'%';
+            $query->where('name', 'like', $term);
+        }
+
+        $paginator = $query->latest('id')->paginate($perPage);
+
+        $mediaMap = $this->buildMediaMap(
+            $paginator->getCollection()->pluck('media_id')->filter()->unique()->values()->all()
+        );
+
+        return $paginator->through(
+            fn (Brand $brand) => BrandDTO::fromModel($brand, $mediaMap->get($brand->media_id)?->url)
+        );
+    }
+
+    public function createBrand(array $data): BrandDTO
+    {
+        $brand = Brand::query()->create($data);
+
+        return BrandDTO::fromModel($brand, $this->resolveUrl((int) $brand->media_id));
+    }
+
+    public function updateBrand(int $id, array $data): BrandDTO
+    {
+        $brand = Brand::query()->findOrFail($id);
+        $brand->update($data);
+        $brand->refresh();
+
+        return BrandDTO::fromModel($brand, $this->resolveUrl((int) $brand->media_id));
+    }
+
+    public function deleteBrand(int $id): void
+    {
+        Brand::query()->findOrFail($id)->delete();
     }
 
     // ── Products ──────────────────────────────────────────────────────────────
@@ -288,7 +344,7 @@ class EloquentCatalogManager implements CatalogManagerInterface
     // ── Private helpers ───────────────────────────────────────────────────────
 
     /**
-     * Apply the shared category/price/search filters to a product query.
+     * Apply the shared category/brand/price/search filters to a product query.
      *
      * When $admin is true the free-text search also matches slug and variant SKU,
      * which storefront buyers never search on but catalog managers rely upon.
@@ -297,6 +353,10 @@ class EloquentCatalogManager implements CatalogManagerInterface
     {
         if (isset($filters['category_id'])) {
             $query->where('category_id', (int) $filters['category_id']);
+        }
+
+        if (isset($filters['brand_id'])) {
+            $query->where('brand_id', (int) $filters['brand_id']);
         }
 
         if (isset($filters['min_price'])) {
@@ -317,7 +377,8 @@ class EloquentCatalogManager implements CatalogManagerInterface
             $term = '%'.$filters['search'].'%';
             $query->where(function ($q) use ($term, $admin) {
                 $q->where('title', 'like', $term)
-                    ->orWhere('description', 'like', $term);
+                    ->orWhere('description', 'like', $term)
+                    ->orWhereHas('brand', fn ($bq) => $bq->where('name', 'like', $term));
 
                 if ($admin) {
                     $q->orWhere('slug', 'like', $term)

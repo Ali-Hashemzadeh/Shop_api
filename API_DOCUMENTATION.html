@@ -119,6 +119,7 @@
 
   <div class="section-label">Catalog</div>
   <a href="#categories">Categories</a>
+  <a href="#brands">Brands</a>
   <a href="#products">Products</a>
   <a href="#gallery">Product Gallery</a>
   <a href="#variants">Product Variants</a>
@@ -1327,6 +1328,167 @@ const res = await fetch(<span class="str">'/api/v1/media'</span>, {
   </div>
 
 
+  <!-- ═══ BRANDS ═══ -->
+  <h2 id="brands">Catalog — Brands</h2>
+  <p>Brands are a flat catalog lookup that products may belong to (a product's <code>brand_id</code> is nullable). Public reads are open; create / update / delete require authentication plus the matching <code>catalog.brand.*</code> permission. A brand may carry a logo image, referenced through the Media module.</p>
+  <div class="note"><strong>Image handling.</strong> Attach a logo either by uploading a file inline (<code>image</code>, multipart/form-data) <em>or</em> by passing a pre-uploaded <code>media_id</code> — the two are mutually exclusive (sending both → 422). The response exposes the resolved public URL as <code>image_url</code>.</div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/catalog/brands</span>
+      <span class="badge">Public</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Paginated list of active brands, newest first.</p>
+      <div class="block-label">Query Parameters</div>
+      <table>
+        <tr><th>Param</th><th>Type</th><th>Description</th></tr>
+        <tr><td>per_page</td><td class="opt">optional integer</td><td>Items per page. 1–100. Default: 15.</td></tr>
+        <tr><td>page</td><td class="opt">optional integer</td><td>Page number. Default: 1.</td></tr>
+        <tr><td>search</td><td class="opt">optional string</td><td>Free-text match on the brand <code>name</code> (case-insensitive contains). Max 255 chars.</td></tr>
+      </table>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{
+  <span class="key">"data"</span>: [
+    {
+      <span class="key">"id"</span>:        <span class="num">3</span>,
+      <span class="key">"name"</span>:      <span class="str">"Samsung"</span>,
+      <span class="key">"slug"</span>:      <span class="str">"samsung"</span>,
+      <span class="key">"is_active"</span>: <span class="bool">true</span>,
+      <span class="key">"image_url"</span>: <span class="str">"http://localhost:8000/storage/brands/samsung-logo.webp"</span>
+    }
+  ],
+  <span class="key">"links"</span>: { <span class="comment">/* first, last, prev, next */</span> },
+  <span class="key">"meta"</span>:  { <span class="key">"current_page"</span>: <span class="num">1</span>, <span class="key">"last_page"</span>: <span class="num">1</span>, <span class="key">"per_page"</span>: <span class="num">15</span>, <span class="key">"total"</span>: <span class="num">7</span> }
+}</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/catalog/brands/{id}</span>
+      <span class="badge">Public</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Returns a single brand by its integer ID.</p>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{
+  <span class="key">"id"</span>:        <span class="num">3</span>,
+  <span class="key">"name"</span>:      <span class="str">"Samsung"</span>,
+  <span class="key">"slug"</span>:      <span class="str">"samsung"</span>,
+  <span class="key">"is_active"</span>: <span class="bool">true</span>,
+  <span class="key">"image_url"</span>: <span class="str">"http://localhost:8000/storage/brands/samsung-logo.webp"</span>
+}</pre>
+      <div class="block-label">Error Responses</div>
+      <table>
+        <tr><th>Status</th><th>Condition</th></tr>
+        <tr><td>404</td><td class="opt">Brand not found</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/catalog/brands</span>
+      <span class="badge auth">Requires auth:sanctum</span>
+      <span class="badge admin">Requires catalog.brand.create</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Creates a brand. The <code>slug</code> is auto-generated from <code>name</code> when omitted.</p>
+      <div class="block-label">Request Body Fields</div>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr><td>name</td><td class="req">required · string</td><td>Brand name, max 255 chars.</td></tr>
+        <tr><td>slug</td><td class="opt">optional · string</td><td>URL slug, max 255. Must be unique across brands. Auto-derived from <code>name</code> when omitted.</td></tr>
+        <tr><td>is_active</td><td class="opt">optional · boolean</td><td>Defaults to <code>true</code>.</td></tr>
+        <tr><td>media_id</td><td class="opt">optional · integer</td><td>Pre-uploaded logo (via <code>POST /media</code>). Mutually exclusive with <code>image</code>.</td></tr>
+        <tr><td>image</td><td class="opt">optional · file</td><td>Logo upload (JPEG/PNG/WebP, max 4 MB), multipart/form-data. Mutually exclusive with <code>media_id</code>.</td></tr>
+      </table>
+      <pre>{
+  <span class="key">"name"</span>:      <span class="str">"Samsung"</span>,
+  <span class="key">"is_active"</span>: <span class="bool">true</span>,
+  <span class="key">"media_id"</span>:  <span class="num">88</span>
+}</pre>
+      <div class="block-label">Response — 201 Created</div>
+      <pre>{
+  <span class="key">"id"</span>:        <span class="num">3</span>,
+  <span class="key">"name"</span>:      <span class="str">"Samsung"</span>,
+  <span class="key">"slug"</span>:      <span class="str">"samsung"</span>,
+  <span class="key">"is_active"</span>: <span class="bool">true</span>,
+  <span class="key">"image_url"</span>: <span class="str">"http://localhost:8000/storage/brands/samsung-logo.webp"</span>
+}</pre>
+      <div class="block-label">Error Responses</div>
+      <table>
+        <tr><th>Status</th><th>Condition</th></tr>
+        <tr><td>401</td><td class="opt">No Bearer token provided</td></tr>
+        <tr><td>403</td><td class="opt">User lacks <code>catalog.brand.create</code> permission</td></tr>
+        <tr><td>422</td><td class="opt">Validation failure (missing <code>name</code>, duplicate <code>slug</code>, or both <code>image</code> and <code>media_id</code> sent)</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method patch">PATCH</span>
+      <span class="endpoint-path">/catalog/brands/{id}</span>
+      <span class="badge auth">Requires auth:sanctum</span>
+      <span class="badge admin">Requires catalog.brand.update</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Partially updates a brand. All fields are optional; only supplied fields change.</p>
+      <div class="block-label">Request Body Fields</div>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr><td>name</td><td class="opt">optional · string</td><td>Brand name, max 255 chars.</td></tr>
+        <tr><td>slug</td><td class="opt">optional · string</td><td>Unique across brands (the current brand is ignored in the uniqueness check).</td></tr>
+        <tr><td>is_active</td><td class="opt">optional · boolean</td><td>Toggle brand visibility.</td></tr>
+        <tr><td>media_id</td><td class="opt">optional · integer</td><td>Replace the logo with a pre-uploaded media. Mutually exclusive with <code>image</code>.</td></tr>
+        <tr><td>image</td><td class="opt">optional · file</td><td>Replace the logo with an upload (max 4 MB). Mutually exclusive with <code>media_id</code>.</td></tr>
+      </table>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{
+  <span class="key">"id"</span>:        <span class="num">3</span>,
+  <span class="key">"name"</span>:      <span class="str">"Samsung Electronics"</span>,
+  <span class="key">"slug"</span>:      <span class="str">"samsung"</span>,
+  <span class="key">"is_active"</span>: <span class="bool">true</span>,
+  <span class="key">"image_url"</span>: <span class="str">"http://localhost:8000/storage/brands/samsung-logo.webp"</span>
+}</pre>
+      <div class="block-label">Error Responses</div>
+      <table>
+        <tr><th>Status</th><th>Condition</th></tr>
+        <tr><td>401</td><td class="opt">No Bearer token provided</td></tr>
+        <tr><td>403</td><td class="opt">User lacks <code>catalog.brand.update</code> permission</td></tr>
+        <tr><td>404</td><td class="opt">Brand not found</td></tr>
+        <tr><td>422</td><td class="opt">Validation failure (duplicate <code>slug</code>, or both <code>image</code> and <code>media_id</code> sent)</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method delete">DELETE</span>
+      <span class="endpoint-path">/catalog/brands/{id}</span>
+      <span class="badge auth">Requires auth:sanctum</span>
+      <span class="badge admin">Requires catalog.brand.delete</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Deletes a brand. Products that referenced it keep existing — their <code>brand_id</code> is set to <code>null</code> (the FK uses <code>nullOnDelete</code>).</p>
+      <div class="block-label">Response — 204 No Content</div>
+      <pre><span class="comment">// Empty body</span></pre>
+      <div class="block-label">Error Responses</div>
+      <table>
+        <tr><th>Status</th><th>Condition</th></tr>
+        <tr><td>401</td><td class="opt">No Bearer token provided</td></tr>
+        <tr><td>403</td><td class="opt">User lacks <code>catalog.brand.delete</code> permission</td></tr>
+        <tr><td>404</td><td class="opt">Brand not found</td></tr>
+      </table>
+    </div>
+  </div>
+
+
   <!-- ═══ PRODUCTS ═══ -->
   <h2 id="products">Catalog — Products</h2>
   <p>Products can be <code>draft</code> (admin-only) or <code>published</code> (public). Public routes only return published products. Each product response includes a nested <code>images</code> gallery array and a <code>variants</code> array (each variant carries a read-only <code>stock</code> count).</p>
@@ -1348,6 +1510,7 @@ const res = await fetch(<span class="str">'/api/v1/media'</span>, {
         <tr><td>per_page</td><td class="opt">optional integer</td><td>Items per page. 1–100. Default: 15.</td></tr>
         <tr><td>page</td><td class="opt">optional integer</td><td>Page number. Default: 1.</td></tr>
         <tr><td>category_id</td><td class="opt">optional integer</td><td>Filter by category ID. Must be a valid existing category — returns 422 otherwise.</td></tr>
+        <tr><td>brand_id</td><td class="opt">optional integer</td><td>Filter by brand ID. Must be a valid existing brand — returns 422 otherwise.</td></tr>
         <tr><td>min_price</td><td class="opt">optional integer</td><td>Minimum price in rials. Compares against the default variant's <code>base_price</code>. Must be ≥ 0.</td></tr>
         <tr><td>max_price</td><td class="opt">optional integer</td><td>Maximum price in rials. Compares against the default variant's <code>base_price</code>. Must be ≥ 0.</td></tr>
         <tr><td>search</td><td class="opt">optional string</td><td>Free-text search. Matches against <code>title</code> OR <code>description</code> (case-insensitive contains). Max 255 chars.</td></tr>
@@ -1374,6 +1537,7 @@ GET /api/v1/catalog/products?category_id=5&amp;min_price=10000000&amp;max_price=
       <span class="key">"status"</span>:            <span class="str">"published"</span>,
       <span class="key">"sales_count"</span>:       <span class="num">128</span>,
       <span class="key">"category_id"</span>:       <span class="num">5</span>,
+      <span class="key">"brand_id"</span>:          <span class="num">3</span>,
       <span class="key">"primary_image_url"</span>: <span class="str">"http://localhost:8000/storage/products/s25-hero.webp"</span>,
       <span class="key">"images"</span>:            [<span class="comment">/* array of gallery image objects */</span>],
       <span class="key">"variants"</span>:          [<span class="comment">/* array of variant objects */</span>]
@@ -1410,6 +1574,7 @@ GET /api/v1/catalog/products?category_id=5&amp;min_price=10000000&amp;max_price=
   <span class="key">"status"</span>:            <span class="str">"published"</span>,
   <span class="key">"sales_count"</span>:       <span class="num">128</span>,
   <span class="key">"category_id"</span>:       <span class="num">5</span>,
+  <span class="key">"brand_id"</span>:          <span class="num">3</span>,
   <span class="key">"primary_image_url"</span>: <span class="str">"http://localhost:8000/storage/products/s25-hero.webp"</span>,
   <span class="key">"images"</span>: [
     { <span class="key">"id"</span>: <span class="num">34</span>, <span class="key">"media_id"</span>: <span class="num">22</span>, <span class="key">"url"</span>: <span class="str">"http://localhost:8000/storage/products/gallery/s25-front.webp"</span>, <span class="key">"sort_order"</span>: <span class="num">0</span> },
@@ -1520,6 +1685,7 @@ GET /api/v1/catalog/products?category_id=5&amp;min_price=10000000&amp;max_price=
   <span class="key">"status"</span>:            <span class="str">"draft"</span>,   <span class="comment">// may be draft — this is the admin view</span>
   <span class="key">"sales_count"</span>:       <span class="num">128</span>,
   <span class="key">"category_id"</span>:       <span class="num">5</span>,
+  <span class="key">"brand_id"</span>:          <span class="num">3</span>,
   <span class="key">"primary_image_url"</span>: <span class="str">"http://localhost:8000/storage/products/s25-hero.webp"</span>,
   <span class="key">"images"</span>:            [<span class="comment">/* gallery images */</span>],
   <span class="key">"variants"</span>:          [<span class="comment">/* variants */</span>]
@@ -1545,6 +1711,7 @@ GET /api/v1/catalog/products?category_id=5&amp;min_price=10000000&amp;max_price=
         <tr><td>features</td><td class="opt">optional array</td><td>Ordered array of <code>{"title":"...","value":"..."}</code> objects for the spec table.</td></tr>
         <tr><td>status</td><td class="opt">optional string</td><td><code>draft</code> (default) or <code>published</code>.</td></tr>
         <tr><td>category_id</td><td class="opt">optional integer</td><td>ID of the category this product belongs to.</td></tr>
+        <tr><td>brand_id</td><td class="opt">optional integer</td><td>ID of the brand this product belongs to. Must exist — 422 otherwise.</td></tr>
         <tr><td>primary_media_id</td><td class="opt">optional integer</td><td>Pre-uploaded media ID for the hero/thumbnail. Mutually exclusive with <code>primary_image</code>.</td></tr>
         <tr><td>primary_image</td><td class="opt">optional file</td><td>Hero image file (inline upload). JPEG/PNG/WebP, max 4 MB. Mutually exclusive with <code>primary_media_id</code>.</td></tr>
         <tr><td>gallery_media_ids</td><td class="opt">optional integer[]</td><td>Array of pre-uploaded media IDs to add to the gallery. Array index sets sort order. Mutually exclusive with <code>gallery</code>.</td></tr>
@@ -1631,6 +1798,7 @@ GET /api/v1/catalog/products?category_id=5&amp;min_price=10000000&amp;max_price=
         <tr><td>features</td><td class="opt">optional array</td><td>Replaces the full spec table. Send <code>null</code> to clear. Each item: <code>{"title":"...","value":"..."}</code>.</td></tr>
         <tr><td>status</td><td class="opt">optional string</td><td><code>draft</code> or <code>published</code>.</td></tr>
         <tr><td>category_id</td><td class="opt">optional integer</td><td>Re-assign to a different category. Send <code>null</code> to unlink.</td></tr>
+        <tr><td>brand_id</td><td class="opt">optional integer</td><td>Re-assign to a different brand. Send <code>null</code> to unlink. Must exist — 422 otherwise.</td></tr>
         <tr><td>primary_media_id</td><td class="opt">optional integer</td><td>Replace the hero image using a pre-uploaded media ID. Send <code>null</code> to clear.</td></tr>
         <tr><td>variants</td><td class="opt">optional array</td><td>Upsert variants by <code>id</code>. Omit entirely to leave existing variants untouched. Must contain ≥ 1 item when provided.</td></tr>
         <tr><td>variants.*.id</td><td class="opt">optional per item</td><td>Existing variant ID. If it already belongs to this product the variant is updated; if omitted (or unknown) a new variant is created with a server-generated SKU. Never send a <code>sku</code> — it is assigned automatically.</td></tr>
@@ -1678,6 +1846,7 @@ GET /api/v1/catalog/products?category_id=5&amp;min_price=10000000&amp;max_price=
   <span class="key">"status"</span>:            <span class="str">"published"</span>,
   <span class="key">"sales_count"</span>:       <span class="num">128</span>,
   <span class="key">"category_id"</span>:       <span class="num">5</span>,
+  <span class="key">"brand_id"</span>:          <span class="num">3</span>,
   <span class="key">"primary_image_url"</span>: <span class="str">"http://localhost:8000/storage/products/s25-hero.webp"</span>,
   <span class="key">"images"</span>: [ <span class="comment">/* … */</span> ],
   <span class="key">"variants"</span>: [

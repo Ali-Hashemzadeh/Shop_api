@@ -270,7 +270,14 @@ Match the surrounding code. Concrete patterns used throughout:
   paid/processing/shipped) and pushes an absolute per-SKU tally through
   `CatalogManagerInterface::syncSalesCounts()` — Catalog resolves SKU→variant→product internally,
   so no cross-module join.
-- Permissions: `catalog.category.{create,update,delete}`,
+- **Brands.** Flat lookup (`brands` table: `name`, unique `slug`, loose `media_id`, `is_active`) that
+  products optionally belong to via a nullable `products.brand_id` FK (`nullOnDelete` — deleting a brand
+  unlinks its products, never deletes them). Public reads (`GET /catalog/brands`, `GET /catalog/brands/{id}`);
+  admin writes (`POST`/`PATCH`/`DELETE /catalog/brands/{id}`) behind `auth:sanctum` + `catalog.brand.*`.
+  Logo attaches via inline `image` upload **or** pre-uploaded `media_id` (mutually exclusive, `prohibits`).
+  `BrandDTO`/`BrandResource` expose the resolved `image_url`. Product read responses carry `brand_id`; the
+  product list/admin endpoints accept a `brand_id` filter, and free-text `search` also matches brand name.
+- Permissions: `catalog.category.{create,update,delete}`, `catalog.brand.{create,update,delete}`,
   `catalog.product.{view-admin,create,update,delete}`, `catalog.variant.{create,update,delete}`.
 
 ### Inventory — key facts

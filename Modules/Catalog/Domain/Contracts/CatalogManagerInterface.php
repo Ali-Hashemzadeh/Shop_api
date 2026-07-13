@@ -3,6 +3,7 @@
 namespace Modules\Catalog\Domain\Contracts;
 
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Modules\Catalog\Domain\DTOs\BrandDTO;
 use Modules\Catalog\Domain\DTOs\CategoryDTO;
 use Modules\Catalog\Domain\DTOs\ProductDTO;
 use Modules\Catalog\Domain\DTOs\ProductImageDTO;
@@ -23,6 +24,19 @@ interface CatalogManagerInterface
 
     public function deleteCategory(int $id): void;
 
+    // ── Brands ────────────────────────────────────────────────────────────────
+
+    public function findBrand(int $id): ?BrandDTO;
+
+    /** @return LengthAwarePaginator<BrandDTO> */
+    public function getBrands(array $filters = [], int $perPage = 15): LengthAwarePaginator;
+
+    public function createBrand(array $data): BrandDTO;
+
+    public function updateBrand(int $id, array $data): BrandDTO;
+
+    public function deleteBrand(int $id): void;
+
     // ── Products ──────────────────────────────────────────────────────────────
 
     /** Resolves a single published product by its public UUID with full gallery and variants. */
@@ -41,9 +55,10 @@ interface CatalogManagerInterface
      *
      * Supported keys in $filters:
      *   - category_id  (int)    — exact match on category_id
+     *   - brand_id     (int)    — exact match on brand_id
      *   - min_price    (int)    — default variant base_price >= value
      *   - max_price    (int)    — default variant base_price <= value
-     *   - search       (string) — LIKE %value% on title OR description
+     *   - search       (string) — LIKE %value% on title, description, OR brand name
      *   - sort         (string) — cheapest | most_expensive (default variant base_price) | most_sold (sales_count desc)
      *
      * @return LengthAwarePaginator<ProductDTO>
@@ -56,9 +71,10 @@ interface CatalogManagerInterface
      * Supported keys in $filters:
      *   - status       (string) — exact match on status (draft|published)
      *   - category_id  (int)    — exact match on category_id
+     *   - brand_id     (int)    — exact match on brand_id
      *   - min_price    (int)    — default variant base_price >= value
      *   - max_price    (int)    — default variant base_price <= value
-     *   - search       (string) — LIKE %value% on title, description, slug, or variant SKU
+     *   - search       (string) — LIKE %value% on title, description, slug, variant SKU, or brand name
      *   - sort         (string) — cheapest | most_expensive (default variant base_price) | most_sold (sales_count desc)
      *
      * @return LengthAwarePaginator<ProductDTO>

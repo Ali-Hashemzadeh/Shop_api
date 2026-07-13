@@ -18,6 +18,7 @@ class IndexAdminProductsRequest extends FormRequest
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
             'status' => ['nullable', 'string', 'in:draft,published'],
             'category_id' => ['nullable', 'integer', 'exists:categories,id'],
+            'brand_id' => ['nullable', 'integer', 'exists:brands,id'],
             'min_price' => ['nullable', 'integer', 'min:0'],
             'max_price' => ['nullable', 'integer', 'min:0'],
             'search' => ['nullable', 'string', 'max:255'],

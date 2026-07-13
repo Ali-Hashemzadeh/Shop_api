@@ -24,6 +24,7 @@ class ProductResource extends JsonResource
             'status' => $dto->status,
             'sales_count' => $dto->salesCount,
             'category_id' => $dto->categoryId,
+            'brand_id' => $dto->brandId,
             'primary_image_url' => $dto->primaryImageUrl,
             'images' => ProductImageResource::collection($dto->images),
             'variants' => ProductVariantResource::collection($dto->variants),
