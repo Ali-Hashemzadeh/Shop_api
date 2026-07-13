@@ -140,6 +140,7 @@
   <a href="#order-overview">Overview</a>
   <a href="#order-create">Place Order</a>
   <a href="#order-list">My Orders</a>
+  <a href="#order-cancel">Cancel Order</a>
 
   <div class="section-label">Payments</div>
   <a href="#payment-overview">Overview</a>
@@ -2459,6 +2460,44 @@ await guestCartRequest('GET',  '/');
     </div>
   </div>
 
+  <!-- POST /api/v1/orders/{order}/cancel -->
+  <h3 id="order-cancel">Cancel Order</h3>
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/orders/{order}/cancel</span>
+      <span class="badge auth">Requires auth:sanctum</span>
+      <span class="badge rate">throttle:api</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Cancels one of the authenticated user's own <strong>pending</strong> orders. Every reserved unit on the order is released back to available stock, and the order moves to <code>cancelled</code>. The order ID goes in the URL; there is no request body.</p>
+      <div class="note"><strong>Ownership &amp; state.</strong> You may only cancel an order you own (403 otherwise). Only <code>pending</code> orders can be cancelled — once an order is <code>paid</code>/<code>processing</code>/<code>shipped</code> this endpoint returns 422 (refund/return is a separate future flow).</div>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{
+  <span class="key">"id"</span>:                  <span class="num">42</span>,
+  <span class="key">"status"</span>:              <span class="str">"cancelled"</span>,
+  <span class="key">"total_amount"</span>:        <span class="num">267000000</span>,
+  <span class="key">"shipping_cost"</span>:       <span class="num">0</span>,
+  <span class="key">"tax_amount"</span>:          <span class="num">0</span>,
+  <span class="key">"shipment_method_id"</span>:  <span class="num">1</span>,
+  <span class="key">"shipping_address"</span>:    { <span class="comment">/* snapshotted address object */</span> },
+  <span class="key">"transaction_ref"</span>:     <span class="null-val">null</span>,
+  <span class="key">"notes"</span>:               <span class="null-val">null</span>,
+  <span class="key">"created_at"</span>:          <span class="str">"2026-06-26T12:34:56.000000Z"</span>,
+  <span class="key">"items"</span>:               [ <span class="comment">/* same shape as POST /orders response items */</span> ]
+}</pre>
+      <div class="block-label">Error Responses</div>
+      <table>
+        <tr><th>Status</th><th>Condition</th></tr>
+        <tr><td>401</td><td class="opt">No Bearer token provided</td></tr>
+        <tr><td>403</td><td class="opt">Order belongs to another user</td></tr>
+        <tr><td>404</td><td class="opt">Order not found</td></tr>
+        <tr><td>422</td><td class="opt">Order is not in <code>pending</code> status</td></tr>
+        <tr><td>429</td><td class="opt">Rate limit exceeded — see <code>Retry-After</code> header</td></tr>
+      </table>
+    </div>
+  </div>
+
 
   <!-- ═══ PAYMENTS ═══ -->
   <h2 id="payment-overview">Payments</h2>
@@ -2484,7 +2523,7 @@ await guestCartRequest('GET',  '/');
       <div class="block-label">Request Body Fields</div>
       <table>
         <tr><th>Field</th><th>Type</th><th>Description</th></tr>
-        <tr><td>order_id</td><td class="req">required integer</td><td>The order to pay. Returns 404 if it does not exist.</td></tr>
+        <tr><td>order_id</td><td class="req">required integer</td><td>The order to pay. Must belong to the authenticated user (403 otherwise). Returns 404 if it does not exist.</td></tr>
         <tr><td>method_type</td><td class="req">required string</td><td><code>online</code> or <code>in_person</code>. Any other value → 422.</td></tr>
         <tr><td>gateway</td><td class="opt">optional string</td><td>Online gateway key. Defaults to <code>payment.default_gateway</code> config (<code>zarinpal</code>). Ignored for <code>in_person</code>.</td></tr>
       </table>
@@ -2511,7 +2550,7 @@ await guestCartRequest('GET',  '/');
       <table>
         <tr><th>Status</th><th>Condition</th></tr>
         <tr><td>401</td><td class="opt">No Bearer token provided</td></tr>
-        <tr><td>403</td><td class="opt">User lacks <code>payment.create</code> permission</td></tr>
+        <tr><td>403</td><td class="opt">User lacks <code>payment.create</code> permission, or the order belongs to another user</td></tr>
         <tr><td>404</td><td class="opt">Order not found</td></tr>
         <tr><td>422</td><td class="opt">Validation failure (missing <code>order_id</code>, invalid <code>method_type</code>)</td></tr>
         <tr><td>429</td><td class="opt">Rate limit exceeded — see <code>Retry-After</code> header</td></tr>

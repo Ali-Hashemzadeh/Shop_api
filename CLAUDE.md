@@ -172,10 +172,10 @@ Match the surrounding code. Concrete patterns used throughout:
 | **Catalog** | ✅ Complete | Categories, products, galleries, variants, atomic nested create, variant upsert on update, variant `type` (`image`/`color`), admin all-status product index — 128 tests |
 | **Inventory** | ✅ Complete | Stock tracking, reservation lifecycle, append-only ledger — 24 tests |
 | **Cart** | ✅ Complete | Guest + auth carts, stock-validated add/update, Catalog price enrichment — 15 tests |
-| **Order** | ✅ Implemented | `Modules/Order/` (singular). Provider registered in `bootstrap/providers.php`. Checkout from cart → order (`POST /api/v1/orders`), paginated my-orders (`GET /api/v1/orders`), status lifecycle (pending/paid/processing/shipped/cancelled/failed), `orders:cancel-expired` + hourly `orders:sync-sales-counts` commands. Tests under `tests/Feature/Order/`. |
-| **Payment** | ✅ Implemented | `Modules/Payment/`. Provider registered. `POST /api/v1/payments/initialize` (online → Zarinpal `redirect_url`; in_person → `pending_cash` + marks order paid) and public `GET /api/v1/payments/zarinpal/callback` (verify/capture). Tests under `tests/Feature/Payment/`. |
+| **Order** | ✅ Implemented | `Modules/Order/` (singular). Provider registered in `bootstrap/providers.php`. Checkout from cart → order (`POST /api/v1/orders`), paginated my-orders (`GET /api/v1/orders`), owner-only cancel (`POST /api/v1/orders/{order}/cancel` → releases reserved stock), status lifecycle (pending/paid/processing/shipped/cancelled/failed), `orders:cancel-expired` + hourly `orders:sync-sales-counts` commands. Tests under `tests/Feature/Order/`. |
+| **Payment** | ✅ Implemented | `Modules/Payment/`. Provider registered. `POST /api/v1/payments/initialize` (online → Zarinpal `redirect_url`; in_person → `pending_cash` + marks order paid; **403 unless the order belongs to the caller**) and public `GET /api/v1/payments/zarinpal/callback` (verify/capture). Tests under `tests/Feature/Payment/`. |
 
-**Test suite baseline: 288 tests / 811 assertions, all green.**
+**Test suite baseline: 294 tests, all green.**
 
 ### Identity — key facts
 - **OTP + password split-auth, phone-based, unified register+login** (sign-up == login).

@@ -7,6 +7,7 @@ namespace Modules\Order\Infrastructure\Http\Controllers;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Modules\Order\Application\Actions\CancelOrderAction;
 use Modules\Order\Application\Actions\CreateOrderAction;
 use Modules\Order\Domain\Contracts\OrderManagerInterface;
 use Modules\Order\Domain\Exceptions\EmptyCartException;
@@ -18,6 +19,7 @@ class OrderController extends Controller
 {
     public function __construct(
         private readonly CreateOrderAction $createOrder,
+        private readonly CancelOrderAction $cancelOrder,
         private readonly OrderManagerInterface $manager,
     ) {}
 
@@ -45,5 +47,15 @@ class OrderController extends Controller
         $paginator = $this->manager->getUserOrders($request->user()->id, $perPage);
 
         return response()->json(OrderResource::collection($paginator)->response()->getData(true));
+    }
+
+    public function cancel(Request $request, int $order): JsonResponse
+    {
+        $dto = $this->cancelOrder->handle(
+            orderId: $order,
+            userId: $request->user()->id,
+        );
+
+        return response()->json(new OrderResource($dto));
     }
 }

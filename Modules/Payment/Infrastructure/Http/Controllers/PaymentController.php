@@ -22,6 +22,7 @@ class PaymentController extends Controller
     {
         $result = $this->manager->initializePayment(
             orderId: (int) $request->input('order_id'),
+            userId: $request->user()->id,
             methodType: $request->input('method_type'),
             gateway: $request->input('gateway'),
         );

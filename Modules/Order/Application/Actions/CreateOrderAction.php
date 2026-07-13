@@ -19,6 +19,7 @@ class CreateOrderAction
     public function __construct(
         private readonly CartManagerInterface $cart,
         private readonly InventoryManagerInterface $inventory,
+        private readonly CancelOrderAction $cancelOrder,
     ) {}
 
     public function handle(int $userId, int $addressId, int $shipmentMethodId, ?string $notes = null): OrderDTO
@@ -52,10 +53,7 @@ class CreateOrderAction
                 ->first();
 
             if ($pending) {
-                foreach ($pending->items as $item) {
-                    $this->inventory->releaseReservation($item->sku, $item->quantity, $pending->id);
-                }
-                $pending->update(['status' => 'cancelled']);
+                $this->cancelOrder->releaseAndCancel($pending);
             }
 
             $order = Order::create([

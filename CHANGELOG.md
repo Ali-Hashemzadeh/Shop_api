@@ -2,6 +2,22 @@
 
 ## [Unreleased](https://github.com/laravel/laravel/compare/v12.12.1...12.x)
 
+### Fix — Order & Payment: enforce ownership and release stock on cancel
+
+**A customer could pay for (and, via `in_person`, mark paid) another user's order, and there was no user-facing way to cancel an order — so reserved stock was only ever freed by the 15-min expiry sweep.**
+
+#### Added
+- `POST /api/v1/orders/{order}/cancel` — a user cancels **their own** pending order; releases every item's reserved stock and returns the cancelled OrderResource. `auth:sanctum`; 403 for another user's order, 404 if missing, 422 unless the order is `pending`.
+- `CancelOrderAction` — owns the single `releaseAndCancel(Order)` primitive (release reservations + mark cancelled) now reused by `CreateOrderAction` (pending replacement) and `CancelExpiredOrdersAction`, so every cancellation path frees stock through one code path.
+
+#### Changed
+- `InitializePaymentAction` / `PaymentManagerInterface::initializePayment` now take the caller's `userId` and **abort 403 unless the target order belongs to that user** (checked right after the 404 guard) — closes the cross-user payment hole.
+- `CancelExpiredOrdersAction` now delegates to `CancelOrderAction::releaseAndCancel` (each order in its own transaction) instead of inlining the release loop.
+
+#### Tests
+- `OrderTest` (+5): user cancels own order releases stock, cancel ownership 403, cancel 404, cancel non-pending 422, unauthenticated cancel 401.
+- `PaymentTest` (+1): initializing payment for another user's order is 403 and writes no payment row.
+
 ### Feature — Catalog: per-variant available stock on the product resource
 
 **Product read responses now report how many units of each variant are available.**
