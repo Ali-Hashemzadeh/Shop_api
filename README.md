@@ -117,7 +117,19 @@ Immutable financial contract anchor. Converts a validated cart into a locked ord
 - **Checkout flow:** `POST /api/v1/orders` cancels any existing pending order (releasing reserved inventory), snapshots prices and shipping address, creates the new order, reserves stock per item, and clears the cart — all in a single `DB::transaction()`.
 - **TTL enforcement:** `orders:cancel-expired` runs every minute and cancels pending orders older than 15 minutes, releasing their inventory reservations.
 - **Price snapshot:** Order items store prices at creation time and never change, even if the catalog is updated.
+- **Shipment selection:** Checkout takes `shipment_method_code` (+ `address_id?`, `delivery_slot_id?`); the order stores an immutable `shipment_snapshot`. The legacy `shipment_method_id` column is retained (nullable) for backward compatibility but is no longer written.
 - **Authorization:** Requires `auth:sanctum` + `order.create` permission. Customers receive this permission by default.
+
+### Shipment (Complete)
+Fulfillment lifecycle from checkout through payment to delivery, postal handoff, or store pickup. The four methods are fixed and **configuration-backed** (`config/shipment.php`) — there is no `shipment_methods` table.
+
+- **Methods (by code):** `post_standard`, `post_express` (postal — end at `handed_to_post`, tracking number shown), `local_delivery` (dated slot required, capacity-limited), `in_person_pickup` (free, no address).
+- **Key contract:** `ShipmentManagerInterface` — `getAvailableMethods`, `getAvailableDeliverySlots`, `validateSelection`, `holdForPendingOrder`, `releasePendingOrder`, `activateForPaidOrder`, `findForOrder`. Supported-region rule isolated behind `LocalDeliveryEligibilityInterface`.
+- **Lifecycle:** a held local-delivery slot is reserved at pending-order creation, confirmed when the order is **paid**, released on cancel/expiry. The operational `shipments` record is created only when the order becomes paid (idempotent by `order_id`, at the shared `markAsPaid` path, which also commits inventory once).
+- **Status mapping:** shipment → order summary (`handed_to_post`/`out_for_delivery` → `shipped`; `delivered`/`picked_up` → `completed`). Postal tracking intentionally ends at `handed_to_post`.
+- **Slots:** `shipment:generate-delivery-slots` generates dated cinema-session slots from recurring working periods (idempotent, scheduled daily). Remaining capacity = capacity − admin-reserved − active reservations; overbooking prevented with row locks.
+- **Endpoints:** customer `GET /shipment/methods`, `/shipment/delivery-slots`, `/shipments/{publicCode}`, `/orders/{order}/shipment`; admin `/admin/shipments*` (business-action POSTs) and `/admin/shipment/delivery-slots*`.
+- **Authorization:** permission-based (`shipment.*`); customer gets `shipment.view-own`, admin gets all.
 
 ---
 
@@ -257,6 +269,44 @@ Or individually:
 php artisan serve
 php artisan queue:listen
 ```
+
+---
+
+## Scheduled Tasks & Cron
+
+Several modules rely on Laravel's scheduler (defined in `routes/console.php`):
+
+| Command | Frequency | Purpose |
+|---|---|---|
+| `orders:cancel-expired` | every minute | Cancel unpaid pending orders past the 15-min TTL and release their reservations |
+| `payments:expire-stale` | every 5 minutes | Fail/settle stale payment attempts |
+| `orders:sync-sales-counts` | hourly | Push best-seller tallies to Catalog |
+| `shipment:generate-delivery-slots` | daily at 00:30 | Generate dated local-delivery sessions from the recurring working periods |
+
+These fire **only if Laravel's scheduler is itself driven by the system cron**. In production add this **single** cron entry (it runs `schedule:run` every minute; Laravel then decides which commands are due):
+
+```cron
+* * * * * cd /path/to/Shop_api && php artisan schedule:run >> /dev/null 2>&1
+```
+
+That one line is all that's needed — do **not** add a separate cron entry per command. Delivery-slot generation is idempotent and safe to run daily: it never duplicates existing slots, overwrites operator-modified slots, or reopens administratively closed slots, so a missed run simply catches up on the next tick.
+
+**Generate slots manually / on demand** (e.g. first deploy, or to widen the horizon):
+
+```bash
+php artisan shipment:generate-delivery-slots            # uses config('shipment.delivery.generation_days'), default 30
+php artisan shipment:generate-delivery-slots --days=60  # generate 60 days ahead
+```
+
+Before slots can be generated you must seed the recurring templates in `delivery_working_periods` (weekday `0`=Sun … `6`=Sat, plus `starts_at`/`ends_at`), and optionally `delivery_schedule_exceptions` (`closed` / `custom_hours`) for holidays or special hours. Slot duration, capacity, booking horizon, and lead time are all tunable in `config/shipment.php` (env-backed).
+
+**Local development** (Windows or no cron): run the scheduler in the foreground instead of a cron entry:
+
+```bash
+php artisan schedule:work
+```
+
+or invoke the generator directly with the command above.
 
 ---
 

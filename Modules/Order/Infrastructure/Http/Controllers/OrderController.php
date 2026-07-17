@@ -11,9 +11,9 @@ use Modules\Order\Application\Actions\CancelOrderAction;
 use Modules\Order\Application\Actions\CreateOrderAction;
 use Modules\Order\Domain\Contracts\OrderManagerInterface;
 use Modules\Order\Domain\Exceptions\EmptyCartException;
-use Modules\Order\Domain\Exceptions\InvalidAddressException;
 use Modules\Order\Infrastructure\Http\Requests\StoreOrderRequest;
 use Modules\Order\Infrastructure\Http\Resources\OrderResource;
+use Modules\Shipment\Domain\Contracts\ShipmentManagerInterface;
 
 class OrderController extends Controller
 {
@@ -21,20 +21,27 @@ class OrderController extends Controller
         private readonly CreateOrderAction $createOrder,
         private readonly CancelOrderAction $cancelOrder,
         private readonly OrderManagerInterface $manager,
+        private readonly ShipmentManagerInterface $shipment,
     ) {}
 
     public function store(StoreOrderRequest $request): JsonResponse
     {
+        // Validate + resolve the shipment selection (address ownership/eligibility,
+        // slot bookability). Throws ValidationException (422) on failure.
+        $selection = $this->shipment->validateSelection(
+            userId: $request->user()->id,
+            methodCode: (string) $request->input('shipment_method_code'),
+            addressId: $request->filled('address_id') ? (int) $request->input('address_id') : null,
+            deliverySlotId: $request->filled('delivery_slot_id') ? (int) $request->input('delivery_slot_id') : null,
+        );
+
         try {
             $dto = $this->createOrder->handle(
                 userId: $request->user()->id,
-                addressId: (int) $request->input('address_id'),
-                shipmentMethodId: (int) $request->input('shipment_method_id'),
+                selection: $selection,
                 notes: $request->input('notes'),
             );
         } catch (EmptyCartException $e) {
-            return response()->json(['message' => $e->getMessage()], 422);
-        } catch (InvalidAddressException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }
 

@@ -16,8 +16,9 @@ class StoreOrderRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'address_id' => ['required', 'integer'],
-            'shipment_method_id' => ['required', 'integer'],
+            'shipment_method_code' => ['required', 'string'],
+            'address_id' => ['nullable', 'integer'],
+            'delivery_slot_id' => ['nullable', 'integer'],
             'notes' => ['nullable', 'string', 'max:1000'],
         ];
     }
