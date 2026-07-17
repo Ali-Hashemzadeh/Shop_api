@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Feature — Shipment: delivery working-period admin API
+
+- Added permission-protected CRUD endpoints at `/api/v1/admin/shipment/delivery-working-periods` for recurring weekday/time templates used by `shipment:generate-delivery-slots`.
+- Reuses `shipment.slot.view-admin` for listing and `shipment.slot.manage` for mutations; validates weekday 0–6, end-after-start, booleans, partial updates, and prevents overlapping periods on the same weekday.
+- Existing generated dated slots are not rewritten when templates change. Added feature coverage for CRUD, validation, authorization, overlap handling, and idempotent generation.
 ### Feature — Catalog/Cart/Order: per-variant order quantity limits
 
 - Catalog variants now store nullable `max_quantity_per_order` (`null` means no special limit; configured values must be whole integers of at least 1). Standalone variant writes, nested product creation, and product-update variant upserts all accept it, including explicit `null` to clear it.

@@ -130,6 +130,7 @@ Fulfillment lifecycle from checkout through payment to delivery, postal handoff,
 - **Lifecycle:** a held local-delivery slot is reserved at pending-order creation, confirmed when the order is **paid**, released on cancel/expiry. The operational `shipments` record is created only when the order becomes paid (idempotent by `order_id`, at the shared `markAsPaid` path, which also commits inventory once).
 - **Status mapping:** shipment → order summary (`handed_to_post`/`out_for_delivery` → `shipped`; `delivered`/`picked_up` → `completed`). Postal tracking intentionally ends at `handed_to_post`.
 - **Slots:** `shipment:generate-delivery-slots` generates dated cinema-session slots from recurring working periods (idempotent, scheduled daily). Remaining capacity = capacity − admin-reserved − active reservations; overbooking prevented with row locks.
+- **Working-period admin API:** GET/POST /api/v1/admin/shipment/delivery-working-periods and PATCH/DELETE /api/v1/admin/shipment/delivery-working-periods/{id} manage recurring weekday templates through existing shipment.slot.view-admin / shipment.slot.manage permissions. Same-day periods cannot overlap; changes affect future generation and do not rewrite existing dated slots.
 - **Endpoints:** customer `GET /shipment/methods`, `/shipment/delivery-slots`, `/shipments/{publicCode}`, `/orders/{order}/shipment`; admin `/admin/shipments*` (business-action POSTs) and `/admin/shipment/delivery-slots*`.
 - **Authorization:** permission-based (`shipment.*`); customer gets `shipment.view-own`, admin gets all.
 

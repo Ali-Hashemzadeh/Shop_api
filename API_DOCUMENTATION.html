@@ -2956,7 +2956,20 @@ await guestCartRequest('GET',  '/');
   </table>
   <div class="note"><strong>Postal tracking ends at <code>handed_to_post</code>.</strong> When a postal shipment reaches that status, show the <code>tracking_number</code> and tell the customer to follow the parcel via the postal service — the app deliberately does not report carrier <code>in_transit</code>/<code>out_for_delivery</code>/<code>delivered</code> states. For pickup, show <code>pickup_location</code> (title/address/phone) once the status is <code>ready_for_pickup</code>.</div>
 
-  <h3>Method → UI inputs cheat-sheet</h3>
+  <h3 id="shipment-working-periods">Admin — Delivery working periods</h3>
+<p>Recurring weekly templates are managed through the admin API. Listing requires <code>shipment.slot.view-admin</code>; create, update, and delete require <code>shipment.slot.manage</code>. Weekday uses Carbon numbering: <code>0</code> Sunday through <code>6</code> Saturday. Times use <code>HH:mm</code>, end must be after start, and periods on the same weekday cannot overlap.</p>
+<pre>GET    /api/v1/admin/shipment/delivery-working-periods
+POST   /api/v1/admin/shipment/delivery-working-periods
+PATCH  /api/v1/admin/shipment/delivery-working-periods/{id}
+DELETE /api/v1/admin/shipment/delivery-working-periods/{id}</pre>
+<pre>{
+  "weekday": 6,
+  "starts_at": "09:00",
+  "ends_at": "18:00",
+  "is_active": true
+}</pre>
+<p>After creating or changing templates, run <code>php artisan shipment:generate-delivery-slots</code> (or wait for its daily 00:30 schedule). Template changes affect future generation only; already-generated dated slots remain available for explicit slot management.</p>
+<h3>Method → UI inputs cheat-sheet</h3>
   <table>
     <tr><th>Method code</th><th>Address picker</th><th>Slot picker</th><th>Shipping cost</th><th>Extra UI</th></tr>
     <tr><td><code>post_standard</code> / <code>post_express</code></td><td>required</td><td>hidden</td><td>from method <code>price</code></td><td>tracking number after handoff</td></tr>

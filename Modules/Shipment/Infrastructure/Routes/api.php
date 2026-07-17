@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use Modules\Shipment\Infrastructure\Http\Controllers\AdminDeliverySlotController;
+use Modules\Shipment\Infrastructure\Http\Controllers\AdminDeliveryWorkingPeriodController;
 use Modules\Shipment\Infrastructure\Http\Controllers\AdminShipmentController;
 use Modules\Shipment\Infrastructure\Http\Controllers\ShipmentController;
 use Modules\Shipment\Infrastructure\Http\Controllers\ShipmentMethodController;
@@ -43,4 +44,9 @@ Route::middleware(['api', 'auth:sanctum', 'throttle:api'])
         Route::patch('shipment/delivery-slots/{slot}', [AdminDeliverySlotController::class, 'update'])->whereNumber('slot');
         Route::post('shipment/delivery-slots/{slot}/close', [AdminDeliverySlotController::class, 'close'])->whereNumber('slot');
         Route::post('shipment/delivery-slots/{slot}/open', [AdminDeliverySlotController::class, 'open'])->whereNumber('slot');
+
+        Route::get('shipment/delivery-working-periods', [AdminDeliveryWorkingPeriodController::class, 'index']);
+        Route::post('shipment/delivery-working-periods', [AdminDeliveryWorkingPeriodController::class, 'store']);
+        Route::patch('shipment/delivery-working-periods/{workingPeriod}', [AdminDeliveryWorkingPeriodController::class, 'update'])->whereNumber('workingPeriod');
+        Route::delete('shipment/delivery-working-periods/{workingPeriod}', [AdminDeliveryWorkingPeriodController::class, 'destroy'])->whereNumber('workingPeriod');
     });
