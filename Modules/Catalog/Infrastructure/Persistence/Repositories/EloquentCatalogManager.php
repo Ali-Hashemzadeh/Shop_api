@@ -192,9 +192,12 @@ class EloquentCatalogManager implements CatalogManagerInterface
             ->with(['images', 'variants']);
 
         $this->applyProductFilters($query, $filters);
+        $stockMap = array_key_exists('available', $filters)
+            ? $this->applyProductAvailabilityFilter($query, (bool) $filters['available'])
+            : null;
         $this->applyProductSort($query, $filters['sort'] ?? null);
 
-        return $this->paginateProducts($query, $perPage);
+        return $this->paginateProducts($query, $perPage, $stockMap);
     }
 
     public function getProductsAdmin(array $filters = [], int $perPage = 15): LengthAwarePaginator
@@ -366,6 +369,22 @@ class EloquentCatalogManager implements CatalogManagerInterface
             );
         }
 
+        if (array_key_exists('has_discount', $filters)) {
+            if ($filters['has_discount']) {
+                $query->whereHas('variants', function ($variantQuery) {
+                    $variantQuery
+                        ->whereNotNull('compare_at_price')
+                        ->whereColumn('compare_at_price', '>', 'base_price');
+                });
+            } else {
+                $query->whereDoesntHave('variants', function ($variantQuery) {
+                    $variantQuery
+                        ->whereNotNull('compare_at_price')
+                        ->whereColumn('compare_at_price', '>', 'base_price');
+                });
+            }
+        }
+
         if (isset($filters['max_price'])) {
             $query->whereHas('variants', fn ($q) => $q
                 ->where('is_default', true)
@@ -420,7 +439,46 @@ class EloquentCatalogManager implements CatalogManagerInterface
         }
     }
 
-    private function paginateProducts($query, int $perPage): LengthAwarePaginator
+    /**
+     * Constrain the product query before pagination using one Inventory batch lookup.
+     *
+     * @return array<string, int> Available quantity keyed by SKU.
+     */
+    private function applyProductAvailabilityFilter($query, bool $available): array
+    {
+        $candidateProductIds = (clone $query)
+            ->reorder()
+            ->select('products.id');
+
+        $skus = ProductVariant::query()
+            ->whereIn('product_id', $candidateProductIds)
+            ->pluck('sku')
+            ->all();
+
+        $stockMap = $this->availableStockMap($skus);
+        $availableSkus = array_keys(array_filter(
+            $stockMap,
+            static fn (int $quantity): bool => $quantity > 0,
+        ));
+
+        if ($availableSkus === []) {
+            if ($available) {
+                $query->whereRaw('1 = 0');
+            }
+
+            return $stockMap;
+        }
+
+        $relation = $available ? 'whereHas' : 'whereDoesntHave';
+        $query->{$relation}(
+            'variants',
+            fn ($variantQuery) => $variantQuery->whereIn('sku', $availableSkus),
+        );
+
+        return $stockMap;
+    }
+
+    private function paginateProducts($query, int $perPage, ?array $stockMap = null): LengthAwarePaginator
     {
         $paginator = $query->paginate($perPage);
 
@@ -434,7 +492,7 @@ class EloquentCatalogManager implements CatalogManagerInterface
 
         // Page-wide available-stock lookup in a single Inventory batch call, so a list
         // of products never fans out into one stock query per product.
-        $stockMap = $this->availableStockMap(
+        $stockMap ??= $this->availableStockMap(
             $paginator->getCollection()
                 ->flatMap(fn (Product $p) => $p->variants->pluck('sku'))
                 ->all()

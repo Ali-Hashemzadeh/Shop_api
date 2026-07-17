@@ -95,6 +95,8 @@ class ProductsController extends Controller
             'max_price' => $request->has('max_price') ? $request->integer('max_price') : null,
             'search' => $request->string('search')->trim()->toString() ?: null,
             'sort' => $request->string('sort')->trim()->toString() ?: null,
+            'has_discount' => $request->has('has_discount') ? $request->boolean('has_discount') : null,
+            'available' => $request->has('available') ? $request->string('available')->toString() === 'true' : null,
         ], fn ($v) => $v !== null);
 
         return ProductResource::collection(
@@ -128,6 +130,7 @@ class ProductsController extends Controller
             'max_price' => $request->has('max_price') ? $request->integer('max_price') : null,
             'search' => $request->string('search')->trim()->toString() ?: null,
             'sort' => $request->string('sort')->trim()->toString() ?: null,
+            'available' => $request->has('available') ? $request->string('available')->toString() === 'true' : null,
         ], fn ($v) => $v !== null);
 
         return ProductResource::collection(

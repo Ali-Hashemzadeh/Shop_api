@@ -1510,7 +1510,7 @@ const res = await fetch(<span class="str">'/api/v1/media'</span>, {
       <span class="badge">Public</span>
     </div>
     <div class="endpoint-body">
-      <p>Paginated list of all published products. Supports optional filtering by category, price range, and full-text search. All query parameters are optional and can be combined freely.</p>
+      <p>Paginated list of all published products. Supports optional filtering by category, price range, availability, and full-text search. All query parameters are optional and can be combined freely.</p>
       <div class="block-label">Query Parameters</div>
       <table>
         <tr><th>Param</th><th>Type</th><th>Description</th></tr>
@@ -1522,6 +1522,7 @@ const res = await fetch(<span class="str">'/api/v1/media'</span>, {
         <tr><td>max_price</td><td class="opt">optional integer</td><td>Maximum price in rials. Compares against the default variant's <code>base_price</code>. Must be ≥ 0.</td></tr>
         <tr><td>search</td><td class="opt">optional string</td><td>Free-text search. Matches against <code>title</code> OR <code>description</code> (case-insensitive contains). Max 255 chars.</td></tr>
         <tr><td>sort</td><td class="opt">optional string</td><td>Sort order. One of <code>cheapest</code> / <code>most_expensive</code> (by the default variant's <code>base_price</code>) or <code>most_sold</code> (by <code>sales_count</code>, best-sellers first). Omitted → newest first. Any other value → 422.</td></tr>
+        <tr><td>available</td><td class="opt">optional string</td><td>Availability filter. Literal <code>true</code> returns products with at least one variant whose Inventory <code>availableQuantity</code> is greater than zero. Literal <code>false</code> returns products whose variants are fully reserved, have zero/negative availability, or have no stock record. Any other value → 422.</td></tr>
       </table>
       <div class="block-label">Example Requests</div>
       <pre><span class="comment">// All published products (page 1, 15 per page)</span>
@@ -1531,7 +1532,10 @@ GET /api/v1/catalog/products
 GET /api/v1/catalog/products?search=گوشی&amp;max_price=50000000
 
 <span class="comment">// Products in category 5 priced between 10M and 100M rials</span>
-GET /api/v1/catalog/products?category_id=5&amp;min_price=10000000&amp;max_price=100000000</pre>
+GET /api/v1/catalog/products?category_id=5&amp;min_price=10000000&amp;max_price=100000000
+
+<span class="comment">// Only products with positive available Inventory stock</span>
+GET /api/v1/catalog/products?available=true</pre>
       <div class="block-label">Response — 200 OK</div>
       <pre>{
   <span class="key">"data"</span>: [
