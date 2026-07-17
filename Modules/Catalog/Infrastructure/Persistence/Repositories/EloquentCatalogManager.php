@@ -369,6 +369,22 @@ class EloquentCatalogManager implements CatalogManagerInterface
             );
         }
 
+        if (array_key_exists('has_discount', $filters)) {
+            if ($filters['has_discount']) {
+                $query->whereHas('variants', function ($variantQuery) {
+                    $variantQuery
+                        ->whereNotNull('compare_at_price')
+                        ->whereColumn('compare_at_price', '>', 'base_price');
+                });
+            } else {
+                $query->whereDoesntHave('variants', function ($variantQuery) {
+                    $variantQuery
+                        ->whereNotNull('compare_at_price')
+                        ->whereColumn('compare_at_price', '>', 'base_price');
+                });
+            }
+        }
+
         if (isset($filters['max_price'])) {
             $query->whereHas('variants', fn ($q) => $q
                 ->where('is_default', true)
