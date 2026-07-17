@@ -11,11 +11,13 @@ use Modules\Order\Domain\DTOs\OrderItemDTO;
 use Modules\Order\Domain\Enums\OrderStatus;
 use Modules\Order\Domain\Models\Order;
 use Modules\Order\Domain\Models\OrderItem;
+use Modules\Shipment\Domain\Contracts\ShipmentManagerInterface;
 
 class CancelOrderAction
 {
     public function __construct(
         private readonly InventoryManagerInterface $inventory,
+        private readonly ShipmentManagerInterface $shipment,
     ) {}
 
     public function handle(int $orderId, int $userId): OrderDTO
@@ -52,6 +54,10 @@ class CancelOrderAction
         foreach ($order->items as $item) {
             $this->inventory->releaseReservation($item->sku, $item->quantity, $order->id);
         }
+
+        // Release any held/confirmed local-delivery slot for this order (no-op
+        // for postal/pickup, and idempotent when repeated).
+        $this->shipment->releasePendingOrder($order->id);
 
         $order->update(['status' => OrderStatus::CANCELLED->value]);
     }

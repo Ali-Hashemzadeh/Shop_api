@@ -14,13 +14,16 @@ class Order extends Model
         'shipping_cost',
         'tax_amount',
         'shipment_method_id',
+        'shipment_method_code',
         'shipping_address',
+        'shipment_snapshot',
         'transaction_ref',
         'notes',
     ];
 
     protected $casts = [
         'shipping_address' => 'array',
+        'shipment_snapshot' => 'array',
         'total_amount' => 'integer',
         'shipping_cost' => 'integer',
         'tax_amount' => 'integer',

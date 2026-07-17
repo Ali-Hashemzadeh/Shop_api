@@ -147,6 +147,13 @@
   <a href="#payment-overview">Overview</a>
   <a href="#payment-initialize">Initialize Payment</a>
   <a href="#payment-callback">Zarinpal Callback</a>
+
+  <div class="section-label">Shipment</div>
+  <a href="#shipment">Overview &amp; Methods</a>
+  <a href="#shipment-slots">Delivery Sessions</a>
+  <a href="#shipment-read">Read a Shipment</a>
+  <a href="#shipment-admin">Admin Workflow</a>
+  <a href="#shipment-frontend-guide">Frontend Guide</a>
 </nav>
 
 <main>
@@ -2517,14 +2524,17 @@ await guestCartRequest('GET',  '/');
       <div class="block-label">Request Body</div>
       <table>
         <tr><th>Field</th><th>Type</th><th>Description</th></tr>
-        <tr><td>address_id</td><td class="req">required · integer</td><td>ID of a saved address that belongs to the authenticated user.</td></tr>
-        <tr><td>shipment_method_id</td><td class="req">required · integer</td><td>ID of the chosen shipment method (Shipment module, future).</td></tr>
+        <tr><td>shipment_method_code</td><td class="req">required · string</td><td>One of <code>post_standard</code>, <code>post_express</code>, <code>local_delivery</code>, <code>in_person_pickup</code>. See the <a href="#shipment">Shipment</a> section.</td></tr>
+        <tr><td>address_id</td><td class="opt">conditional · integer</td><td>Required for postal + local delivery (a saved address you own). Ignored for pickup.</td></tr>
+        <tr><td>delivery_slot_id</td><td class="opt">conditional · integer</td><td>Required for <code>local_delivery</code> (a bookable slot id). Prohibited for all other methods.</td></tr>
         <tr><td>notes</td><td class="opt">optional · string</td><td>Free-text order note, max 1000 characters.</td></tr>
       </table>
+      <div class="note">Shipping cost and the slot date/time are resolved server-side from config and the snapshot — the frontend cannot override them. The chosen selection is frozen into an immutable <code>shipment_snapshot</code> on the order.</div>
       <pre>{
-  <span class="key">"address_id"</span>:         <span class="num">3</span>,
-  <span class="key">"shipment_method_id"</span>: <span class="num">1</span>,
-  <span class="key">"notes"</span>:              <span class="str">"Please ring the doorbell"</span>
+  <span class="key">"shipment_method_code"</span>: <span class="str">"local_delivery"</span>,
+  <span class="key">"address_id"</span>:           <span class="num">3</span>,
+  <span class="key">"delivery_slot_id"</span>:     <span class="num">103</span>,
+  <span class="key">"notes"</span>:                <span class="str">"Please ring the doorbell"</span>
 }</pre>
       <div class="block-label">Response — 201 Created</div>
       <pre>{
@@ -2533,7 +2543,9 @@ await guestCartRequest('GET',  '/');
   <span class="key">"total_amount"</span>:        <span class="num">267000000</span>,   <span class="comment">// rials, integer</span>
   <span class="key">"shipping_cost"</span>:       <span class="num">0</span>,
   <span class="key">"tax_amount"</span>:          <span class="num">0</span>,
-  <span class="key">"shipment_method_id"</span>:  <span class="num">1</span>,
+  <span class="key">"shipment_method_id"</span>:  <span class="null-val">null</span>,   <span class="comment">// legacy, kept for BC</span>
+  <span class="key">"shipment_method_code"</span>: <span class="str">"local_delivery"</span>,
+  <span class="key">"shipment_snapshot"</span>: { <span class="comment">/* immutable method_code/title/type/shipping_cost/address/delivery_slot/pickup_location */</span> },
   <span class="key">"shipping_address"</span>: {
     <span class="key">"id"</span>:          <span class="num">3</span>,
     <span class="key">"title"</span>:       <span class="str">"Home"</span>,
@@ -2622,7 +2634,8 @@ await guestCartRequest('GET',  '/');
         <tr><td><code>pending</code></td><td>Awaiting payment. Expires after 15 minutes if unpaid.</td></tr>
         <tr><td><code>paid</code></td><td>Payment confirmed. Inventory reservation is now committed.</td></tr>
         <tr><td><code>processing</code></td><td>Order is being fulfilled / packed.</td></tr>
-        <tr><td><code>shipped</code></td><td>Dispatched to the carrier.</td></tr>
+        <tr><td><code>shipped</code></td><td>Handed to the postal service / out for local delivery.</td></tr>
+        <tr><td><code>completed</code></td><td>Local delivery <code>delivered</code> or pickup <code>picked_up</code> (neutral final state).</td></tr>
         <tr><td><code>cancelled</code></td><td>Cancelled (by user, by TTL expiry, or by a new checkout).</td></tr>
         <tr><td><code>failed</code></td><td>Payment or fulfilment failure.</td></tr>
       </table>
@@ -2763,6 +2776,189 @@ await guestCartRequest('GET',  '/');
       </table>
     </div>
   </div>
+
+  <!-- ============================ SHIPMENT ============================ -->
+  <h2 id="shipment">Shipment &amp; Fulfillment</h2>
+  <p>The shop supports exactly four <strong>fixed, configuration-backed</strong> fulfillment methods. They cannot be created, renamed, repriced, or toggled from the admin panel, and there is no <code>shipment_methods</code> table. Methods are identified by a stable <strong>code</strong>; all prices are integer rials.</p>
+  <table>
+    <tr><th>Code</th><th>Type</th><th>Address</th><th>Delivery slot</th><th>Tracking</th><th>Final states</th></tr>
+    <tr><td><code>post_standard</code></td><td>postal</td><td>required</td><td>—</td><td>yes</td><td>shipment <code>handed_to_post</code> → order <code>shipped</code></td></tr>
+    <tr><td><code>post_express</code></td><td>postal</td><td>required</td><td>—</td><td>yes</td><td>shipment <code>handed_to_post</code> → order <code>shipped</code></td></tr>
+    <tr><td><code>local_delivery</code></td><td>local_delivery</td><td>required (eligible)</td><td>required</td><td>no</td><td>shipment <code>delivered</code> → order <code>completed</code></td></tr>
+    <tr><td><code>in_person_pickup</code></td><td>pickup</td><td>—</td><td>—</td><td>no</td><td>shipment <code>picked_up</code> → order <code>completed</code></td></tr>
+  </table>
+  <div class="note"><strong>Postal tracking ends at <code>handed_to_post</code>.</strong> Once the parcel is handed to the postal service the app has no reliable carrier lifecycle, so it never claims <code>in_transit</code> / <code>out_for_delivery</code> / <code>delivered</code> for postal shipments. Show the customer the tracking number and tell them to track via the postal service.</div>
+
+  <h3 id="shipment-methods">List Methods</h3>
+  <div class="endpoint">
+    <div class="endpoint-header"><span class="method get">GET</span><span class="endpoint-path">/shipment/methods?address_id=3</span><span class="badge auth">Requires auth:sanctum</span><span class="badge rate">throttle:api</span></div>
+    <div class="endpoint-body">
+      <p>Returns the fixed methods with capabilities calculated for the (optional) address. Local delivery is marked <code>available: false</code> with a reason when the address is missing or ineligible. Pickup includes the configured <code>pickup_location</code>.</p>
+      <pre>{
+  <span class="key">"data"</span>: [
+    {
+      <span class="key">"code"</span>: <span class="str">"post_standard"</span>, <span class="key">"title"</span>: <span class="str">"Standard Post"</span>, <span class="key">"type"</span>: <span class="str">"postal"</span>,
+      <span class="key">"price"</span>: <span class="num">850000</span>, <span class="key">"requires_address"</span>: <span class="num">true</span>, <span class="key">"requires_delivery_slot"</span>: <span class="num">false</span>,
+      <span class="key">"supports_tracking"</span>: <span class="num">true</span>, <span class="key">"estimated_min_days"</span>: <span class="num">3</span>, <span class="key">"estimated_max_days"</span>: <span class="num">7</span>,
+      <span class="key">"available"</span>: <span class="num">true</span>, <span class="key">"unavailable_reason"</span>: <span class="null-val">null</span>
+    }
+  ]
+}</pre>
+    </div>
+  </div>
+
+  <h3 id="shipment-slots">List Local-Delivery Sessions</h3>
+  <div class="endpoint">
+    <div class="endpoint-header"><span class="method get">GET</span><span class="endpoint-path">/shipment/delivery-slots?address_id=3&amp;from=2026-07-15&amp;days=7</span><span class="badge auth">Requires auth:sanctum</span><span class="badge rate">throttle:api</span></div>
+    <div class="endpoint-body">
+      <p>Dated sessions grouped by date. Full/closed/past slots are returned with <code>available: false</code> so the frontend can render a disabled "Full" state. The frontend submits only <code>delivery_slot_id</code> at checkout — never a date/time.</p>
+      <pre>{
+  <span class="key">"data"</span>: [
+    { <span class="key">"date"</span>: <span class="str">"2026-07-15"</span>, <span class="key">"slots"</span>: [
+      { <span class="key">"id"</span>: <span class="num">103</span>, <span class="key">"starts_at"</span>: <span class="str">"15:00"</span>, <span class="key">"ends_at"</span>: <span class="str">"16:30"</span>, <span class="key">"remaining_capacity"</span>: <span class="num">1</span>, <span class="key">"available"</span>: <span class="num">true</span> },
+      { <span class="key">"id"</span>: <span class="num">104</span>, <span class="key">"starts_at"</span>: <span class="str">"16:30"</span>, <span class="key">"ends_at"</span>: <span class="str">"18:00"</span>, <span class="key">"remaining_capacity"</span>: <span class="num">0</span>, <span class="key">"available"</span>: <span class="num">false</span> }
+    ] }
+  ]
+}</pre>
+      <div class="block-label">Checkout examples per method</div>
+      <pre><span class="comment">// Standard / express post</span>
+{ <span class="key">"shipment_method_code"</span>: <span class="str">"post_standard"</span>, <span class="key">"address_id"</span>: <span class="num">3</span> }
+<span class="comment">// Local delivery (slot required)</span>
+{ <span class="key">"shipment_method_code"</span>: <span class="str">"local_delivery"</span>, <span class="key">"address_id"</span>: <span class="num">3</span>, <span class="key">"delivery_slot_id"</span>: <span class="num">103</span> }
+<span class="comment">// In-person pickup (no address, no slot)</span>
+{ <span class="key">"shipment_method_code"</span>: <span class="str">"in_person_pickup"</span> }</pre>
+      <div class="note">Selecting a slot re-checks capacity under a row lock at order creation; a stale "available" slot that filled up returns <code>422</code> with <code>errors.delivery_slot_id</code>.</div>
+    </div>
+  </div>
+
+  <h3 id="shipment-read">Read a Shipment</h3>
+  <div class="endpoint">
+    <div class="endpoint-header"><span class="method get">GET</span><span class="endpoint-path">/shipments/{publicCode}</span><span class="badge auth">Requires auth:sanctum</span><span class="badge rate">throttle:api</span></div>
+    <div class="endpoint-body">
+      <p>Also available as <code>GET /orders/{order}/shipment</code>. The owner (permission <code>shipment.view-own</code>) or an operator (<code>shipment.view-admin</code>) may view it; anyone else gets 403. A shipment exists only after the order is <strong>paid</strong>.</p>
+      <pre>{
+  <span class="key">"id"</span>: <span class="str">"SH-X0T3K9ABCD"</span>, <span class="key">"order_id"</span>: <span class="num">42</span>,
+  <span class="key">"method_code"</span>: <span class="str">"post_standard"</span>, <span class="key">"method_type"</span>: <span class="str">"postal"</span>, <span class="key">"shipping_cost"</span>: <span class="num">850000</span>,
+  <span class="key">"status"</span>: <span class="str">"handed_to_post"</span>, <span class="key">"status_label"</span>: <span class="str">"Handed to postal service"</span>,
+  <span class="key">"tracking_number"</span>: <span class="str">"TRK-999"</span>, <span class="key">"delivery_slot"</span>: <span class="null-val">null</span>, <span class="key">"pickup_location"</span>: <span class="null-val">null</span>,
+  <span class="key">"history"</span>: [ { <span class="key">"from_status"</span>: <span class="str">"ready_for_post"</span>, <span class="key">"to_status"</span>: <span class="str">"handed_to_post"</span>, <span class="key">"metadata"</span>: { <span class="key">"tracking_number"</span>: <span class="str">"TRK-999"</span> } } ]
+}</pre>
+    </div>
+  </div>
+
+  <h3 id="shipment-admin">Admin / Operator Workflow</h3>
+  <p>Explicit business-action endpoints (permission-gated, 403 before validation). There is no generic "set status" endpoint — each action validates the method-specific transition. Base path <code>/admin/shipments/{publicCode}</code>.</p>
+  <table>
+    <tr><th>Action (POST)</th><th>Permission</th><th>Transition</th><th>Body</th></tr>
+    <tr><td><code>/start-preparing</code></td><td>shipment.start-preparing</td><td>pending → preparing (order → processing)</td><td><code>note?</code></td></tr>
+    <tr><td><code>/mark-ready-for-post</code></td><td>shipment.post.mark-ready</td><td>preparing → ready_for_post</td><td><code>note?</code></td></tr>
+    <tr><td><code>/hand-to-post</code></td><td>shipment.post.hand-over</td><td>ready_for_post → handed_to_post (order → shipped)</td><td><code>tracking_number</code>*, <code>carrier_name?</code>, <code>note?</code>, <code>postal_receipt_media_id?</code></td></tr>
+    <tr><td><code>/mark-ready-for-dispatch</code></td><td>shipment.delivery.mark-ready</td><td>preparing → ready_for_dispatch</td><td><code>note?</code></td></tr>
+    <tr><td><code>/mark-out-for-delivery</code></td><td>shipment.delivery.dispatch</td><td>ready_for_dispatch → out_for_delivery (order → shipped)</td><td><code>note?</code></td></tr>
+    <tr><td><code>/mark-delivered</code></td><td>shipment.delivery.complete</td><td>out_for_delivery → delivered (order → completed)</td><td><code>receiver_name?</code>, <code>note?</code>, <code>proof_media_id?</code></td></tr>
+    <tr><td><code>/mark-delivery-failed</code></td><td>shipment.delivery.fail</td><td>out_for_delivery → delivery_failed</td><td><code>failure_reason</code>*, <code>note?</code></td></tr>
+    <tr><td><code>/reschedule</code></td><td>shipment.delivery.reschedule</td><td>delivery_failed → ready_for_dispatch (new slot)</td><td><code>delivery_slot_id</code>*, <code>note?</code></td></tr>
+    <tr><td><code>/mark-ready-for-pickup</code></td><td>shipment.pickup.mark-ready</td><td>preparing → ready_for_pickup</td><td><code>note?</code></td></tr>
+    <tr><td><code>/confirm-pickup</code></td><td>shipment.pickup.complete</td><td>ready_for_pickup → picked_up (order → completed)</td><td><code>receiver_name?</code>, <code>note?</code></td></tr>
+  </table>
+  <p>Listing &amp; slot management: <code>GET /admin/shipments</code> (filters: status, method_code, method_type, order_id, tracking_number, delivery_date, delivery_slot_id, date_from/to; paginated <code>data</code>/<code>links</code>/<code>meta</code>, 15/page, per_page clamped to 100), <code>GET /admin/shipments/{publicCode}</code>, and delivery-slot admin: <code>GET</code> / <code>PATCH /admin/shipment/delivery-slots[/{slot}]</code> (change capacity / reserve part of it — never below active reservations), <code>POST .../close</code>, <code>POST .../open</code>.</p>
+
+  <!-- ============================ SHIPMENT — FRONTEND GUIDE ============================ -->
+  <h2 id="shipment-frontend-guide">Shipment — Frontend Implementation Guide</h2>
+  <p>This walks the storefront checkout UI through choosing a fulfillment method and (for local delivery) a delivery session, placing the order, and rendering the shipment status afterwards. All examples use <code>fetch</code> with a Bearer token; adapt to your HTTP client. <strong>Never send prices, dates, or slot times</strong> — the server resolves them from config and the snapshot; the UI submits only ids and the method <em>code</em>.</p>
+
+  <h3>Step 1 — Let the user pick an address, then load methods</h3>
+  <p>Call <code>GET /shipment/methods</code> with the selected <code>address_id</code> (omit it if none is chosen yet). Each method returns capability flags so you can drive the UI without hard-coding anything. Local delivery comes back <code>available: false</code> + <code>unavailable_reason</code> when the address is missing or ineligible — render it disabled with the reason.</p>
+  <pre>async function loadMethods(token, addressId) {
+  const q = addressId ? `?address_id=${addressId}` : '';
+  const { data } = await (await fetch(`/api/v1/shipment/methods${q}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })).json();
+
+  return data; // [{ code, title, type, price, requires_address, requires_delivery_slot, available, unavailable_reason, pickup_location? }]
+}
+
+// Render: title + formatted price; disable when !available and show unavailable_reason.
+// Use the flags to decide which extra inputs to show (see Step 2).</pre>
+  <div class="note">Drive the form entirely from the flags: show the address picker when <code>requires_address</code>, show the slot picker when <code>requires_delivery_slot</code>, and show <code>pickup_location</code> for the pickup method. Do not branch on the code string beyond that.</div>
+
+  <h3>Step 2 — If the chosen method needs a delivery slot, load sessions</h3>
+  <p>Only <code>local_delivery</code> has <code>requires_delivery_slot: true</code>. Fetch bookable sessions for the address and render them grouped by date. Slots with <code>available: false</code> (full, closed, past, or outside the booking window) must be shown <strong>disabled</strong>, not hidden — use <code>remaining_capacity</code> to label a "Full" state.</p>
+  <pre>async function loadSlots(token, addressId, fromISODate, days = 7) {
+  const q = `?address_id=${addressId}&from=${fromISODate}&days=${days}`;
+  const { data } = await (await fetch(`/api/v1/shipment/delivery-slots${q}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })).json();
+
+  return data; // [{ date: '2026-07-15', slots: [{ id, starts_at, ends_at, remaining_capacity, available }] }]
+}
+
+// Render each date group; for each slot:
+//   label = `${slot.starts_at}–${slot.ends_at}` + (slot.available ? '' : ' (Full)')
+//   the radio/button is disabled when !slot.available
+// The user selects exactly one slot; keep only its `id`.</pre>
+
+  <h3>Step 3 — Build the checkout payload per method</h3>
+  <p>The order endpoint is the same for every method; only the fields differ. Send the method <code>code</code>, plus the ids the flags told you to collect.</p>
+  <pre>function buildCheckoutBody(method, { addressId, deliverySlotId, notes }) {
+  const body = { shipment_method_code: method.code };
+  if (method.requires_address)       body.address_id = addressId;
+  if (method.requires_delivery_slot) body.delivery_slot_id = deliverySlotId;
+  if (notes)                         body.notes = notes;
+  return body;
+}
+
+// post_standard / post_express → { shipment_method_code, address_id }
+// local_delivery             → { shipment_method_code, address_id, delivery_slot_id }
+// in_person_pickup           → { shipment_method_code }</pre>
+
+  <h3>Step 4 — Place the order and handle the "slot just filled" race</h3>
+  <p>The availability list is a snapshot; between loading it and checking out, the last place in a slot can be taken. The server re-checks under a lock and returns <strong>422</strong> with <code>errors.delivery_slot_id</code>. Handle it by reloading slots and asking the user to pick again — don't treat it as a fatal error.</p>
+  <pre>async function placeOrder(token, body) {
+  const res = await fetch('/api/v1/orders', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  });
+
+  if (res.status === 422) {
+    const { errors } = await res.json();
+    if (errors?.delivery_slot_id) {
+      // Slot no longer available (or invalid) — refresh the slot picker.
+      throw { type: 'slot_unavailable', errors };
+    }
+    throw { type: 'validation', errors }; // e.g. address_id ineligible, empty cart
+  }
+
+  return res.json(); // 201 → the order, including shipment_method_code + shipment_snapshot
+}</pre>
+  <div class="warn"><strong>Don't cache the slot list across the payment step.</strong> If the user backs out and returns, reload <code>/shipment/delivery-slots</code> — capacity and availability change constantly.</div>
+
+  <h3>Step 5 — After payment, read and render the shipment</h3>
+  <p>A shipment record exists only <strong>after the order is paid</strong> (see <a href="#payment-overview">Payments</a>). Then read it by the order id or the shipment's public code and render a status timeline from <code>status</code> + <code>history</code>.</p>
+  <pre>async function loadShipment(token, orderId) {
+  const res = await fetch(`/api/v1/orders/${orderId}/shipment`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (res.status === 404) return null; // not paid yet → show "awaiting payment"
+  return res.json(); // { id: 'SH-...', status, status_label, tracking_number, delivery_slot, pickup_location, history }
+}</pre>
+  <p>Use <code>status_label</code> for a ready-made customer string, or map <code>status</code> yourself. Suggested per-method timelines to render:</p>
+  <table>
+    <tr><th>Method</th><th>Timeline to show</th></tr>
+    <tr><td>Postal (standard/express)</td><td>Payment confirmed → Preparing → Ready for post → <strong>Handed to postal service</strong></td></tr>
+    <tr><td>Local delivery</td><td>Payment confirmed → Preparing → Scheduled for [slot date/time] → Out for delivery → Delivered</td></tr>
+    <tr><td>Pickup</td><td>Payment confirmed → Preparing → Ready for pickup → Picked up</td></tr>
+  </table>
+  <div class="note"><strong>Postal tracking ends at <code>handed_to_post</code>.</strong> When a postal shipment reaches that status, show the <code>tracking_number</code> and tell the customer to follow the parcel via the postal service — the app deliberately does not report carrier <code>in_transit</code>/<code>out_for_delivery</code>/<code>delivered</code> states. For pickup, show <code>pickup_location</code> (title/address/phone) once the status is <code>ready_for_pickup</code>.</div>
+
+  <h3>Method → UI inputs cheat-sheet</h3>
+  <table>
+    <tr><th>Method code</th><th>Address picker</th><th>Slot picker</th><th>Shipping cost</th><th>Extra UI</th></tr>
+    <tr><td><code>post_standard</code> / <code>post_express</code></td><td>required</td><td>hidden</td><td>from method <code>price</code></td><td>tracking number after handoff</td></tr>
+    <tr><td><code>local_delivery</code></td><td>required (must be eligible)</td><td>required</td><td>from method <code>price</code></td><td>chosen slot date/time on order</td></tr>
+    <tr><td><code>in_person_pickup</code></td><td>hidden</td><td>hidden</td><td>free (0)</td><td>show <code>pickup_location</code></td></tr>
+  </table>
 
 </main>
 

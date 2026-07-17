@@ -1,0 +1,901 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How Checkout Works — Order, Payment &amp; Shipment</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:wght@500;600;700&display=swap" rel="stylesheet">
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+
+<style>
+  :root {
+    color-scheme: light dark;
+
+    /* warm ink-on-paper neutrals — chosen, not default grey */
+    --paper: #f7f5f0;
+    --surface: #fffefb;
+    --surface-2: #f0ede5;
+    --ink: #1c1e22;
+    --ink-soft: #3a3d44;
+    --muted: #6d6f77;
+    --hair: #e3ded3;
+    --hair-strong: #d6d0c2;
+    --accent: #2f5d86;        /* restrained dispatch-blue: links, structure */
+    --accent-ink: #234868;
+    --canvas: #ffffff;        /* diagram backdrop, light in both themes */
+
+    /* color reserved for MEANING (status) */
+    --s-pending: #8a5a10;  --s-pending-bg: #f6ead2;
+    --s-paid: #1a7a45;     --s-paid-bg: #dcefdf;
+    --s-processing: #2f5d86; --s-processing-bg: #dfe9f3;
+    --s-shipped: #5146c0;  --s-shipped-bg: #e6e3f8;
+    --s-completed: #0b7d70; --s-completed-bg: #d3eeea;
+    --s-bad: #b52d3a;      --s-bad-bg: #f7dfe1;
+    --s-neutral: #6d6f77;  --s-neutral-bg: #e8e4da;
+
+    --sans: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --serif: "IBM Plex Serif", Georgia, "Times New Roman", serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+
+    --maxw: 1200px;
+    --read: 70ch;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #131519;
+      --surface: #1a1d22;
+      --surface-2: #21252c;
+      --ink: #eae7e0;
+      --ink-soft: #cbc9c3;
+      --muted: #9a9da5;
+      --hair: #2a2e35;
+      --hair-strong: #363b44;
+      --accent: #7ba6d6;
+      --accent-ink: #a7c6e8;
+      --canvas: #f2f1ee;
+
+      --s-pending: #e0a94a;  --s-pending-bg: #34291432;
+      --s-paid: #4fc07f;     --s-paid-bg: #12301e6b;
+      --s-processing: #74a2d8; --s-processing-bg: #16283a6b;
+      --s-shipped: #9a90f2;  --s-shipped-bg: #201d3d6b;
+      --s-completed: #33b8a6; --s-completed-bg: #0e2f2b6b;
+      --s-bad: #ef6b78;      --s-bad-bg: #331a1e6b;
+      --s-neutral: #9a9da5;  --s-neutral-bg: #23272f;
+    }
+  }
+
+  :root[data-theme="light"] {
+    --paper:#f7f5f0; --surface:#fffefb; --surface-2:#f0ede5; --ink:#1c1e22; --ink-soft:#3a3d44;
+    --muted:#6d6f77; --hair:#e3ded3; --hair-strong:#d6d0c2; --accent:#2f5d86; --accent-ink:#234868; --canvas:#ffffff;
+    --s-pending:#8a5a10; --s-pending-bg:#f6ead2; --s-paid:#1a7a45; --s-paid-bg:#dcefdf;
+    --s-processing:#2f5d86; --s-processing-bg:#dfe9f3; --s-shipped:#5146c0; --s-shipped-bg:#e6e3f8;
+    --s-completed:#0b7d70; --s-completed-bg:#d3eeea; --s-bad:#b52d3a; --s-bad-bg:#f7dfe1;
+    --s-neutral:#6d6f77; --s-neutral-bg:#e8e4da;
+  }
+  :root[data-theme="dark"] {
+    --paper:#131519; --surface:#1a1d22; --surface-2:#21252c; --ink:#eae7e0; --ink-soft:#cbc9c3;
+    --muted:#9a9da5; --hair:#2a2e35; --hair-strong:#363b44; --accent:#7ba6d6; --accent-ink:#a7c6e8; --canvas:#f2f1ee;
+    --s-pending:#e0a94a; --s-pending-bg:#34291432; --s-paid:#4fc07f; --s-paid-bg:#12301e6b;
+    --s-processing:#74a2d8; --s-processing-bg:#16283a6b; --s-shipped:#9a90f2; --s-shipped-bg:#201d3d6b;
+    --s-completed:#33b8a6; --s-completed-bg:#0e2f2b6b; --s-bad:#ef6b78; --s-bad-bg:#331a1e6b;
+    --s-neutral:#9a9da5; --s-neutral-bg:#23272f;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16.5px;
+    line-height: 1.72;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection { background: var(--accent); color: #fff; }
+
+  /* subtle top hairline accent across the whole doc */
+  body::before {
+    content: "";
+    position: fixed; top: 0; left: 0; right: 0; height: 3px;
+    background: var(--accent);
+    z-index: 50;
+    opacity: 0.9;
+  }
+
+  /* ---------- theme toggle ---------- */
+  .theme-toggle {
+    position: fixed; top: 16px; right: 16px; z-index: 60;
+    width: 40px; height: 40px; border-radius: 50%;
+    border: 1px solid var(--hair-strong);
+    background: var(--surface); color: var(--ink);
+    cursor: pointer; font-size: 17px; line-height: 1;
+    display: grid; place-items: center;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+    transition: transform .15s ease, background .2s ease;
+  }
+  .theme-toggle:hover { transform: rotate(-12deg) scale(1.06); }
+
+  /* ---------- masthead / spec sheet ---------- */
+  header.masthead {
+    max-width: var(--maxw);
+    margin: 0 auto;
+    padding: 72px 32px 0;
+  }
+  .kicker {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 20px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .kicker::after { content: ""; flex: 1; height: 1px; background: var(--hair-strong); }
+
+  header.masthead h1 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: clamp(38px, 6vw, 68px);
+    line-height: 1.02;
+    letter-spacing: -0.025em;
+    margin: 0 0 22px;
+    max-width: 15ch;
+    text-wrap: balance;
+  }
+  .lede {
+    font-size: clamp(18px, 2.1vw, 22px);
+    line-height: 1.5;
+    color: var(--ink-soft);
+    max-width: 60ch;
+    margin: 0 0 40px;
+  }
+
+  .specsheet {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    border-top: 1px solid var(--hair-strong);
+    border-bottom: 1px solid var(--hair-strong);
+  }
+  .specsheet div {
+    padding: 16px 20px 18px;
+    border-left: 1px solid var(--hair);
+  }
+  .specsheet div:first-child { border-left: none; padding-left: 0; }
+  .specsheet dt {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .specsheet dd {
+    margin: 0;
+    font-size: 14.5px;
+    font-weight: 500;
+    color: var(--ink);
+  }
+
+  .thesis {
+    max-width: var(--maxw);
+    margin: 40px auto 0;
+    padding: 0 32px;
+  }
+  .thesis-inner {
+    font-family: var(--serif);
+    font-size: clamp(19px, 2.3vw, 25px);
+    line-height: 1.5;
+    font-weight: 500;
+    color: var(--ink-soft);
+    max-width: 30ch;
+    border-left: 3px solid var(--accent);
+    padding-left: 26px;
+  }
+  .thesis-inner { max-width: 46ch; }
+  .thesis-inner b { color: var(--ink); font-weight: 600; }
+
+  /* ---------- layout ---------- */
+  .wrap {
+    max-width: var(--maxw);
+    margin: 56px auto 0;
+    padding: 0 32px;
+    display: grid;
+    grid-template-columns: 232px minmax(0, 1fr);
+    gap: 56px;
+  }
+
+  nav.toc { align-self: start; position: sticky; top: 28px; font-size: 13.5px; }
+  nav.toc .toc-label {
+    font-family: var(--mono);
+    font-size: 10.5px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--muted); margin: 0 0 12px; padding-left: 15px;
+  }
+  nav.toc a {
+    display: block; color: var(--muted); text-decoration: none;
+    padding: 5px 15px; border-left: 2px solid var(--hair);
+    line-height: 1.35; transition: color .15s, border-color .15s;
+  }
+  nav.toc a.sub { padding-left: 28px; font-size: 12.5px; }
+  nav.toc a:hover { color: var(--ink); }
+  nav.toc a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; }
+
+  main { min-width: 0; padding-bottom: 90px; }
+
+  section { scroll-margin-top: 24px; padding-top: 34px; }
+  section + section { border-top: 1px solid var(--hair); margin-top: 34px; }
+
+  h2 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: clamp(25px, 3vw, 32px);
+    letter-spacing: -0.02em;
+    line-height: 1.12;
+    margin: 4px 0 10px;
+    text-wrap: balance;
+    display: flex; align-items: baseline; gap: 16px;
+  }
+  h2 .num {
+    font-family: var(--mono);
+    font-size: 14px; font-weight: 600;
+    color: var(--accent);
+    letter-spacing: 0;
+    flex: none;
+  }
+  h3 {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 18.5px;
+    margin: 36px 0 8px;
+    letter-spacing: -0.01em;
+  }
+  p, li { max-width: var(--read); }
+  a { color: var(--accent); text-underline-offset: 2px; }
+
+  code {
+    font-family: var(--mono);
+    font-size: 0.85em;
+    background: var(--surface-2);
+    padding: 1.5px 6px;
+    border-radius: 5px;
+    border: 1px solid var(--hair);
+    white-space: nowrap;
+  }
+  em { font-style: italic; color: var(--ink); }
+
+  /* ---------- status chips ---------- */
+  .chip {
+    font-family: var(--mono);
+    font-size: 11.5px; font-weight: 600;
+    padding: 2px 9px; border-radius: 5px;
+    white-space: nowrap; display: inline-block; line-height: 1.55;
+    letter-spacing: 0.01em;
+  }
+  .chip.pending, .chip.held { color: var(--s-pending); background: var(--s-pending-bg); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--s-pending) 22%, transparent); }
+  .chip.paid, .chip.confirmed { color: var(--s-paid); background: var(--s-paid-bg); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--s-paid) 22%, transparent); }
+  .chip.processing { color: var(--s-processing); background: var(--s-processing-bg); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--s-processing) 22%, transparent); }
+  .chip.shipped { color: var(--s-shipped); background: var(--s-shipped-bg); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--s-shipped) 22%, transparent); }
+  .chip.completed { color: var(--s-completed); background: var(--s-completed-bg); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--s-completed) 22%, transparent); }
+  .chip.bad { color: var(--s-bad); background: var(--s-bad-bg); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--s-bad) 22%, transparent); }
+  .chip.neutral { color: var(--s-neutral); background: var(--s-neutral-bg); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--s-neutral) 22%, transparent); }
+
+  /* ---------- callouts ---------- */
+  .callout {
+    border-radius: 4px;
+    padding: 18px 20px;
+    margin: 24px 0;
+    background: var(--surface);
+    border: 1px solid var(--hair);
+    border-left: 3px solid var(--accent);
+    max-width: var(--read);
+  }
+  .callout .tag {
+    font-family: var(--mono);
+    font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase;
+    font-weight: 600; display: block; margin-bottom: 7px; color: var(--accent);
+  }
+  .callout p { margin: 0; }
+  .callout.warn { border-left-color: var(--s-bad); }
+  .callout.warn .tag { color: var(--s-bad); }
+  .callout.key { border-left-color: var(--s-paid); }
+  .callout.key .tag { color: var(--s-paid); }
+
+  /* ---------- cards ---------- */
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(232px, 1fr)); gap: 16px; margin: 26px 0; }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--hair);
+    border-radius: 6px;
+    padding: 18px 20px;
+    transition: border-color .18s ease, transform .18s ease;
+  }
+  .card:hover { border-color: var(--hair-strong); transform: translateY(-2px); }
+  .card h4 { margin: 0 0 5px; font-size: 15.5px; font-weight: 600; }
+  .card .role {
+    font-family: var(--mono);
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.1em;
+    color: var(--accent); display: block; margin-bottom: 10px;
+  }
+  .card p { margin: 0; font-size: 14px; color: var(--muted); line-height: 1.55; }
+
+  .lane { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 16px; margin: 26px 0; }
+
+  /* ---------- tables ---------- */
+  .table-scroll { overflow-x: auto; margin: 24px 0; border: 1px solid var(--hair); border-radius: 6px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; padding: 11px 16px; border-bottom: 1px solid var(--hair); vertical-align: top; }
+  th {
+    font-family: var(--mono);
+    font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--muted); background: var(--surface-2); white-space: nowrap; font-weight: 600;
+  }
+  tbody tr { transition: background .12s ease; }
+  tbody tr:hover { background: var(--surface-2); }
+  tr:last-child td { border-bottom: none; }
+  td code { white-space: nowrap; }
+
+  /* ---------- ordered steps ---------- */
+  ol.steps { counter-reset: step; list-style: none; padding: 0; margin: 26px 0; max-width: var(--read); }
+  ol.steps > li {
+    counter-increment: step; position: relative;
+    padding: 3px 0 18px 48px;
+    border-left: 2px solid var(--hair); margin-left: 16px;
+  }
+  ol.steps > li::before {
+    content: counter(step, decimal-leading-zero);
+    position: absolute; left: -17px; top: -2px;
+    width: 32px; height: 32px;
+    background: var(--surface);
+    border: 2px solid var(--accent); color: var(--accent);
+    border-radius: 50%; display: grid; place-items: center;
+    font-family: var(--mono); font-size: 11px; font-weight: 600;
+  }
+  ol.steps > li:last-child { border-left-color: transparent; }
+  ol.steps > li b { font-weight: 600; }
+
+  /* ---------- diagram canvas ---------- */
+  figure.diagram {
+    margin: 26px 0;
+    background: var(--canvas);
+    border: 1px solid var(--hair-strong);
+    border-radius: 8px;
+    padding: 22px 18px;
+    overflow-x: auto;
+  }
+  figure.diagram .mermaid { display: flex; justify-content: center; min-width: 460px; }
+  figure.diagram figcaption {
+    font-family: var(--mono); font-size: 11.5px; color: #6d6f77;
+    margin-top: 14px; text-align: center; letter-spacing: 0.02em;
+  }
+  .card figure.diagram { padding: 12px 8px; }
+
+  h4.wf-label {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 30px 0 0;
+  }
+  h4.wf-label + figure.diagram { margin-top: 10px; }
+
+  footer.end {
+    max-width: var(--maxw);
+    margin: 0 auto;
+    padding: 34px 32px 80px;
+    color: var(--muted);
+    font-size: 13.5px;
+    border-top: 1px solid var(--hair);
+  }
+  footer.end code { font-size: 12px; }
+
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 3px; }
+
+  @media (max-width: 900px) {
+    .wrap { grid-template-columns: 1fr; gap: 10px; margin-top: 36px; }
+    nav.toc { position: static; margin-bottom: 14px; border: 1px solid var(--hair); border-radius: 8px; padding: 16px; background: var(--surface); }
+    nav.toc a { border-left: none; padding: 3px 0; }
+    nav.toc a.active { border-left: none; }
+    nav.toc a.sub { padding-left: 16px; }
+    .specsheet { grid-template-columns: repeat(2, 1fr); }
+    .specsheet div:nth-child(3) { border-left: none; padding-left: 0; }
+    header.masthead { padding-top: 52px; }
+  }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } * { transition: none !important; } }
+</style>
+</head>
+<body>
+
+<button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle light or dark theme">◑</button>
+
+<header class="masthead">
+  <p class="kicker">Backend internals · guided walkthrough</p>
+  <h1>How an order becomes a delivery</h1>
+  <p class="lede">Everything the Order, Payment, and Shipment modules do — from the moment a cart is checked out to the moment a parcel is handed over or picked up. Written to be read start to finish.</p>
+  <dl class="specsheet">
+    <div><dt>Scope</dt><dd>Order · Payment · Shipment</dd></div>
+    <div><dt>Architecture</dt><dd>Laravel 12 · modular monolith</dd></div>
+    <div><dt>Boundary</dt><dd>Contracts &amp; DTOs only</dd></div>
+    <div><dt>Read time</dt><dd>~12 minutes</dd></div>
+  </dl>
+</header>
+
+<div class="thesis">
+  <p class="thesis-inner"><b>Order</b> owns the money and the record. <b>Payment</b> settles it. <b>Shipment</b> fulfills it. The three only ever speak through published contracts — never by touching each other's tables.</p>
+</div>
+
+<div class="wrap">
+  <nav class="toc" aria-label="Table of contents">
+    <p class="toc-label">On this page</p>
+    <a href="#ground">Ground rules</a>
+    <a href="#vocab">The status vocabulary</a>
+    <a href="#happy">The happy path</a>
+    <a href="#order">Order module</a>
+    <a href="#order-checkout" class="sub">Checkout flow</a>
+    <a href="#order-paid" class="sub">The paid path</a>
+    <a href="#order-expiry" class="sub">Cancel &amp; expiry</a>
+    <a href="#payment">Payment module</a>
+    <a href="#shipment">Shipment module</a>
+    <a href="#ship-methods" class="sub">Config-backed methods</a>
+    <a href="#ship-slots" class="sub">Slots &amp; capacity</a>
+    <a href="#ship-activate" class="sub">Activation on paid</a>
+    <a href="#ship-workflows" class="sub">Fulfillment workflows</a>
+    <a href="#guarantees">Concurrency &amp; idempotency</a>
+    <a href="#files">Where the code lives</a>
+  </nav>
+
+  <main>
+    <!-- ============ GROUND RULES ============ -->
+    <section id="ground">
+      <h2><span class="num">01</span>Ground rules that explain the shape of everything</h2>
+      <p>Before the flows, five rules the code obeys everywhere. Once you know these, most of the "why is it written like that?" questions answer themselves.</p>
+
+      <div class="cards">
+        <div class="card">
+          <span class="role">Money</span>
+          <h4>The Cents Rule</h4>
+          <p>Every monetary value — item prices, shipping cost, totals — is a raw <b>integer in rials</b>. No floats, ever. A shipping price of 850,000 is the integer <code>850000</code>.</p>
+        </div>
+        <div class="card">
+          <span class="role">Isolation</span>
+          <h4>Contracts, not models</h4>
+          <p>A module never imports another module's Eloquent model or joins its tables. They talk through interfaces (<code>…ManagerInterface</code>) resolved from the container, passing immutable <b>DTOs</b>.</p>
+        </div>
+        <div class="card">
+          <span class="role">Safety</span>
+          <h4>Locks + idempotency</h4>
+          <p>Anything that mutates shared state runs in a DB transaction with a row lock (<code>lockForUpdate()</code>), and every "make it happen" operation is safe to call twice.</p>
+        </div>
+        <div class="card">
+          <span class="role">History</span>
+          <h4>Snapshots are frozen</h4>
+          <p>Prices and the shipment selection are copied onto the order at checkout. Changing a product price or a config value later never rewrites an existing order.</p>
+        </div>
+        <div class="card">
+          <span class="role">Auth</span>
+          <h4>Permission-based</h4>
+          <p>Actions check a permission (<code>order.create</code>, <code>shipment.post.hand-over</code>), not a role. Guests get 401; authenticated-but-unauthorized get 403 before validation.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ VOCABULARY ============ -->
+    <section id="vocab">
+      <h2><span class="num">02</span>The status vocabulary</h2>
+      <p>Four separate state machines run in parallel. They are related but distinct — the same word can mean different things in different modules. Here is the full cast, colour-coded; the rest of the page reuses these colours.</p>
+
+      <div class="lane">
+        <div class="card">
+          <h4>Order status</h4>
+          <p style="margin-bottom:12px">The commercial summary a customer sees.</p>
+          <span class="chip pending">pending</span> <span class="chip paid">paid</span> <span class="chip processing">processing</span> <span class="chip shipped">shipped</span> <span class="chip completed">completed</span> <span class="chip bad">cancelled</span> <span class="chip bad">failed</span>
+        </div>
+        <div class="card">
+          <h4>Payment status</h4>
+          <p style="margin-bottom:12px">Where a single payment attempt stands.</p>
+          <span class="chip pending">initiated</span> <span class="chip pending">pending_cash</span> <span class="chip paid">captured</span> <span class="chip bad">failed</span> <span class="chip neutral">refunded</span>
+        </div>
+        <div class="card">
+          <h4>Shipment status</h4>
+          <p style="margin-bottom:12px">Operational fulfillment detail (per method).</p>
+          <span class="chip pending">pending</span> <span class="chip processing">preparing</span> <span class="chip processing">ready_for_post</span> <span class="chip shipped">handed_to_post</span> <span class="chip processing">ready_for_dispatch</span> <span class="chip shipped">out_for_delivery</span> <span class="chip completed">delivered</span> <span class="chip bad">delivery_failed</span> <span class="chip processing">ready_for_pickup</span> <span class="chip completed">picked_up</span> <span class="chip bad">cancelled</span>
+        </div>
+        <div class="card">
+          <h4>Slot reservation status</h4>
+          <p style="margin-bottom:12px">A seat in a local-delivery session.</p>
+          <span class="chip held">held</span> <span class="chip confirmed">confirmed</span> <span class="chip neutral">released</span> <span class="chip neutral">expired</span> <span class="chip neutral">cancelled</span> <span class="chip completed">completed</span>
+        </div>
+      </div>
+
+      <div class="callout">
+        <span class="tag">The one mapping to remember</span>
+        <p>The shipment status <em>drives</em> the order status after payment. Every fulfillment step calls back into Order to update its summary — <span class="chip processing">preparing</span> → order <span class="chip processing">processing</span>, <span class="chip shipped">handed_to_post</span> → order <span class="chip shipped">shipped</span>, <span class="chip completed">delivered</span>/<span class="chip completed">picked_up</span> → order <span class="chip completed">completed</span>.</p>
+      </div>
+    </section>
+
+    <!-- ============ HAPPY PATH ============ -->
+    <section id="happy">
+      <h2><span class="num">03</span>The happy path, end to end</h2>
+      <p>Here is the entire lifecycle in one picture: a customer with a full cart checking out, paying, and the order being fulfilled. Every arrow is a real call across a contract. Read it top to bottom, then we'll unpack each module.</p>
+
+      <figure class="diagram">
+        <pre class="mermaid">
+sequenceDiagram
+    autonumber
+    actor Cust as Customer
+    participant Ord as Order
+    participant Shp as Shipment
+    participant Inv as Inventory
+    participant Crt as Cart
+    participant Pay as Payment
+
+    Cust->>Ord: POST /orders {method_code, address?, slot?}
+    Ord->>Shp: validateSelection()
+    Shp-->>Ord: ShipmentSelectionDTO  (422 if invalid)
+    Note over Ord: open DB transaction
+    Ord->>Inv: reserveStock() per item
+    Ord->>Shp: holdForPendingOrder()  (local: lock + hold slot)
+    Ord->>Crt: clearCart()
+    Ord-->>Cust: 201  order = pending  (+ frozen snapshot)
+
+    Cust->>Pay: POST /payments/initialize
+    Pay->>Ord: markAsPaid()
+    Note over Ord: shared paid path (locked, idempotent)
+    Ord->>Inv: commitReservation() per item  (exactly once)
+    Ord->>Shp: activateForPaidOrder()  (create shipment, confirm slot)
+    Ord-->>Cust: order = paid · shipment = pending
+
+    Note over Shp: operator works the fulfillment queue
+    Shp->>Ord: syncStatusFromShipment()  on every step
+        </pre>
+        <figcaption>Fig. 1 — The full choreography. Order orchestrates; Payment and Shipment are called across contracts.</figcaption>
+      </figure>
+
+      <p>The single most important thing to notice: <b>the operational shipment does not exist until the order is paid.</b> At checkout, all that happens for shipping is a lightweight <em>slot hold</em> (and only for local delivery). Everything else waits for money.</p>
+    </section>
+
+    <!-- ============ ORDER ============ -->
+    <section id="order">
+      <h2><span class="num">04</span>Order — the money and the record</h2>
+      <p>The Order module turns a validated cart into an immutable financial contract. It stores two tables: <code>orders</code> (totals, status, the shipping-address snapshot, and now the shipment selection) and <code>order_items</code> (one snapshotted line per cart item — sku, title, quantity, and the price frozen at checkout).</p>
+
+      <p>Two columns were added for shipment:</p>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Column</th><th>Purpose</th></tr></thead>
+          <tbody>
+          <tr><td><code>shipment_method_code</code></td><td>The chosen method's stable code (e.g. <code>local_delivery</code>). This is the new source of truth.</td></tr>
+          <tr><td><code>shipment_snapshot</code> (JSON)</td><td>The whole selection frozen: method title/type, shipping cost, address, chosen slot, pickup location. Read an old order and you see exactly what was chosen then.</td></tr>
+          <tr><td><code>shipment_method_id</code></td><td>Legacy integer column, kept <em>nullable</em> for backward compatibility. No longer written.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 id="order-checkout">The checkout flow · <code>CreateOrderAction</code></h3>
+      <p>When <code>POST /api/v1/orders</code> arrives, the controller first asks Shipment to validate the selection (throwing a 422 with field errors on a bad address, ineligible region, or unbookable slot). It hands the resulting <code>ShipmentSelectionDTO</code> to the action, which does everything else inside a single transaction:</p>
+
+      <ol class="steps">
+        <li><b>Load the enriched cart</b> and reject an empty one (<span class="chip bad">422 EmptyCart</span>).</li>
+        <li><b>Compute totals</b> — item subtotal <code>+</code> the shipping cost the selection carries. All integers.</li>
+        <li><b>Release the previous pending order,</b> if any. A user has at most one pending order; a new checkout replaces the old one, freeing its stock reservations <em>and</em> its held slot.</li>
+        <li><b>Create the order</b> as <span class="chip pending">pending</span> with <code>shipment_method_code</code> and the frozen <code>shipment_snapshot</code>.</li>
+        <li><b>Snapshot each item</b> and <b>reserve its stock</b> through <code>InventoryManagerInterface</code>.</li>
+        <li><b>Hold the delivery slot</b> — a no-op for postal/pickup; for local delivery it locks the slot row and creates a <span class="chip held">held</span> reservation that expires when the order does.</li>
+        <li><b>Clear the cart.</b> Because this is the last step inside the transaction, if <em>anything</em> above fails the cart is left untouched.</li>
+      </ol>
+
+      <div class="callout key">
+        <span class="tag">Why the order matters</span>
+        <p>The cart is only cleared after stock is reserved and the slot is held. A failure anywhere rolls the whole transaction back — no half-checked-out state, no lost cart, no orphan reservation.</p>
+      </div>
+
+      <h3 id="order-paid">The shared "paid" path · <code>markAsPaid</code></h3>
+      <p>This is the hinge of the entire system. <em>Both</em> payment flows — in-person cash and online gateway — converge here. It is row-locked and idempotent:</p>
+
+      <ol class="steps">
+        <li><b>Lock the order</b> and check its status. If it is already <span class="chip paid">paid</span> (or further along), <b>return immediately</b> — no double work.</li>
+        <li><b>Flip to</b> <span class="chip paid">paid</span> and store the transaction reference.</li>
+        <li><b>Commit the inventory reservation</b> for every item — turning "reserved" into "sold". This happens <b>exactly once</b>, guarded by the status check above.</li>
+        <li><b>Activate the shipment</b> via <code>activateForPaidOrder()</code> — which creates the operational record and confirms the held slot.</li>
+      </ol>
+
+      <div class="callout warn">
+        <span class="tag">A gap this closed</span>
+        <p>Before shipment existed, paying an order never actually committed its inventory — reserved stock just sat reserved forever. Routing the commit through this one locked, idempotent path fixed that and guarantees it fires once.</p>
+      </div>
+
+      <h3 id="order-expiry">Cancel &amp; expiry</h3>
+      <p>All the "unwind a pending order" paths share one primitive, <code>CancelOrderAction::releaseAndCancel()</code>: it releases every stock reservation, releases any held slot (via the Shipment contract), and marks the order <span class="chip bad">cancelled</span>. Three callers use it:</p>
+      <div class="cards">
+        <div class="card"><span class="role">User</span><h4>Cancel my order</h4><p><code>POST /orders/{id}/cancel</code> — owner-only, pending-only. 403 for someone else's order.</p></div>
+        <div class="card"><span class="role">Scheduler</span><h4>TTL sweep</h4><p><code>orders:cancel-expired</code> runs every minute, cancelling pending orders older than 15 minutes.</p></div>
+        <div class="card"><span class="role">Checkout</span><h4>Replace previous</h4><p>Starting a new checkout releases the user's earlier pending order first.</p></div>
+      </div>
+
+      <figure class="diagram">
+        <pre class="mermaid">
+stateDiagram-v2
+    direction LR
+    [*] --> pending
+    pending --> paid: payment settles
+    pending --> cancelled: user / TTL / replaced
+    paid --> processing: operator starts preparing
+    processing --> shipped: handed to post / out for delivery
+    shipped --> completed: delivered
+    processing --> completed: pickup collected
+    paid --> failed: fulfilment failure
+        </pre>
+        <figcaption>Fig. 2 — Order status. After paid, transitions are driven by Shipment.</figcaption>
+      </figure>
+    </section>
+
+    <!-- ============ PAYMENT ============ -->
+    <section id="payment">
+      <h2><span class="num">05</span>Payment — settling the order</h2>
+      <p>Payment settles a <span class="chip pending">pending</span> order. It knows two method <em>types</em> and picks a gateway driver by name (the Strategy pattern: <code>ZarinpalGatewayDriver</code> in production, <code>MockGatewayDriver</code> in tests, resolved by <code>PaymentGatewayFactory</code>). Crucially, <b>Payment never touches inventory or shipment directly</b> — it only moves the order to paid through the contract, and <code>markAsPaid</code> does the rest.</p>
+
+      <div class="lane">
+        <div class="card">
+          <span class="role">Instant</span>
+          <h4>In-person cash</h4>
+          <p><code>initialize</code> writes a <span class="chip pending">pending_cash</span> payment row and <b>immediately</b> calls <code>markAsPaid</code>. The order is paid the moment checkout-with-cash happens.</p>
+        </div>
+        <div class="card">
+          <span class="role">Two-step</span>
+          <h4>Online gateway</h4>
+          <p><code>initialize</code> writes an <span class="chip pending">initiated</span> row and returns a <code>redirect_url</code>. The customer pays on Zarinpal; the public <b>callback</b> verifies, captures, and then calls <code>markAsPaid</code>.</p>
+        </div>
+      </div>
+
+      <div class="callout">
+        <span class="tag">Ownership guard</span>
+        <p><code>initialize</code> aborts <span class="chip bad">403</span> unless the target order belongs to the caller — checked right after the 404 guard, so one user can never pay for (or, via cash, mark paid) another user's order.</p>
+      </div>
+
+      <p>The callback carries its own idempotency guard: if the payment is already <span class="chip paid">captured</span>, it returns early before doing anything. Combined with the lock inside <code>markAsPaid</code>, a payment gateway that fires its callback twice cannot double-commit inventory or create two shipments.</p>
+
+      <figure class="diagram">
+        <pre class="mermaid">
+stateDiagram-v2
+    direction LR
+    [*] --> initiated: online init
+    [*] --> pending_cash: in-person init
+    initiated --> captured: callback verified
+    initiated --> failed: cancelled / rejected
+    pending_cash --> captured: cash collected
+    captured --> refunded: (future)
+        </pre>
+        <figcaption>Fig. 3 — Payment status. Both captured and pending_cash paths reach the shared markAsPaid.</figcaption>
+      </figure>
+    </section>
+
+    <!-- ============ SHIPMENT ============ -->
+    <section id="shipment">
+      <h2><span class="num">06</span>Shipment — fulfilling the order</h2>
+      <p>This is the largest module, but it decomposes into four clean concerns: the fixed <b>methods</b>, the local-delivery <b>slot system</b>, the operational <b>shipment record</b>, and the per-method <b>workflows</b>.</p>
+
+      <h3 id="ship-methods">Config-backed methods — there is no methods table</h3>
+      <p>The four fulfillment methods are fixed business facts, so they live in <code>config/shipment.php</code>, not the database. The admin cannot invent, rename, or reprice them. Each is keyed by a stable <b>code</b> and carries capability flags that drive the entire checkout UI.</p>
+
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Code</th><th>Type</th><th>Address</th><th>Slot</th><th>Tracking</th><th>Ends at</th></tr></thead>
+          <tbody>
+          <tr><td><code>post_standard</code></td><td>postal</td><td>required</td><td>—</td><td>yes</td><td>shipment <span class="chip shipped">handed_to_post</span> → order <span class="chip shipped">shipped</span></td></tr>
+          <tr><td><code>post_express</code></td><td>postal</td><td>required</td><td>—</td><td>yes</td><td>same workflow as standard, different price/speed</td></tr>
+          <tr><td><code>local_delivery</code></td><td>local_delivery</td><td>required (eligible)</td><td>required</td><td>no</td><td>shipment <span class="chip completed">delivered</span> → order <span class="chip completed">completed</span></td></tr>
+          <tr><td><code>in_person_pickup</code></td><td>pickup</td><td>—</td><td>—</td><td>no</td><td>shipment <span class="chip completed">picked_up</span> → order <span class="chip completed">completed</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p><code>validateSelection()</code> is the checkout gate. Per method it enforces: is the code real and enabled? Is an address required and owned by the caller? For local delivery, is the address in an eligible region (a rule isolated behind <code>LocalDeliveryEligibilityInterface</code>) and is a bookable slot supplied? Is a slot <em>prohibited</em> (postal/pickup) but one was sent? Any failure is a 422 with the exact offending field.</p>
+
+      <h3 id="ship-slots">The slot system — capacity like cinema seats</h3>
+      <p>Local delivery works on dated sessions with limited capacity. Three layers build them:</p>
+      <ol class="steps">
+        <li><b>Working periods</b> — recurring weekly templates (e.g. "Saturdays 15:00–22:00") in <code>delivery_working_periods</code>. These are the raw material; you seed them once.</li>
+        <li><b>The generator</b> — <code>shipment:generate-delivery-slots</code> slices each period into fixed-length sessions (default 90 min), keeping a short final slice only if it meets the minimum. It applies calendar exceptions (a date fully <em>closed</em>, or <em>custom hours</em>), and is idempotent: it never duplicates, overwrites an operator's edits, or reopens a closed slot.</li>
+        <li><b>Dated slots</b> — the concrete bookable rows in <code>delivery_slots</code>, each with a capacity.</li>
+      </ol>
+
+      <div class="callout key">
+        <span class="tag">Capacity is computed, never stored</span>
+        <p>There is no <code>reserved_count</code> column. Remaining capacity is derived live from the reservation table:</p>
+        <p style="margin-top:12px;font-family:var(--mono);font-size:14px;color:var(--ink)">remaining = capacity − admin_reserved − active(held + confirmed)</p>
+      </div>
+
+      <p>A slot is selectable only if it is open, not in the past, past the minimum lead time, inside the booking horizon, not closed by an exception, and has remaining capacity &gt; 0. The public availability endpoint returns full/closed slots as <code>available: false</code> so the UI can grey them out rather than hide them.</p>
+
+      <div class="callout warn">
+        <span class="tag">Overbooking is impossible</span>
+        <p>The availability list is only a snapshot. At checkout, <code>holdForPendingOrder()</code> re-locks the slot row with <code>lockForUpdate()</code> and re-counts capacity <em>inside</em> the transaction. Two customers racing for the last seat: one wins, the other gets a 422 on <code>delivery_slot_id</code>.</p>
+      </div>
+
+      <figure class="diagram">
+        <pre class="mermaid">
+stateDiagram-v2
+    direction LR
+    [*] --> held: checkout (pending order)
+    held --> confirmed: order paid
+    held --> released: cancel / replaced
+    held --> expired: 15-min TTL
+    confirmed --> completed: delivered
+    confirmed --> released: cancelled after paid
+    note right of held
+      held + confirmed
+      consume capacity
+    end note
+        </pre>
+        <figcaption>Fig. 4 — Slot reservation lifecycle. Only held and confirmed take a seat.</figcaption>
+      </figure>
+
+      <h3 id="ship-activate">Activation happens on payment, and only once</h3>
+      <p>When <code>markAsPaid</code> calls <code>activateForPaidOrder()</code>, the module: creates the <code>shipments</code> row (status <span class="chip pending">pending</span>, with the frozen snapshot copied in and an unguessable <code>public_code</code>), writes the first status-history entry, and confirms the held slot (<span class="chip held">held</span> → <span class="chip confirmed">confirmed</span>). If the order carried no shipment selection, it simply returns nothing.</p>
+      <div class="callout">
+        <span class="tag">Idempotent by construction</span>
+        <p>The <code>shipments.order_id</code> column is <b>unique</b>. A repeated payment callback that reaches activation finds the existing shipment and returns it — no duplicate record, no duplicate history, no second slot confirmation.</p>
+      </div>
+
+      <h3 id="ship-workflows">Fulfillment workflows — one per method type</h3>
+      <p>After activation, an operator moves the shipment forward through <em>explicit business actions</em> — there is no generic "set status" endpoint. Each transition is validated against a method-specific map by a <code>ShipmentWorkflowResolver</code>, and applied by one atomic primitive, <code>ShipmentTransitionService</code>, which locks the shipment, checks the move is legal, stamps the timestamp, writes a history row, and calls back into Order to update the summary status — all in one transaction. An illegal move (e.g. postal → out_for_delivery) returns a clean 422.</p>
+
+      <h4 class="wf-label">Postal · standard / express</h4>
+      <figure class="diagram">
+        <pre class="mermaid">
+stateDiagram-v2
+    direction LR
+    [*] --> pending
+    pending --> preparing
+    preparing --> ready_for_post
+    ready_for_post --> handed_to_post
+    handed_to_post --> [*]
+        </pre>
+        <figcaption>Fig. 5 — Postal workflow. Terminal at handed_to_post.</figcaption>
+      </figure>
+
+      <h4 class="wf-label">Local delivery</h4>
+      <figure class="diagram">
+        <pre class="mermaid">
+stateDiagram-v2
+    direction LR
+    [*] --> pending
+    pending --> preparing
+    preparing --> ready_for_dispatch
+    ready_for_dispatch --> out_for_delivery
+    out_for_delivery --> delivered
+    out_for_delivery --> delivery_failed
+    delivery_failed --> ready_for_dispatch: reschedule
+    delivery_failed --> out_for_delivery: retry
+    delivered --> [*]
+        </pre>
+        <figcaption>Fig. 6 — Local delivery workflow, including the failure &amp; reschedule branches.</figcaption>
+      </figure>
+
+      <h4 class="wf-label">Pickup</h4>
+      <figure class="diagram">
+        <pre class="mermaid">
+stateDiagram-v2
+    direction LR
+    [*] --> pending
+    pending --> preparing
+    preparing --> ready_for_pickup
+    ready_for_pickup --> picked_up
+    picked_up --> [*]
+        </pre>
+        <figcaption>Fig. 7 — Pickup workflow. Terminal at picked_up.</figcaption>
+      </figure>
+
+      <div class="callout warn">
+        <span class="tag">Postal tracking ends at handed_to_post</span>
+        <p>Once a parcel is handed to the postal service, the app has no reliable feed of the carrier's lifecycle — so it deliberately <em>never</em> claims <code>in_transit</code>, carrier <code>out_for_delivery</code>, or <code>delivered</code> for postal shipments. It shows the tracking number and tells the customer to follow it with the post office. <span class="chip shipped">handed_to_post</span> is the terminal known state; the order sits at <span class="chip shipped">shipped</span>.</p>
+      </div>
+
+      <p>Rescheduling a failed local delivery is its own guarded action: it locks and validates the new slot, releases the old reservation, creates a fresh confirmed one, updates the snapshot, and records the old→new slot in history — all without overbooking.</p>
+    </section>
+
+    <!-- ============ GUARANTEES ============ -->
+    <section id="guarantees">
+      <h2><span class="num">07</span>How the guarantees are actually enforced</h2>
+      <p>The properties the system promises aren't wishful — each is backed by a specific mechanism.</p>
+
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Promise</th><th>How it's enforced</th></tr></thead>
+          <tbody>
+          <tr><td>Inventory committed exactly once on payment</td><td>Status check + row lock in <code>markAsPaid</code>: if already paid, return before committing.</td></tr>
+          <tr><td>No duplicate shipment on a repeated callback</td><td>Unique <code>shipments.order_id</code> + the callback's own "already captured" guard.</td></tr>
+          <tr><td>Two customers can't take the last slot</td><td><code>lockForUpdate()</code> on the slot row with a capacity re-check inside the transaction.</td></tr>
+          <tr><td>An abandoned order leaves no trace</td><td>TTL sweep releases stock <em>and</em> slot; no shipment is ever created for an unpaid order.</td></tr>
+          <tr><td>Old orders are historically accurate</td><td>Everything is read from the frozen <code>shipment_snapshot</code>, never recomputed from current config.</td></tr>
+          <tr><td>No circular dependency Order ↔ Shipment</td><td>Order resolves the Shipment contract <em>lazily</em> (at call time) inside <code>markAsPaid</code>; the transition service injects the Order contract normally. The cycle never forms at construction.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ============ FILES ============ -->
+    <section id="files">
+      <h2><span class="num">08</span>Where the code lives</h2>
+      <p>A map for when you want to read the real thing.</p>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Concern</th><th>File</th></tr></thead>
+          <tbody>
+          <tr><td>Checkout orchestration</td><td><code>Modules/Order/Application/Actions/CreateOrderAction.php</code></td></tr>
+          <tr><td>The shared paid path</td><td><code>Modules/Order/Infrastructure/Persistence/Repositories/EloquentOrderManager.php</code> → <code>markAsPaid</code></td></tr>
+          <tr><td>Cancel / release primitive</td><td><code>Modules/Order/Application/Actions/CancelOrderAction.php</code></td></tr>
+          <tr><td>Payment flows</td><td><code>Modules/Payment/Application/Actions/</code> — <code>InitializePaymentAction</code>, <code>HandleZarinpalCallbackAction</code></td></tr>
+          <tr><td>Method config</td><td><code>config/shipment.php</code> + <code>Modules/Shipment/Domain/Services/ShipmentMethodRegistry.php</code></td></tr>
+          <tr><td>Checkout validation &amp; slot hold</td><td><code>Modules/Shipment/Infrastructure/Persistence/Repositories/EloquentShipmentManager.php</code></td></tr>
+          <tr><td>Slot generation / availability</td><td><code>Modules/Shipment/Application/Services/DeliverySlotGenerator.php</code>, <code>DeliverySlotAvailabilityService.php</code></td></tr>
+          <tr><td>Transition engine + workflows</td><td><code>Modules/Shipment/Application/Services/ShipmentTransitionService.php</code>, <code>Domain/Workflows/</code></td></tr>
+          <tr><td>Public contracts</td><td><code>…/Order/Domain/Contracts/OrderManagerInterface.php</code>, <code>…/Shipment/Domain/Contracts/ShipmentManagerInterface.php</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</div>
+
+<footer class="end">
+  Order · Payment · Shipment — internal logic walkthrough. Every flow described here is covered by the test suite under <code>tests/Feature/Order</code>, <code>tests/Feature/Payment</code>, and <code>tests/Feature/Shipment</code>.
+</footer>
+
+<script>
+  // ---- Theme: default to OS, allow manual override, persist choice ----
+  (function () {
+    var root = document.documentElement;
+    var saved = null;
+    try { saved = localStorage.getItem('mlg-theme'); } catch (e) {}
+    if (saved) root.setAttribute('data-theme', saved);
+
+    var btn = document.getElementById('themeToggle');
+    function current() {
+      return root.getAttribute('data-theme') ||
+        (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    }
+    function render() { btn.textContent = current() === 'dark' ? '☀' : '☾'; }
+    render();
+    btn.addEventListener('click', function () {
+      var next = current() === 'dark' ? 'light' : 'dark';
+      root.setAttribute('data-theme', next);
+      try { localStorage.setItem('mlg-theme', next); } catch (e) {}
+      render();
+    });
+  })();
+
+  // ---- Mermaid ----
+  window.addEventListener('DOMContentLoaded', function () {
+    if (window.mermaid) {
+      mermaid.initialize({ startOnLoad: true, theme: 'neutral', securityLevel: 'loose', fontFamily: 'IBM Plex Mono, monospace' });
+    }
+  });
+
+  // ---- Scroll-spy TOC ----
+  (function () {
+    var links = Array.prototype.slice.call(document.querySelectorAll('nav.toc a[href^="#"]'));
+    var map = {};
+    links.forEach(function (l) { map[l.getAttribute('href').slice(1)] = l; });
+    var targets = links.map(function (l) { return document.getElementById(l.getAttribute('href').slice(1)); }).filter(Boolean);
+
+    function setActive(id) { links.forEach(function (l) { l.classList.toggle('active', l.getAttribute('href') === '#' + id); }); }
+    if (targets.length) setActive(targets[0].id);
+
+    var obs = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) { if (e.isIntersecting) setActive(e.target.id); });
+    }, { rootMargin: '0px 0px -80% 0px', threshold: 0 });
+    targets.forEach(function (t) { obs.observe(t); });
+  })();
+</script>
+</body>
+</html>

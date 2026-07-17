@@ -11,6 +11,7 @@ use Modules\Inventory\Infrastructure\Persistence\Seeders\InventoryPermissionsSee
 use Modules\Media\Infrastructure\Persistence\Seeders\MediaPermissionsSeeder;
 use Modules\Order\Infrastructure\Persistence\Seeders\OrderPermissionsSeeder;
 use Modules\Payment\Infrastructure\Persistence\Seeders\PaymentPermissionsSeeder;
+use Modules\Shipment\Infrastructure\Persistence\Seeders\ShipmentPermissionsSeeder;
 
 abstract class TestCase extends BaseTestCase
 {
@@ -42,6 +43,11 @@ abstract class TestCase extends BaseTestCase
     protected function seedPaymentPermissions(): void
     {
         $this->seed(PaymentPermissionsSeeder::class);
+    }
+
+    protected function seedShipmentPermissions(): void
+    {
+        $this->seed(ShipmentPermissionsSeeder::class);
     }
 
     protected function actingAsCustomer(?User $user = null): User

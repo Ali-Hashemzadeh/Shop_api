@@ -83,7 +83,7 @@ class OrderTest extends TestCase
 
         $this->postJson('/api/v1/orders', [
             'address_id' => $addressId,
-            'shipment_method_id' => 1,
+            'shipment_method_code' => 'in_person_pickup',
         ])
             ->assertStatus(201)
             ->assertJsonPath('status', 'pending')
@@ -131,7 +131,7 @@ class OrderTest extends TestCase
 
         $this->postJson('/api/v1/orders', [
             'address_id' => $addressId,
-            'shipment_method_id' => 1,
+            'shipment_method_code' => 'in_person_pickup',
         ])->assertStatus(201);
 
         $this->assertDatabaseHas('orders', ['id' => $oldOrder->id, 'status' => 'cancelled']);
@@ -284,7 +284,7 @@ class OrderTest extends TestCase
 
         $this->postJson('/api/v1/orders', [
             'address_id' => $addressId,
-            'shipment_method_id' => 1,
+            'shipment_method_code' => 'in_person_pickup',
         ])->assertStatus(422);
     }
 }

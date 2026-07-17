@@ -8,6 +8,7 @@ use Modules\Inventory\Infrastructure\Providers\InventoryServiceProvider;
 use Modules\Media\Infrastructure\Providers\MediaServiceProvider;
 use Modules\Order\Infrastructure\Providers\OrderServiceProvider;
 use Modules\Payment\Infrastructure\Providers\PaymentServiceProvider;
+use Modules\Shipment\Infrastructure\Providers\ShipmentServiceProvider;
 
 return [
     AppServiceProvider::class,
@@ -18,4 +19,5 @@ return [
     CartServiceProvider::class,
     OrderServiceProvider::class,
     PaymentServiceProvider::class,
+    ShipmentServiceProvider::class,
 ];

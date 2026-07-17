@@ -2,6 +2,26 @@
 
 ## [Unreleased](https://github.com/laravel/laravel/compare/v12.12.1...12.x)
 
+### Feature — Shipment: fulfillment module (postal / local delivery / pickup)
+
+**A complete `Shipment` bounded context handling checkout → payment → delivery, postal handoff, or store pickup.** The four fulfillment methods are fixed and **configuration-backed** (no `shipment_methods` table); the admin cannot create, rename, reprice, or toggle them from the panel.
+
+#### Added
+- `config/shipment.php` — the four fixed methods (`post_standard`, `post_express`, `local_delivery`, `in_person_pickup`) keyed by stable **code**, integer-rial prices, plus local-delivery slot-generation and pending-order-TTL tunables (env-backed).
+- Tables: `shipments` (operational record, unique `public_code` + unique `order_id`, loose `user_id`/media refs, address/slot/pickup JSON snapshots, per-status timestamps), `shipment_status_histories` (append-only), `delivery_working_periods` (recurring weekly templates), `delivery_slots` (generated dated sessions, unique `[date, starts_at, ends_at]`, `capacity` + `admin_reserved_capacity`), `delivery_slot_reservations` (source of truth for consumed capacity), `delivery_schedule_exceptions` (`closed` / `custom_hours`).
+- `ShipmentManagerInterface` (public contract) + `LocalDeliveryEligibilityInterface` (isolated supported-region rule, default permissive). DTOs: `ShipmentMethodDTO`, `ShipmentSelectionDTO`, `DeliverySlotDTO`, `DeliverySlotReservationDTO`, `ShipmentDTO`, `ShipmentStatusHistoryDTO`.
+- Method-specific workflows (`Postal`/`LocalDelivery`/`Pickup` + `ShipmentWorkflowResolver`) and `ShipmentTransitionService` (lock → validate transition → mutate + timestamp → history → sync order status → reservation). Focused Actions per business step (start-preparing, mark-ready-for-post, hand-to-post, mark-ready-for-dispatch, out-for-delivery, delivered, delivery-failed, reschedule, ready-for-pickup, confirm-pickup) + slot Actions (generate, close, open, update-capacity). No generic "set status" endpoint.
+- `shipment:generate-delivery-slots {--days=}` (idempotent cinema-session generation; scheduled daily at 00:30). Availability service computes remaining = capacity − admin_reserved − active(held+confirmed) and enforces lead-time / booking-horizon / closed-date / capacity rules; `holdForPendingOrder` re-checks under `lockForUpdate()` to prevent overbooking.
+- Customer endpoints: `GET /shipment/methods`, `GET /shipment/delivery-slots`, `GET /shipments/{publicCode}`, `GET /orders/{order}/shipment`. Admin/operator: `GET /admin/shipments[/{publicCode}]` + business-action POSTs + slot management (`GET/PATCH /admin/shipment/delivery-slots[/{slot}]`, `.../close`, `.../open`). All `throttle:api`.
+- Permissions (permission-based, 403-before-validation): `shipment.view-own`, `shipment.view-admin`, `shipment.start-preparing`, `shipment.post.{mark-ready,hand-over}`, `shipment.delivery.{mark-ready,dispatch,complete,fail,reschedule}`, `shipment.pickup.{mark-ready,complete}`, `shipment.slot.{view-admin,manage,close,reserve-capacity}`. `ShipmentServiceProvider` registered in `bootstrap/providers.php`.
+
+#### Changed
+- **Checkout now uses `shipment_method_code`** (+ `address_id?`, `delivery_slot_id?`). `orders` gains `shipment_method_code` and an immutable `shipment_snapshot` JSON; the legacy `shipment_method_id` column is kept nullable for backward compatibility but is no longer written. `OrderManagerInterface::createOrderFromCart` now takes a `ShipmentSelectionDTO`; added `syncStatusFromShipment`; `OrderStatus` gains `completed`.
+- **`markAsPaid` is now the shared, idempotent, row-locked paid path:** it commits the inventory reservation exactly once (previously never committed on payment) and activates the operational shipment (idempotent by `order_id`). Pending-order cancel/expiry/replacement release any held local-delivery slot via `CancelOrderAction::releaseAndCancel`.
+
+#### Tests
+- `tests/Feature/Shipment/` (ShipmentMethods, ShipmentSlot, ShipmentPaymentIntegration, ShipmentWorkflow, ShipmentAuthorization, AdminDeliverySlot, AdminShipmentIndex) + `tests/Unit/Shipment/ShipmentWorkflowTest` — **55 tests, 225 assertions**. Existing Order/Payment tests updated for the new checkout contract; no regressions.
+
 ### Feature — Catalog: Brands
 
 **Products can now belong to a brand.** Brands are a flat catalog lookup with public reads and permission-gated admin writes.
