@@ -71,7 +71,7 @@ class OrderTest extends TestCase
         return $cart;
     }
 
-    // ── Scenario 1: Happy path — snapshot prices, reserve stock, clear cart ──
+    // ── Scenario 1: Happy path — snapshot prices and reserve stock ──
 
     /** @test */
     public function it_creates_an_order_with_snapshotted_prices_and_reserves_stock(): void
@@ -93,7 +93,10 @@ class OrderTest extends TestCase
             ->assertJsonPath('items.0.price_per_unit', 50000)
             ->assertJsonPath('items.0.line_total', 100000);
 
-        $this->assertDatabaseEmpty('cart_items');
+        $this->assertDatabaseHas('cart_items', [
+            'sku' => 'TEST-001',
+            'quantity' => 2,
+        ]);
         $this->assertDatabaseHas('inventory_stocks', [
             'sku' => 'TEST-001',
             'reserved_quantity' => 2,

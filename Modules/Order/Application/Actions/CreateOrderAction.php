@@ -81,8 +81,6 @@ class CreateOrderAction
             // Lock + hold the local-delivery slot (no-op for postal/pickup).
             $this->shipment->holdForPendingOrder($order->id, $userId, $selection, $expiresAt);
 
-            $this->cart->clearCart($enrichedCart->id);
-
             return OrderDTO::fromModel($order, $itemDTOs);
         });
     }

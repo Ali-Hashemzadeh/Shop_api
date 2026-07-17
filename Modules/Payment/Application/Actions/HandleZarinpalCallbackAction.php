@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Modules\Payment\Application\Actions;
 
 use Illuminate\Support\Facades\DB;
+use Modules\Cart\Domain\Contracts\CartManagerInterface;
 use Modules\Order\Domain\Contracts\OrderManagerInterface;
 use Modules\Payment\Domain\Enums\PaymentStatus;
 use Modules\Payment\Domain\Models\Payment;
@@ -15,6 +16,7 @@ class HandleZarinpalCallbackAction
     public function __construct(
         private readonly OrderManagerInterface $orderManager,
         private readonly PaymentGatewayFactory $gatewayFactory,
+        private readonly CartManagerInterface $cartManager,
     ) {}
 
     public function handle(string $status, string $authority): array
@@ -55,7 +57,8 @@ class HandleZarinpalCallbackAction
                 'gateway_response' => $result['raw_response'],
             ]);
 
-            $this->orderManager->markAsPaid($payment->order_id, (string) $result['reference_id']);
+            $order = $this->orderManager->markAsPaid($payment->order_id, (string) $result['reference_id']);
+            $this->cartManager->clearUserCart($order->userId);
 
             return [
                 'success' => true,

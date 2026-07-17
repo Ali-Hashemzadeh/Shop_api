@@ -42,6 +42,9 @@ interface CartManagerInterface
     /** Remove all items from the cart. */
     public function clearCart(int $cartId): void;
 
+    /** Remove all items from an authenticated user's cart, if it exists. */
+    public function clearUserCart(int $userId): void;
+
     /**
      * Merge a guest session cart into an authenticated user's cart.
      * Quantities are clamped to available stock; SKUs with no inventory record are skipped.

@@ -3,6 +3,8 @@
 namespace Tests\Feature\Payment;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Modules\Cart\Domain\Models\Cart;
+use Modules\Cart\Domain\Models\CartItem;
 use Modules\Identity\Domain\Models\User;
 use Modules\Order\Domain\Models\Order;
 use Modules\Payment\Domain\Models\Payment;
@@ -45,6 +47,13 @@ class PaymentTest extends TestCase
             'amount' => 100000,
             'status' => 'initiated',
         ]);
+    }
+
+    private function createCartItem(int $userId, string $sku = 'PAYMENT-CART-ITEM'): CartItem
+    {
+        $cart = Cart::create(['user_id' => $userId]);
+
+        return CartItem::create(['cart_id' => $cart->id, 'sku' => $sku, 'quantity' => 1]);
     }
 
     // ── Scenario 1: In-person — instant cash checkout ─────────────────────────
@@ -113,6 +122,7 @@ class PaymentTest extends TestCase
     {
         $user = $this->actingAsCustomer();
         $order = $this->createPendingOrder($user->id, 100000);
+        $cartItem = $this->createCartItem($user->id);
 
         $driver = new MockGatewayDriver;
         $this->app->instance(MockGatewayDriver::class, $driver);
@@ -135,6 +145,7 @@ class PaymentTest extends TestCase
             'status' => 'paid',
             'transaction_ref' => $driver->fakeRefId,
         ]);
+        $this->assertDatabaseMissing('cart_items', ['id' => $cartItem->id]);
     }
 
     // ── Scenario 4: Callback — user cancelled at bank ─────────────────────────
@@ -144,6 +155,7 @@ class PaymentTest extends TestCase
     {
         $user = $this->actingAsCustomer();
         $order = $this->createPendingOrder($user->id, 100000);
+        $cartItem = $this->createCartItem($user->id);
 
         $authority = 'TEST-AUTH-CANCEL-001';
         $this->createInitiatedPayment($order->id, $authority);
@@ -158,6 +170,7 @@ class PaymentTest extends TestCase
         ]);
 
         $this->assertDatabaseHas('orders', ['id' => $order->id, 'status' => 'pending']);
+        $this->assertDatabaseHas('cart_items', ['id' => $cartItem->id]);
     }
 
     // ── Scenario 5: Callback — gateway verification rejects ───────────────────
@@ -167,6 +180,7 @@ class PaymentTest extends TestCase
     {
         $user = $this->actingAsCustomer();
         $order = $this->createPendingOrder($user->id, 100000);
+        $cartItem = $this->createCartItem($user->id);
 
         $driver = new MockGatewayDriver;
         $driver->shouldVerifySucceed = false;
@@ -185,6 +199,7 @@ class PaymentTest extends TestCase
         ]);
 
         $this->assertDatabaseHas('orders', ['id' => $order->id, 'status' => 'pending']);
+        $this->assertDatabaseHas('cart_items', ['id' => $cartItem->id]);
     }
 
     // ── Scenario 6: Idempotency — already captured skips re-processing ────────

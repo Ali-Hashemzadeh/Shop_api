@@ -100,6 +100,13 @@ class EloquentCartManager implements CartManagerInterface
         $cart->items()->delete();
     }
 
+    public function clearUserCart(int $userId): void
+    {
+        $cart = Cart::query()->where('user_id', $userId)->first();
+
+        $cart?->items()->delete();
+    }
+
     public function mergeGuestCart(int $userId, string $sessionId): CartDTO
     {
         return DB::transaction(function () use ($userId, $sessionId) {
