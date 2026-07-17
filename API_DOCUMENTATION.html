@@ -2964,6 +2964,27 @@ await guestCartRequest('GET',  '/');
     <tr><td><code>in_person_pickup</code></td><td>hidden</td><td>hidden</td><td>free (0)</td><td>show <code>pickup_location</code></td></tr>
   </table>
 
+  <section id="variant-order-limits">
+    <h2>Variant per-order quantity limits</h2>
+    <p>Every product variant may configure <code>max_quantity_per_order</code>. It limits that exact SKU inside one cart and resulting Order. <code>null</code> means no special Catalog limit; configured values must be whole integers of at least <code>1</code>. Previous, paid, cancelled, pending, or other Orders are never counted. Inventory stock is independent and may impose a lower maximum.</p>
+    <h3>Variant create and update</h3>
+    <p>The field is accepted by standalone variant create/update, nested <code>variants[]</code> during Product creation, and variant upsert during Product update. Explicit <code>null</code> clears it. Existing Catalog permissions apply.</p>
+    <pre>{ "sku": "bdp12-v3", "base_price": 125000, "max_quantity_per_order": 5 }</pre>
+    <table><tr><th>Input</th><th>Result</th></tr><tr><td><code>null</code> or omitted</td><td>No special per-order limit</td></tr><tr><td>Whole integer ≥ 1</td><td>Accepted</td></tr><tr><td>0, negative, float, decimal string</td><td>422 validation error</td></tr></table>
+    <h3>Product and variant responses</h3>
+    <pre>{ "sku": "bdp12-v3", "stock": 18, "max_quantity_per_order": 5, "effective_max_quantity": 5 }</pre>
+    <p><code>effective_max_quantity</code> is the lower of stock and the configured limit, or current stock when the limit is null. Response values are advisory; mutations reload authoritative Catalog and Inventory state.</p>
+    <h3>Cart add, update, merge, and item response</h3>
+    <p><code>POST /api/v1/cart/items</code> validates existing + incoming quantity. <code>PATCH /api/v1/cart/items/{itemId}</code> validates the submitted final quantity. Guest and authenticated carts reject excess with 422 and remain unchanged.</p>
+    <pre>{ "message": "The maximum allowed quantity for SKU bdp12-v3 is 5 per order.", "errors": { "quantity": ["You can add a maximum of 5 units of this item to one order."] } }</pre>
+    <p><code>POST /api/v1/cart/merge</code> sums duplicate SKUs and clamps to the lower of combined quantity, available stock, and the configured limit. Its response shape is unchanged.</p>
+    <pre>{ "sku": "bdp12-v3", "quantity": 3, "available_stock": 18, "max_quantity_per_order": 5, "effective_max_quantity": 5, "remaining_addable_quantity": 2, "quantity_valid": true }</pre>
+    <p>Lowering a limit does not rewrite existing carts; reads return <code>quantity_valid: false</code> until the customer reduces the quantity.</p>
+    <h3>Order checkout and snapshot</h3>
+    <p><code>POST /api/v1/orders</code> aggregates all lines by SKU and reloads current limits before any Order mutation, Inventory reservation, local-delivery hold, or Cart clearing. A violation returns 422 and changes nothing.</p>
+    <pre>{ "message": "The given data was invalid.", "errors": { "items.bdp12-v3.quantity": ["This item is limited to 5 units per order. Your cart currently contains 8."] } }</pre>
+    <p>Order items expose nullable <code>max_quantity_per_order_snapshot</code>. It records the rule at checkout; later Catalog changes do not alter historical Orders and the snapshot never validates future Orders.</p>
+  </section>
 </main>
 
 <script>

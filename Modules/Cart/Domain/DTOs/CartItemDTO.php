@@ -19,6 +19,11 @@ class CartItemDTO
         public readonly ?string $imageUrl,
         public readonly int $lineTotal,
         public readonly array $attributes = [],
+        public readonly ?int $availableStock = null,
+        public readonly ?int $maxQuantityPerOrder = null,
+        public readonly ?int $effectiveMaxQuantity = null,
+        public readonly ?int $remainingAddableQuantity = null,
+        public readonly bool $quantityValid = true,
     ) {}
 
     public static function fromModel(
@@ -28,7 +33,13 @@ class CartItemDTO
         ?int $compareAtPrice = null,
         ?string $imageUrl = null,
         array $attributes = [],
+        ?int $availableStock = null,
+        ?int $maxQuantityPerOrder = null,
     ): self {
+        $effectiveMax = $availableStock !== null
+            ? min(max(0, $availableStock), $maxQuantityPerOrder ?? PHP_INT_MAX)
+            : $maxQuantityPerOrder;
+
         return new self(
             id: $item->id,
             cartId: $item->cart_id,
@@ -40,17 +51,28 @@ class CartItemDTO
             imageUrl: $imageUrl,
             lineTotal: $basePrice !== null ? $item->quantity * $basePrice : 0,
             attributes: $attributes,
+            availableStock: $availableStock,
+            maxQuantityPerOrder: $maxQuantityPerOrder,
+            effectiveMaxQuantity: $effectiveMax,
+            remainingAddableQuantity: $effectiveMax !== null ? max(0, $effectiveMax - $item->quantity) : null,
+            quantityValid: $effectiveMax === null || $item->quantity <= $effectiveMax,
         );
     }
 
-    /** Return a new instance enriched with Catalog pricing data. */
+    /** Return a new instance enriched with Catalog pricing and purchasing data. */
     public function withCatalogData(
         ?string $productName,
         ?int $basePrice,
         ?int $compareAtPrice,
         ?string $imageUrl,
         array $attributes = [],
+        ?int $availableStock = null,
+        ?int $maxQuantityPerOrder = null,
     ): self {
+        $effectiveMax = $availableStock !== null
+            ? min(max(0, $availableStock), $maxQuantityPerOrder ?? PHP_INT_MAX)
+            : $maxQuantityPerOrder;
+
         return new self(
             id: $this->id,
             cartId: $this->cartId,
@@ -62,6 +84,11 @@ class CartItemDTO
             imageUrl: $imageUrl,
             lineTotal: $basePrice !== null ? $this->quantity * $basePrice : 0,
             attributes: $attributes,
+            availableStock: $availableStock,
+            maxQuantityPerOrder: $maxQuantityPerOrder,
+            effectiveMaxQuantity: $effectiveMax,
+            remainingAddableQuantity: $effectiveMax !== null ? max(0, $effectiveMax - $this->quantity) : null,
+            quantityValid: $effectiveMax === null || $this->quantity <= $effectiveMax,
         );
     }
 }

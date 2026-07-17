@@ -13,7 +13,6 @@ use Modules\Cart\Domain\Models\Cart;
 use Modules\Cart\Domain\Models\CartItem;
 use Modules\Catalog\Domain\Contracts\CatalogManagerInterface;
 use Modules\Inventory\Domain\Contracts\InventoryManagerInterface;
-use Modules\Inventory\Domain\Exceptions\StockNotFoundException;
 
 class EloquentCartManager implements CartManagerInterface
 {
@@ -120,37 +119,43 @@ class EloquentCartManager implements CartManagerInterface
             }
 
             $userCart->load('items');
+            $skus = $guestCart->items->pluck('sku')->unique()->values()->all();
+            $variants = $this->catalog->getVariantsBySkus($skus);
+            $stocks = $this->inventory->getBatchStockBySkus($skus);
 
             foreach ($guestCart->items as $guestItem) {
-                try {
-                    $stock = $this->inventory->getStockBySku($guestItem->sku);
-                } catch (StockNotFoundException) {
-                    continue;
-                }
+                $variant = $variants[$guestItem->sku] ?? null;
+                $stock = $stocks[$guestItem->sku] ?? null;
 
-                $available = $stock->availableQuantity;
-
-                if ($available <= 0) {
+                if ($stock === null || $stock->availableQuantity <= 0) {
                     continue;
                 }
 
                 $existing = $userCart->items->firstWhere('sku', $guestItem->sku);
+                $requestedQuantity = ($existing?->quantity ?? 0) + $guestItem->quantity;
+                $allowedQuantity = min(
+                    $requestedQuantity,
+                    $stock->availableQuantity,
+                    $variant?->maxQuantityPerOrder ?? PHP_INT_MAX,
+                );
+
+                if ($allowedQuantity <= 0) {
+                    continue;
+                }
 
                 if ($existing !== null) {
-                    $newQty = min($existing->quantity + $guestItem->quantity, $available);
-                    if ($newQty > $existing->quantity) {
-                        $existing->update(['quantity' => $newQty]);
+                    if ($existing->quantity !== $allowedQuantity) {
+                        $existing->update(['quantity' => $allowedQuantity]);
                     }
                 } else {
                     $userCart->items()->create([
                         'sku' => $guestItem->sku,
-                        'quantity' => min($guestItem->quantity, $available),
+                        'quantity' => $allowedQuantity,
                     ]);
                 }
             }
 
             $guestCart->delete();
-
             $userCart->load('items');
 
             return $this->buildDTO($userCart);
@@ -159,8 +164,12 @@ class EloquentCartManager implements CartManagerInterface
 
     private function buildDTO(Cart $cart): CartDTO
     {
-        $items = $cart->items->map(function (CartItem $item): CartItemDTO {
-            $variant = $this->catalog->findVariantBySku($item->sku);
+        $skus = $cart->items->pluck('sku')->all();
+        $variants = $this->catalog->getVariantsBySkus($skus);
+        $stocks = $this->inventory->getBatchStockBySkus($skus);
+
+        $items = $cart->items->map(function (CartItem $item) use ($variants, $stocks): CartItemDTO {
+            $variant = $variants[$item->sku] ?? null;
 
             return CartItemDTO::fromModel(
                 $item,
@@ -169,6 +178,8 @@ class EloquentCartManager implements CartManagerInterface
                 compareAtPrice: $variant?->compareAtPrice,
                 imageUrl: $variant?->imageUrl,
                 attributes: $variant?->attributes ?? [],
+                availableStock: $stocks[$item->sku]->availableQuantity ?? 0,
+                maxQuantityPerOrder: $variant?->maxQuantityPerOrder,
             );
         })->all();
 

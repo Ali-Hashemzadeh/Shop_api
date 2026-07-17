@@ -1,6 +1,15 @@
 # Release Notes
 
-## [Unreleased](https://github.com/laravel/laravel/compare/v12.12.1...12.x)
+## [Unreleased]
+
+### Feature — Catalog/Cart/Order: per-variant order quantity limits
+
+- Catalog variants now store nullable `max_quantity_per_order` (`null` means no special limit; configured values must be whole integers of at least 1). Standalone variant writes, nested product creation, and product-update variant upserts all accept it, including explicit `null` to clear it.
+- `ProductVariantDTO` and variant responses expose the limit plus `effective_max_quantity` where stock is available. Catalog publishes batch `getVariantsBySkus()` DTO lookup so Cart and Order do not query Catalog models or perform N+1 SKU lookups.
+- Guest and authenticated Cart add/update operations reject quantities above the variant limit with the standard 422 validation shape. Adds validate the resulting quantity; automatic guest-cart merge clamps to the lower of combined quantity, available stock, and the configured limit.
+- Cart items expose `max_quantity_per_order`, `effective_max_quantity`, `remaining_addable_quantity`, and `quantity_valid`, allowing clients to detect carts made stale by an administrator lowering a limit.
+- Checkout aggregates quantities by SKU and reloads current Catalog rules before creating/cancelling an Order, reserving Inventory, or holding a delivery slot. Rejection leaves every existing Order, reservation, slot hold, and Cart unchanged.
+- Order items snapshot the applied rule in nullable `max_quantity_per_order_snapshot`. Historical and previous Orders are never counted; the rule is independent per Order and Inventory may impose a lower maximum.(https://github.com/laravel/laravel/compare/v12.12.1...12.x)
 
 ### Feature — Shipment: fulfillment module (postal / local delivery / pickup)
 

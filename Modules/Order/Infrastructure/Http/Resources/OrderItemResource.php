@@ -22,6 +22,7 @@ class OrderItemResource extends JsonResource
             'product_title' => $dto->productTitle,
             'variant_attributes' => $dto->variantAttributes,
             'quantity' => $dto->quantity,
+            'max_quantity_per_order_snapshot' => $dto->maxQuantityPerOrderSnapshot,
             'price_per_unit' => $dto->pricePerUnit,
             'line_total' => $dto->lineTotal,
         ];

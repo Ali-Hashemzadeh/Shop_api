@@ -301,11 +301,32 @@ class EloquentCatalogManager implements CatalogManagerInterface
 
     public function findVariantBySku(string $sku): ?ProductVariantDTO
     {
-        $variant = ProductVariant::with('product')->where('sku', $sku)->first();
+        return $this->getVariantsBySkus([$sku])[$sku] ?? null;
+    }
 
-        return $variant
-            ? ProductVariantDTO::fromModel($variant, $this->resolveUrl((int) $variant->media_id), $variant->product?->title, $this->availableStockFor($variant->sku))
-            : null;
+    public function getVariantsBySkus(array $skus): array
+    {
+        $skus = array_values(array_unique(array_filter($skus)));
+
+        if ($skus === []) {
+            return [];
+        }
+
+        $variants = ProductVariant::query()
+            ->with('product')
+            ->whereIn('sku', $skus)
+            ->get();
+        $stockMap = $this->availableStockMap($variants->pluck('sku')->all());
+        $mediaMap = $this->buildMediaMap($variants->pluck('media_id')->filter()->unique()->values()->all());
+
+        return $variants->mapWithKeys(fn (ProductVariant $variant): array => [
+            $variant->sku => ProductVariantDTO::fromModel(
+                $variant,
+                $mediaMap->get($variant->media_id)?->url,
+                $variant->product?->title,
+                $stockMap[$variant->sku] ?? 0,
+            ),
+        ])->all();
     }
 
     public function createProductVariant(int $productId, array $data): ProductVariantDTO

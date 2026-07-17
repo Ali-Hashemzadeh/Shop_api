@@ -109,6 +109,9 @@ interface CatalogManagerInterface
 
     public function findVariantBySku(string $sku): ?ProductVariantDTO;
 
+    /** @return array<string, ProductVariantDTO> Variants keyed by SKU. */
+    public function getVariantsBySkus(array $skus): array;
+
     public function createProductVariant(int $productId, array $data): ProductVariantDTO;
 
     /** Update arbitrary variant fields; enforces is_default single-true invariant. */

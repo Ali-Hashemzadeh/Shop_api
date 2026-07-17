@@ -15,6 +15,7 @@ class OrderItemDTO
         public readonly string $productTitle,
         public readonly array $variantAttributes,
         public readonly int $quantity,
+        public readonly ?int $maxQuantityPerOrderSnapshot,
         public readonly int $pricePerUnit,
         public readonly int $lineTotal,
     ) {}
@@ -28,6 +29,7 @@ class OrderItemDTO
             productTitle: $item->product_title,
             variantAttributes: $item->variant_attributes ?? [],
             quantity: $item->quantity,
+            maxQuantityPerOrderSnapshot: $item->max_quantity_per_order_snapshot,
             pricePerUnit: $item->price_per_unit,
             lineTotal: $item->line_total,
         );

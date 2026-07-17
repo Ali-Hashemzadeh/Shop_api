@@ -21,6 +21,20 @@ class UpdateProductRequest extends FormRequest
                 $this->merge(['variants' => $decoded]);
             }
         }
+
+        $variants = $this->input('variants');
+        if (is_array($variants)) {
+            foreach ($variants as $index => $variant) {
+                foreach (['base_price', 'compare_at_price', 'max_quantity_per_order'] as $field) {
+                    $value = $variant[$field] ?? null;
+                    if (is_string($value) && preg_match('/^\d+$/', $value)) {
+                        $variants[$index][$field] = (int) $value;
+                    }
+                }
+            }
+
+            $this->merge(['variants' => $variants]);
+        }
     }
 
     public function rules(): array
@@ -41,6 +55,7 @@ class UpdateProductRequest extends FormRequest
             'variants.*.type' => ['required', 'in:image,color'],
             'variants.*.base_price' => ['required', 'integer', 'min:0'],
             'variants.*.compare_at_price' => ['nullable', 'integer', 'min:0'],
+            'variants.*.max_quantity_per_order' => ['nullable', 'integer', 'min:1'],
             'variants.*.is_default' => ['required', 'boolean'],
             'variants.*.media_id' => ['nullable', 'integer'],
             'variants.*.attributes' => ['nullable', 'array'],

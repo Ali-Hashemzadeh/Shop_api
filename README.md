@@ -85,6 +85,8 @@ Lightweight, high-performance file upload handler and storage ledger.
 Controls the storefront presentation layer: hierarchical categories, products with multi-image galleries, and purchasable product variants.
 
 - **Key entities:** `Category` (infinite nesting via `parent_id`), `Product` (`draft`/`published` status), `ProductImage` (gallery with sort order), `ProductVariant` (unique SKU, integer prices, JSON attributes, per-variant image, `is_default` single-true invariant)
+- **Per-order variant limit:** ProductVariant.max_quantity_per_order is nullable (
+ull = unlimited by Catalog, minimum configured value 1). It applies independently to each cart/order; previous Orders are not counted. Variant reads expose it and an effective maximum bounded by current available Inventory.
 - **Key contract:** `CatalogManagerInterface` — full read/write surface consumed by higher-level modules (e.g. Orders, Inventory)
 - **Authorization:** Public read endpoints require no auth. Write endpoints and the admin product view require `auth:sanctum`; authorization is permission-based (`catalog.category.*`, `catalog.product.*`, `catalog.variant.*`) enforced via Laravel policies — any user granted a specific permission can act, independent of role.
 - **Pagination:** List endpoints return `LengthAwarePaginator` with a `{data, links, meta}` envelope. `per_page` (1–100) and `page` are documented automatically by Scramble.
@@ -106,7 +108,7 @@ Provides guest and authenticated shopping carts with real-time stock validation 
 - **Key contract:** `CartManagerInterface` — `findOrCreateCart`, `getCart`, `addItem`, `removeItem`, `updateQuantity`, `clearCart`.
 - **Session identity:** Authenticated users are identified by `user_id`; guests use an `X-Session-Id` request header. If the header is absent, the middleware auto-generates a UUID and echoes it back as `X-Cart-Session-Id` in the response.
 - **Stock validation:** Every `addItem` / `updateQuantity` call checks live inventory via `InventoryManagerInterface`. Insufficient stock or unknown SKU returns 422.
-- **Price enrichment:** `getCart()` calls `CatalogManagerInterface::findVariantBySku()` for each item and populates `base_price`, `compare_at_price`, `image_url`, and `line_total` (all integers, Cents Rule).
+- **Catalog enrichment and limits:** `getCart()` batch-loads immutable variant DTOs. Add/update reject quantities above current stock or `max_quantity_per_order`; merge clamps to the lower bound. Cart items expose the configured/effective maximum, remaining addable quantity, and validity for stale carts.
 - **Authorization:** No permissions required — cart operations are self-service.
 
 ### Order (Complete)
@@ -114,7 +116,7 @@ Immutable financial contract anchor. Converts a validated cart into a locked ord
 
 - **Key entities:** `Order` (status, snapshotted `shipping_address` JSON, integer totals), `OrderItem` (snapshotted sku, product_title, price_per_unit, line_total — all integers)
 - **Key contract:** `OrderManagerInterface` — `createOrderFromCart`, `markAsPaid`, `markAsComplete`, `getUserOrders`, `findOrder`.
-- **Checkout flow:** `POST /api/v1/orders` cancels any existing pending order (releasing reserved inventory), snapshots prices and shipping address, creates the new order, reserves stock per item, and clears the cart — all in a single `DB::transaction()`.
+- **Checkout flow:** `POST /api/v1/orders` first aggregates cart quantities by SKU and batch-revalidates current Catalog limits. Only then does it replace a pending order, snapshot prices/rules/shipping, reserve Inventory, and hold Shipment capacity in one transaction. The cart remains until successful payment; quantity failure changes nothing.
 - **TTL enforcement:** `orders:cancel-expired` runs every minute and cancels pending orders older than 15 minutes, releasing their inventory reservations.
 - **Price snapshot:** Order items store prices at creation time and never change, even if the catalog is updated.
 - **Shipment selection:** Checkout takes `shipment_method_code` (+ `address_id?`, `delivery_slot_id?`); the order stores an immutable `shipment_snapshot`. The legacy `shipment_method_id` column is retained (nullable) for backward compatibility but is no longer written.

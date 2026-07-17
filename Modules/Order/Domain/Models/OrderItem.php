@@ -13,6 +13,7 @@ class OrderItem extends Model
         'product_title',
         'variant_attributes',
         'quantity',
+        'max_quantity_per_order_snapshot',
         'price_per_unit',
         'line_total',
     ];
@@ -20,6 +21,7 @@ class OrderItem extends Model
     protected $casts = [
         'variant_attributes' => 'array',
         'quantity' => 'integer',
+        'max_quantity_per_order_snapshot' => 'integer',
         'price_per_unit' => 'integer',
         'line_total' => 'integer',
     ];

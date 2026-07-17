@@ -21,10 +21,14 @@ class ProductVariantResource extends JsonResource
             'is_default' => $dto->isDefault,
             'base_price' => $dto->basePrice,
             'compare_at_price' => $dto->compareAtPrice,
+            'max_quantity_per_order' => $dto->maxQuantityPerOrder,
             'attributes' => $dto->attributes,
             'image_url' => $dto->imageUrl,
             // Available units for this variant (physical − reserved), from Inventory.
             'stock' => $dto->availableStock,
+            'effective_max_quantity' => $dto->availableStock !== null
+                ? min(max(0, $dto->availableStock), $dto->maxQuantityPerOrder ?? PHP_INT_MAX)
+                : $dto->maxQuantityPerOrder,
         ];
     }
 }

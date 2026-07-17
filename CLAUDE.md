@@ -296,6 +296,11 @@ Match the surrounding code. Concrete patterns used throughout:
 - Exceptions: `StockNotFoundException` (unknown SKU), `InsufficientStockException` (available < requested).
 - Permissions: `inventory.stock.manage`, `inventory.ledger.view`.
 
+### Per-variant order quantity limit — cross-module rule
+- Catalog owns nullable `product_variants.max_quantity_per_order` and exposes it only through immutable `ProductVariantDTO`; `null` means no special limit and the minimum configured value is 1.
+- `CatalogManagerInterface::getVariantsBySkus()` is the batch boundary for Cart and Order. Never import `ProductVariant` outside Catalog.
+- Cart add/update reject excess quantities; guest merge may clamp to `min(combined, available stock, limit-or-infinity)`. Cart resources expose current/effective limits and validity.
+- Order checkout aggregates by SKU and revalidates before any Order mutation, Inventory reservation, or Shipment hold. `order_items.max_quantity_per_order_snapshot` is historical only. Previous Orders are never counted.
 ### Cart — key facts
 - **Dual identity:** authenticated users get a `user_id`-keyed cart; guests use a `session_id` (sent as `X-Session-Id` request header — auto-generated UUID if absent, echoed back as `X-Cart-Session-Id` response header).
 - **Cart identification middleware** (`cart.identify`) runs on all cart routes. It calls `auth('sanctum')` without requiring it — no 401 for guests.

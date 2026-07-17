@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Modules\Order\Application\Actions;
 
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Modules\Cart\Domain\Contracts\CartManagerInterface;
+use Modules\Catalog\Domain\Contracts\CatalogManagerInterface;
 use Modules\Inventory\Domain\Contracts\InventoryManagerInterface;
 use Modules\Order\Domain\DTOs\OrderDTO;
 use Modules\Order\Domain\DTOs\OrderItemDTO;
@@ -19,6 +21,7 @@ class CreateOrderAction
 {
     public function __construct(
         private readonly CartManagerInterface $cart,
+        private readonly CatalogManagerInterface $catalog,
         private readonly InventoryManagerInterface $inventory,
         private readonly CancelOrderAction $cancelOrder,
         private readonly ShipmentManagerInterface $shipment,
@@ -33,12 +36,39 @@ class CreateOrderAction
             throw new EmptyCartException;
         }
 
+        $quantitiesBySku = collect($enrichedCart->items)
+            ->groupBy(fn ($item) => $item->sku)
+            ->map(fn ($items): int => $items->sum('quantity'))
+            ->all();
+        $variantsBySku = $this->catalog->getVariantsBySkus(array_keys($quantitiesBySku));
+        $errors = [];
+
+        foreach ($quantitiesBySku as $sku => $quantity) {
+            $variant = $variantsBySku[$sku] ?? null;
+
+            if ($variant === null) {
+                $errors["items.{$sku}.quantity"] = ['This item is no longer available.'];
+
+                continue;
+            }
+
+            if ($variant->maxQuantityPerOrder !== null && $quantity > $variant->maxQuantityPerOrder) {
+                $errors["items.{$sku}.quantity"] = [
+                    "This item is limited to {$variant->maxQuantityPerOrder} units per order. Your cart currently contains {$quantity}.",
+                ];
+            }
+        }
+
+        if ($errors !== []) {
+            throw ValidationException::withMessages($errors);
+        }
+
         $subtotal = $enrichedCart->totalPrice;
         $shippingCost = $selection->shippingCost;
         $snapshot = $selection->toSnapshot();
         $expiresAt = now()->addMinutes((int) config('shipment.pending_order_ttl_minutes', 15));
 
-        return DB::transaction(function () use ($userId, $enrichedCart, $selection, $snapshot, $subtotal, $shippingCost, $notes, $expiresAt) {
+        return DB::transaction(function () use ($userId, $enrichedCart, $variantsBySku, $selection, $snapshot, $subtotal, $shippingCost, $notes, $expiresAt) {
             $pending = Order::with('items')
                 ->where('user_id', $userId)
                 ->where('status', 'pending')
@@ -70,6 +100,7 @@ class CreateOrderAction
                     'product_title' => $cartItem->productName ?? '',
                     'variant_attributes' => $cartItem->attributes,
                     'quantity' => $cartItem->quantity,
+                    'max_quantity_per_order_snapshot' => $variantsBySku[$cartItem->sku]->maxQuantityPerOrder,
                     'price_per_unit' => $cartItem->basePrice ?? 0,
                     'line_total' => $cartItem->lineTotal,
                 ]);

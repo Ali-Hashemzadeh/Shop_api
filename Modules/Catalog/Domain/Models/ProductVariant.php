@@ -14,6 +14,7 @@ class ProductVariant extends Model
         'is_default',
         'base_price',
         'compare_at_price',
+        'max_quantity_per_order',
         'media_id',
         'attributes',
     ];
@@ -24,6 +25,7 @@ class ProductVariant extends Model
             'is_default' => 'boolean',
             'base_price' => 'integer',
             'compare_at_price' => 'integer',
+            'max_quantity_per_order' => 'integer',
             'attributes' => 'array',
         ];
     }

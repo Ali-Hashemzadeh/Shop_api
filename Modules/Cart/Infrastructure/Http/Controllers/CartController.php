@@ -14,6 +14,7 @@ use Modules\Cart\Application\Actions\MergeCartAction;
 use Modules\Cart\Application\Actions\RemoveFromCartAction;
 use Modules\Cart\Application\Actions\UpdateCartItemAction;
 use Modules\Cart\Domain\Exceptions\CartItemNotFoundException;
+use Modules\Cart\Domain\Exceptions\CartQuantityLimitExceededException;
 use Modules\Cart\Domain\Exceptions\InsufficientStockException;
 use Modules\Cart\Domain\Exceptions\ProductSkuNotFoundException;
 use Modules\Cart\Infrastructure\Http\Requests\AddCartItemRequest;
@@ -49,6 +50,11 @@ class CartController extends Controller
             );
         } catch (ProductSkuNotFoundException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
+        } catch (CartQuantityLimitExceededException $e) {
+            return response()->json([
+                'message' => $e->getMessage(),
+                'errors' => ['quantity' => [$e->validationMessage()]],
+            ], 422);
         } catch (InsufficientStockException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }
@@ -68,6 +74,11 @@ class CartController extends Controller
             return response()->json(['message' => $e->getMessage()], 404);
         } catch (ProductSkuNotFoundException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
+        } catch (CartQuantityLimitExceededException $e) {
+            return response()->json([
+                'message' => $e->getMessage(),
+                'errors' => ['quantity' => [$e->validationMessage()]],
+            ], 422);
         } catch (InsufficientStockException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }

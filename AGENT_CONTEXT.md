@@ -145,6 +145,10 @@ Modules/
   * **Permissions:** `inventory.stock.manage`, `inventory.ledger.view` — both granted to `admin` by `InventoryPermissionsSeeder`.
   * **Test suite:** `InventoryTest` (14) + `InventoryAuthorizationTest` (10) = **24 tests** covering public paths, batch lookup, admin adjust + ledger, reserve/commit/release, oversell prevention, full 401/403/public matrix, and permission-not-role proofs.
 
+### Per-variant Order Quantity Limit (Catalog → Cart → Order)
+* Catalog owns nullable `product_variants.max_quantity_per_order` (integer ≥ 1; `null` means no special limit), mutation validation, DTO/resource output, and batch `CatalogManagerInterface::getVariantsBySkus()` lookup.
+* Cart add validates resulting quantity; update validates final quantity; both guest and authenticated carts return standard 422 quantity errors. Guest merge clamps against both available Inventory and the Catalog limit. Cart item DTO/resources expose configured/effective maximum, remaining addable quantity, and `quantity_valid` without mutating stale carts.
+* Order checkout defensively aggregates by SKU, reloads current Catalog DTOs before any mutation/reservation/Shipment hold, and stores `order_items.max_quantity_per_order_snapshot`. Previous/other/historical Orders are not counted; Inventory remains the independent physical-stock constraint. The Cart is cleared only after successful payment through the established paid callback flow.
 ### 🛒 5. Cart Module (Status: Active & Complete)
 * **Responsibility:** Guest and authenticated shopping cart — add/update/remove items with real-time stock validation, Catalog price enrichment, and session-based guest persistence.
   * **Tables:**

@@ -56,6 +56,7 @@ class CreateProductVariantAction
                 'is_default' => $isDefault,
                 'base_price' => (int) $data['base_price'],
                 'compare_at_price' => isset($data['compare_at_price']) ? (int) $data['compare_at_price'] : null,
+                'max_quantity_per_order' => isset($data['max_quantity_per_order']) ? (int) $data['max_quantity_per_order'] : null,
                 'media_id' => $mediaId,
                 'attributes' => $data['attributes'] ?? null,
             ]);
