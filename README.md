@@ -114,11 +114,12 @@ Provides guest and authenticated shopping carts with real-time stock validation 
 ### Order (Complete)
 Immutable financial contract anchor. Converts a validated cart into a locked order, atomically reserves inventory, and enforces a 15-minute checkout TTL via a scheduled command.
 
-- **Key entities:** `Order` (status, snapshotted `shipping_address` JSON, integer totals), `OrderItem` (snapshotted sku, product_title, price_per_unit, line_total — all integers)
+- **Key entities:** `Order` (status, snapshotted `shipping_address`/`shipment_snapshot`/`customer_snapshot` JSON, integer totals), `OrderItem` (snapshotted sku, product_title, price_per_unit, line_total, `product_snapshot` JSON — all integers where monetary)
 - **Key contract:** `OrderManagerInterface` — `createOrderFromCart`, `markAsPaid`, `markAsComplete`, `getUserOrders`, `findOrder`.
 - **Checkout flow:** `POST /api/v1/orders` first aggregates cart quantities by SKU and batch-revalidates current Catalog limits. Only then does it replace a pending order, snapshot prices/rules/shipping, reserve Inventory, and hold Shipment capacity in one transaction. The cart remains until successful payment; quantity failure changes nothing.
 - **TTL enforcement:** `orders:cancel-expired` runs every minute and cancels pending orders older than 15 minutes, releasing their inventory reservations.
 - **Price snapshot:** Order items store prices at creation time and never change, even if the catalog is updated.
+- **Customer & product snapshots:** Orders are historical records — later profile or catalog edits must never alter them. `customer_snapshot` (`name`, `last_name`, `phone`, `email`) is captured once via `IdentityManagerInterface::getUserSummary()` (no `User` model import into Order). `product_snapshot` (`title`, `sku`, `image_url`, `attributes`) is built entirely from the already-enriched `CartItemDTO` — no second Catalog call, no `Product`/`ProductVariant` model import into Order.
 - **Shipment selection:** Checkout takes `shipment_method_code` (+ `address_id?`, `delivery_slot_id?`); the order stores an immutable `shipment_snapshot`. The legacy `shipment_method_id` column is retained (nullable) for backward compatibility but is no longer written.
 - **Authorization:** Requires `auth:sanctum` + `order.create` permission. Customers receive this permission by default.
 
@@ -345,7 +346,7 @@ tests/
     ├── Cart/
     │   └── CartTest.php                 # Guest + auth carts, stock validation, isolation
     └── Order/
-        └── OrderTest.php                # Checkout flow, auto-cancel, TTL expiry, auth matrix
+        └── OrderTest.php                # Checkout flow, customer/product snapshots + immutability, auto-cancel, TTL expiry, auth matrix
 ```
 
 ---

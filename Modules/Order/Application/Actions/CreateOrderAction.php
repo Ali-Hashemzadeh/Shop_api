@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Modules\Cart\Domain\Contracts\CartManagerInterface;
 use Modules\Catalog\Domain\Contracts\CatalogManagerInterface;
+use Modules\Identity\Domain\Contracts\IdentityManagerInterface;
 use Modules\Inventory\Domain\Contracts\InventoryManagerInterface;
 use Modules\Order\Domain\DTOs\OrderDTO;
 use Modules\Order\Domain\DTOs\OrderItemDTO;
@@ -25,6 +26,7 @@ class CreateOrderAction
         private readonly InventoryManagerInterface $inventory,
         private readonly CancelOrderAction $cancelOrder,
         private readonly ShipmentManagerInterface $shipment,
+        private readonly IdentityManagerInterface $identity,
     ) {}
 
     public function handle(int $userId, ShipmentSelectionDTO $selection, ?string $notes = null): OrderDTO
@@ -68,7 +70,15 @@ class CreateOrderAction
         $snapshot = $selection->toSnapshot();
         $expiresAt = now()->addMinutes((int) config('shipment.pending_order_ttl_minutes', 15));
 
-        return DB::transaction(function () use ($userId, $enrichedCart, $variantsBySku, $selection, $snapshot, $subtotal, $shippingCost, $notes, $expiresAt) {
+        $customer = $this->identity->getUserSummary($userId);
+        $customerSnapshot = [
+            'name' => $customer->name,
+            'last_name' => $customer->lastName,
+            'phone' => $customer->phone,
+            'email' => $customer->email,
+        ];
+
+        return DB::transaction(function () use ($userId, $enrichedCart, $variantsBySku, $selection, $snapshot, $customerSnapshot, $subtotal, $shippingCost, $notes, $expiresAt) {
             $pending = Order::with('items')
                 ->where('user_id', $userId)
                 ->where('status', 'pending')
@@ -89,6 +99,7 @@ class CreateOrderAction
                 'shipment_method_code' => $selection->methodCode,
                 'shipping_address' => $selection->address ?? [],
                 'shipment_snapshot' => $snapshot,
+                'customer_snapshot' => $customerSnapshot,
                 'notes' => $notes,
             ]);
 
@@ -99,6 +110,12 @@ class CreateOrderAction
                     'sku' => $cartItem->sku,
                     'product_title' => $cartItem->productName ?? '',
                     'variant_attributes' => $cartItem->attributes,
+                    'product_snapshot' => [
+                        'title' => $cartItem->productName,
+                        'sku' => $cartItem->sku,
+                        'image_url' => $cartItem->imageUrl,
+                        'attributes' => $cartItem->attributes,
+                    ],
                     'quantity' => $cartItem->quantity,
                     'max_quantity_per_order_snapshot' => $variantsBySku[$cartItem->sku]->maxQuantityPerOrder,
                     'price_per_unit' => $cartItem->basePrice ?? 0,

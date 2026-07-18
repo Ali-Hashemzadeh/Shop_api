@@ -21,6 +21,7 @@ class OrderItemResource extends JsonResource
             'sku' => $dto->sku,
             'product_title' => $dto->productTitle,
             'variant_attributes' => $dto->variantAttributes,
+            'product_snapshot' => $dto->productSnapshot,
             'quantity' => $dto->quantity,
             'max_quantity_per_order_snapshot' => $dto->maxQuantityPerOrderSnapshot,
             'price_per_unit' => $dto->pricePerUnit,

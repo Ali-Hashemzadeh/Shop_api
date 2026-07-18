@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Modules\Cart\Domain\Models\Cart;
 use Modules\Cart\Domain\Models\CartItem;
+use Modules\Catalog\Domain\Contracts\CatalogManagerInterface;
 use Modules\Catalog\Domain\Models\ProductVariant;
 use Modules\Identity\Domain\Models\Address;
 use Modules\Identity\Domain\Models\User;
@@ -26,6 +27,8 @@ use Modules\Order\Domain\Models\OrderItem;
 class OrderSampleDataSeeder extends Seeder
 {
     private InventoryManagerInterface $inventory;
+
+    private CatalogManagerInterface $catalog;
 
     /** @var array<int, ProductVariant> */
     private array $variants = [];
@@ -47,6 +50,7 @@ class OrderSampleDataSeeder extends Seeder
         }
 
         $this->inventory = app(InventoryManagerInterface::class);
+        $this->catalog = app(CatalogManagerInterface::class);
 
         [$sara, $reza, $nima] = $this->demoCustomers();
 
@@ -148,10 +152,20 @@ class OrderSampleDataSeeder extends Seeder
             $variant = $this->variants[$index];
             $lineTotal = $variant->base_price * $qty;
             $total += $lineTotal;
+            $title = $variant->product?->title ?? 'Product';
+            // Mirrors CreateOrderAction: resolved once via the Catalog contract at
+            // "checkout" time, then frozen — never re-read if the catalog changes later.
+            $catalogVariant = $this->catalog->findVariantBySku($variant->sku);
             $items[] = [
                 'sku' => $variant->sku,
-                'product_title' => $variant->product?->title ?? 'Product',
+                'product_title' => $title,
                 'variant_attributes' => $variant->attributes,
+                'product_snapshot' => [
+                    'title' => $title,
+                    'sku' => $variant->sku,
+                    'image_url' => $catalogVariant?->imageUrl,
+                    'attributes' => $variant->attributes,
+                ],
                 'quantity' => $qty,
                 'price_per_unit' => $variant->base_price,
                 'line_total' => $lineTotal,
@@ -168,6 +182,16 @@ class OrderSampleDataSeeder extends Seeder
             'address' => $address?->address,
         ];
 
+        // Mirrors CreateOrderAction: the buyer's identity is frozen onto the order at
+        // "checkout" time via IdentityManagerInterface-equivalent fields — never re-read
+        // from the User record later, even in this demo data.
+        $customerSnapshot = [
+            'name' => $user->name,
+            'last_name' => $user->last_name,
+            'phone' => $user->phone,
+            'email' => $user->email,
+        ];
+
         $order = Order::create([
             'user_id' => $user->id,
             'status' => 'pending',
@@ -175,6 +199,7 @@ class OrderSampleDataSeeder extends Seeder
             'shipping_cost' => 0,
             'tax_amount' => 0,
             'shipping_address' => $snapshot,
+            'customer_snapshot' => $customerSnapshot,
             'notes' => "[demo] {$status} order",
         ]);
 

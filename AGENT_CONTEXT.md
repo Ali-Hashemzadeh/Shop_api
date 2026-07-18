@@ -58,7 +58,8 @@ Modules/
       * **Actions:** `CheckUserStatus`, `RequestOtp`, `VerifyOtp`, `SetPassword`, `LoginWithPassword` (Application\Actions). All DB access goes through `UserRepositoryInterface` — no model leaks across the module boundary.
   * **Public Cross-Module Contract:**
       * `Modules\Identity\Domain\Contracts\IdentityManagerInterface`: exposes `isAdmin(int $userId): bool`. Available for cross-module role checks, but **prefer direct permission checks via `$user->can('...')` in policies instead** — see Authorization Pattern below.
-      * Concrete: `EloquentIdentityManager` (bound in `IdentityServiceProvider::register()`). Internally calls `User::find()->hasRole('admin')` — all Spatie internals stay inside Identity.
+      * `getUserSummary(int $userId): UserSummaryDTO` — returns `{id, name, lastName, phone, email}` (`Domain/DTOs/UserSummaryDTO.php`). Consumed by Order's `CreateOrderAction` to build the immutable `customer_snapshot` at checkout; never leaks the `User` model across the boundary.
+      * Concrete: `EloquentIdentityManager` (bound in `IdentityServiceProvider::register()`). Internally calls `User::find()->hasRole('admin')` / `User::findOrFail()->…` — all Spatie internals stay inside Identity.
   * **Route structure:** user-facing address routes registered under `prefix('addresses')` (plural). Admin user management under `prefix('admin/users')`. Profile self-service under `prefix('profile')`.
   * **Known fix applied:** `UpdateAddressRequest` had `city_id` as `required` instead of `sometimes` — corrected so PATCH requests can update partial fields without supplying city.
   * **Address map pin:** `addresses` carries `latitude`/`longitude` (`decimal(10,7)`) and a nullable `map_address` text line (the map's reverse-geocoded string, distinct from the user-typed `address`). Columns are nullable at the DB level, but `StoreAddressRequest` requires `latitude`/`longitude` (`numeric`, `between:-90,90` / `between:-180,180`) on create; `UpdateAddressRequest` treats all three as `sometimes`. `map_address` is always optional. Exposed on `AddressResource`.
@@ -175,8 +176,8 @@ Modules/
 ### 📦 6. Order Module (Status: Active & Complete)
 * **Responsibility:** Immutable financial contract anchor. Translates a validated cart into a locked order record, atomically reserves inventory, and manages a 15-minute pending-order TTL via a scheduled command.
   * **Tables:**
-      * `orders`: `id`, `user_id` (indexed), `status` (string, default `pending`), `total_amount` (int), `shipping_cost` (int, default 0), `tax_amount` (int, default 0), `shipment_method_id` (nullable bigint), `shipping_address` (JSON — snapshotted at creation, immutable), `transaction_ref` (nullable unique string), `notes` (nullable text), timestamps. Index on `[user_id, status]`.
-      * `order_items`: `id`, `order_id` (FK → orders, cascade delete), `sku`, `product_title`, `variant_attributes` (JSON), `quantity` (int), `price_per_unit` (int), `line_total` (int), timestamps. All monetary columns are integers (Cents Rule). Prices are snapshotted at order creation — they never update even if the catalog changes.
+      * `orders`: `id`, `user_id` (indexed), `status` (string, default `pending`), `total_amount` (int), `shipping_cost` (int, default 0), `tax_amount` (int, default 0), `shipment_method_id` (nullable bigint), `shipping_address` (JSON — snapshotted at creation, immutable), `shipment_snapshot` (nullable JSON), `customer_snapshot` (nullable JSON — `{name, last_name, phone, email}`, captured via `IdentityManagerInterface::getUserSummary()` at checkout; later profile edits never touch it), `transaction_ref` (nullable unique string), `notes` (nullable text), timestamps. Index on `[user_id, status]`.
+      * `order_items`: `id`, `order_id` (FK → orders, cascade delete), `sku`, `product_title`, `variant_attributes` (JSON), `product_snapshot` (nullable JSON — `{title, sku, image_url, attributes}`, captured from the enriched `CartItemDTO` at checkout, **not** a second Catalog call; later catalog edits never touch it), `quantity` (int), `max_quantity_per_order_snapshot` (nullable int), `price_per_unit` (int), `line_total` (int), timestamps. All monetary columns are integers (Cents Rule). Prices and snapshots are captured at order creation — they never update even if the catalog or the customer's profile changes.
   * **Domain Models (internal):** `Order`, `OrderItem`.
   * **Public Contract:** `Modules\Order\Domain\Contracts\OrderManagerInterface`:
       * `createOrderFromCart(int $userId, int $addressId, int $shipmentMethodId, ?string $notes): OrderDTO` — full checkout orchestration.
@@ -184,16 +185,16 @@ Modules/
       * `markAsComplete(int $orderId): OrderDTO` — transitions to `processing`.
       * `getUserOrders(int $userId, int $perPage = 15): LengthAwarePaginator` — paginator items are DTOs (mapped via `->through()`).
       * `findOrder(int $orderId): ?OrderDTO`.
-  * **DTOs:** `OrderDTO` (id, userId, status as `OrderStatus` enum, totalAmount, shippingCost, taxAmount, shipmentMethodId, shippingAddress array, transactionRef, notes, createdAt, items[]), `OrderItemDTO` (id, orderId, sku, productTitle, variantAttributes, quantity, pricePerUnit, lineTotal).
+  * **DTOs:** `OrderDTO` (id, userId, status as `OrderStatus` enum, totalAmount, shippingCost, taxAmount, shipmentMethodId, shippingAddress array, shipmentSnapshot, **customerSnapshot**, transactionRef, notes, createdAt, items[]), `OrderItemDTO` (id, orderId, sku, productTitle, variantAttributes, **productSnapshot**, quantity, maxQuantityPerOrderSnapshot, pricePerUnit, lineTotal). Both snapshot fields are nullable arrays, exposed as-is on `OrderResource`/`OrderItemResource`.
   * **Enum:** `OrderStatus: string` — PENDING, PAID, PROCESSING, SHIPPED, CANCELLED, FAILED.
   * **Exceptions:** `EmptyCartException`, `InvalidAddressException` (both in `Domain/Exceptions/`).
-  * **`CreateOrderAction`** — constructor deps: `CartManagerInterface`, `InventoryManagerInterface`. Single `DB::transaction()`:
-      1. Fetch enriched cart via `CartManagerInterface::getCart()`.
-      2. Snapshot address from `DB::table('addresses')` (no Identity model import).
-      3. Cancel any existing pending order for the user + `releaseReservation` per item.
-      4. Create `Order` + `OrderItem` records (prices snapshotted from CartItemDTO).
-      5. `reserveStock(sku, qty, orderId)` per item.
-      6. `clearCart(cartId)`.
+  * **`CreateOrderAction`** — constructor deps: `CartManagerInterface`, `CatalogManagerInterface`, `InventoryManagerInterface`, `CancelOrderAction`, `ShipmentManagerInterface`, `IdentityManagerInterface`. Single `DB::transaction()`:
+      1. Fetch enriched cart via `CartManagerInterface::getCart()`; validate per-SKU quantity limits against `CatalogManagerInterface::getVariantsBySkus()`.
+      2. Resolve the shipment selection snapshot (`ShipmentSelectionDTO::toSnapshot()`) and the customer snapshot (`IdentityManagerInterface::getUserSummary($userId)`, mapped to `{name, last_name, phone, email}`) **before** the transaction opens — both are pure reads.
+      3. Cancel any existing pending order for the user + `releaseAndCancel`.
+      4. Create `Order` with `shipment_snapshot` + `customer_snapshot`.
+      5. Create each `OrderItem` (prices snapshotted from `CartItemDTO`, plus `product_snapshot` built from `CartItemDTO::{sku, productName, imageUrl, attributes}` — **no second Catalog call**), then `reserveStock(sku, qty, orderId)`.
+      6. `holdForPendingOrder()` on the Shipment contract (local-delivery slot; no-op otherwise).
   * **`CancelOrderAction`** — dep: `InventoryManagerInterface`. Owns the single "release reservations + mark cancelled" primitive (`releaseAndCancel(Order)`, caller-transactional) reused by `CreateOrderAction` (pending replacement) and `CancelExpiredOrdersAction`. `handle(orderId, userId)` is the user-facing cancel: 404 if missing, **403 if the order is not owned by `userId`**, 422 unless status is `pending`; otherwise releases every item's reservation and sets `cancelled` inside a transaction.
   * **`CancelExpiredOrdersAction`** — dep: `CancelOrderAction`. Finds pending orders with `created_at < now() - 15 min` and calls `releaseAndCancel` per order (each wrapped in its own transaction). Run every minute by `orders:cancel-expired` Artisan command scheduled in `routes/console.php`.
   * **HTTP Endpoints:**
@@ -202,7 +203,7 @@ Modules/
       * `POST /api/v1/orders/{order}/cancel` — user cancels **their own** pending order; releases reserved stock and returns 200 OrderResource. `auth:sanctum`; 403 for another user's order, 404 if missing, 422 if not `pending`.
   * **Authorization:** `StoreOrderRequest::authorize()` checks `order.create` → 403 before validation. Cancellation is ownership-gated in `CancelOrderAction` (self-service, like Cart). No `OrderPolicy` yet — admin order management is a future concern.
   * **Permissions:** `order.create`, `order.view-own`, `order.view-admin` — admin receives all three; customer receives `order.create` + `order.view-own`.
-  * **Test suite:** `OrderTest` — **11 tests**: price snapshot + stock reservation + cart-cleared, auto-cancel pending, TTL expiry command, user cancel releases stock, cancel ownership 403 / 404 / non-pending 422, 401/422 auth matrix.
+  * **Test suite:** `OrderTest` — **14 tests**: price snapshot + stock reservation, immutable customer/product snapshot creation + post-update immutability (profile edit / catalog title edit do not alter a placed order), auto-cancel pending, TTL expiry command, user cancel releases stock, cancel ownership 403 / 404 / non-pending 422, 401/422 auth matrix.
 
 ### 💳 7. Payment Module (Status: Active & Complete)
 * **Responsibility:** Hybrid payment processing — cash/offline (`in_person`) and online gateway (`online`) via the Strategy Pattern.

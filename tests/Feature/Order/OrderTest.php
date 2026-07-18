@@ -10,6 +10,7 @@ use Modules\Catalog\Domain\Models\Product;
 use Modules\Catalog\Domain\Models\ProductVariant;
 use Modules\Identity\Domain\Models\User;
 use Modules\Inventory\Domain\Models\InventoryStock;
+use Modules\Media\Domain\Models\Media;
 use Modules\Order\Domain\Models\Order;
 use Modules\Order\Domain\Models\OrderItem;
 use Tests\TestCase;
@@ -101,6 +102,135 @@ class OrderTest extends TestCase
             'sku' => 'TEST-001',
             'reserved_quantity' => 2,
         ]);
+    }
+
+    // ── Scenario 1b: Immutable snapshots — customer + product ─────────────────
+
+    /** @test */
+    public function it_stores_an_immutable_customer_snapshot_on_order_creation(): void
+    {
+        $user = $this->actingAsCustomer();
+        $addressId = $this->createAddress($user->id);
+        $this->createVariantWithStock('SNAP-001', 40000, 5);
+        $this->createCartWithItem($user->id, 'SNAP-001', 1);
+
+        $this->postJson('/api/v1/orders', [
+            'address_id' => $addressId,
+            'shipment_method_code' => 'in_person_pickup',
+        ])
+            ->assertStatus(201)
+            ->assertJsonPath('customer_snapshot.name', $user->name)
+            ->assertJsonPath('customer_snapshot.last_name', $user->last_name)
+            ->assertJsonPath('customer_snapshot.phone', $user->phone)
+            ->assertJsonPath('customer_snapshot.email', $user->email);
+
+        $order = Order::where('user_id', $user->id)->latest('id')->first();
+        $this->assertSame([
+            'name' => $user->name,
+            'last_name' => $user->last_name,
+            'phone' => $user->phone,
+            'email' => $user->email,
+        ], $order->customer_snapshot);
+    }
+
+    /** @test */
+    public function it_stores_an_immutable_product_snapshot_on_order_item_creation(): void
+    {
+        $user = $this->actingAsCustomer();
+        $addressId = $this->createAddress($user->id);
+
+        $media = Media::create([
+            'file_path' => 'products/ip16.jpg',
+            'mime_type' => 'image/jpeg',
+            'file_size' => 2048,
+            'original_name' => 'ip16.jpg',
+        ]);
+
+        $product = Product::create([
+            'title' => 'iPhone 16 Pro',
+            'slug' => 'iphone-16-pro',
+            'status' => 'published',
+        ]);
+
+        ProductVariant::create([
+            'product_id' => $product->id,
+            'sku' => 'IPH16-BLK-256',
+            'type' => 'color',
+            'base_price' => 500000,
+            'is_default' => true,
+            'media_id' => $media->id,
+            'attributes' => ['color' => 'Black', 'storage' => '256GB'],
+        ]);
+
+        InventoryStock::create(['sku' => 'IPH16-BLK-256', 'quantity' => 5, 'reserved_quantity' => 0]);
+        $this->createCartWithItem($user->id, 'IPH16-BLK-256', 1);
+
+        $this->postJson('/api/v1/orders', [
+            'address_id' => $addressId,
+            'shipment_method_code' => 'in_person_pickup',
+        ])
+            ->assertStatus(201)
+            ->assertJsonPath('items.0.product_snapshot.title', 'iPhone 16 Pro')
+            ->assertJsonPath('items.0.product_snapshot.sku', 'IPH16-BLK-256')
+            ->assertJsonPath('items.0.product_snapshot.attributes.color', 'Black')
+            ->assertJsonPath('items.0.product_snapshot.attributes.storage', '256GB');
+
+        $orderItem = OrderItem::where('sku', 'IPH16-BLK-256')->latest('id')->first();
+        $this->assertSame('iPhone 16 Pro', $orderItem->product_snapshot['title']);
+        $this->assertSame('IPH16-BLK-256', $orderItem->product_snapshot['sku']);
+        $this->assertNotNull($orderItem->product_snapshot['image_url']);
+        $this->assertSame(['color' => 'Black', 'storage' => '256GB'], $orderItem->product_snapshot['attributes']);
+    }
+
+    /** @test */
+    public function order_snapshots_remain_unchanged_after_later_profile_and_catalog_updates(): void
+    {
+        $user = $this->actingAsCustomer();
+        $addressId = $this->createAddress($user->id);
+
+        $product = Product::create([
+            'title' => 'Original Title',
+            'slug' => 'original-title',
+            'status' => 'published',
+        ]);
+        ProductVariant::create([
+            'product_id' => $product->id,
+            'sku' => 'IMMUT-001',
+            'type' => 'color',
+            'base_price' => 20000,
+            'is_default' => true,
+            'attributes' => ['color' => 'Red'],
+        ]);
+        InventoryStock::create(['sku' => 'IMMUT-001', 'quantity' => 5, 'reserved_quantity' => 0]);
+        $this->createCartWithItem($user->id, 'IMMUT-001', 1);
+
+        $this->postJson('/api/v1/orders', [
+            'address_id' => $addressId,
+            'shipment_method_code' => 'in_person_pickup',
+        ])->assertStatus(201);
+
+        $order = Order::where('user_id', $user->id)->latest('id')->first();
+        $orderItem = $order->items()->first();
+
+        $originalCustomerSnapshot = $order->customer_snapshot;
+        $originalProductSnapshot = $orderItem->product_snapshot;
+
+        // Simulate later profile + catalog edits — the snapshot must not move.
+        $user->update([
+            'name' => 'Changed Name',
+            'last_name' => 'Changed Last',
+            'phone' => '09999999999',
+            'email' => 'changed@example.com',
+        ]);
+        $product->update(['title' => 'Renamed Product']);
+
+        $order->refresh();
+        $orderItem->refresh();
+
+        $this->assertSame($originalCustomerSnapshot, $order->customer_snapshot);
+        $this->assertSame($originalProductSnapshot, $orderItem->product_snapshot);
+        $this->assertNotSame('Changed Name', $order->customer_snapshot['name']);
+        $this->assertNotSame('Renamed Product', $orderItem->product_snapshot['title']);
     }
 
     // ── Scenario 2: Auto-cancel — existing pending order is replaced ──────────

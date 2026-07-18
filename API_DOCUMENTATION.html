@@ -2508,6 +2508,10 @@ await guestCartRequest('GET',  '/');
   </div>
 
   <div class="note">
+    <strong>Customer &amp; product snapshots.</strong> Orders are historical records, so every order carries a frozen copy of the buyer's identity and each purchased product. <code>customer_snapshot</code> (<code>name</code>, <code>last_name</code>, <code>phone</code>, <code>email</code>) is captured on the order at checkout; each item's <code>product_snapshot</code> (<code>title</code>, <code>sku</code>, <code>image_url</code>, <code>attributes</code>) is captured on that order item. <strong>Neither is ever rewritten</strong> — if the customer later edits their profile, or an admin renames/re-images the product, this order still shows exactly what was true at checkout. Both fields are nullable JSON and appear on every order response (create, list, cancel).
+  </div>
+
+  <div class="note">
     <strong>15-minute checkout TTL.</strong> A pending order that is not paid within 15 minutes is automatically cancelled and its inventory reservations are released. If the user tries to check out again, the old pending order is cancelled and replaced by the new one.
   </div>
 
@@ -2551,6 +2555,12 @@ await guestCartRequest('GET',  '/');
   <span class="key">"shipment_method_id"</span>:  <span class="null-val">null</span>,   <span class="comment">// legacy, kept for BC</span>
   <span class="key">"shipment_method_code"</span>: <span class="str">"local_delivery"</span>,
   <span class="key">"shipment_snapshot"</span>: { <span class="comment">/* immutable method_code/title/type/shipping_cost/address/delivery_slot/pickup_location */</span> },
+  <span class="key">"customer_snapshot"</span>: {
+    <span class="key">"name"</span>:      <span class="str">"Sara"</span>,
+    <span class="key">"last_name"</span>: <span class="str">"Ahmadi"</span>,
+    <span class="key">"phone"</span>:     <span class="str">"09123456789"</span>,
+    <span class="key">"email"</span>:     <span class="str">"sara@example.com"</span>
+  },
   <span class="key">"shipping_address"</span>: {
     <span class="key">"id"</span>:          <span class="num">3</span>,
     <span class="key">"title"</span>:       <span class="str">"Home"</span>,
@@ -2568,6 +2578,12 @@ await guestCartRequest('GET',  '/');
       <span class="key">"sku"</span>:                <span class="str">"S25U-TBK-256"</span>,
       <span class="key">"product_title"</span>:     <span class="str">"Samsung Galaxy S25 Ultra"</span>,
       <span class="key">"variant_attributes"</span>: [],
+      <span class="key">"product_snapshot"</span>: {
+        <span class="key">"title"</span>:      <span class="str">"Samsung Galaxy S25 Ultra"</span>,
+        <span class="key">"sku"</span>:        <span class="str">"S25U-TBK-256"</span>,
+        <span class="key">"image_url"</span>:  <span class="str">"/storage/products/s25u-titanium-black.webp"</span>,
+        <span class="key">"attributes"</span>: { <span class="key">"color"</span>: <span class="str">"Titanium Black"</span>, <span class="key">"storage"</span>: <span class="str">"256GB"</span> }
+      },
       <span class="key">"quantity"</span>:           <span class="num">2</span>,
       <span class="key">"price_per_unit"</span>:     <span class="num">89000000</span>,   <span class="comment">// snapshotted at checkout</span>
       <span class="key">"line_total"</span>:         <span class="num">178000000</span>
@@ -2577,6 +2593,12 @@ await guestCartRequest('GET',  '/');
       <span class="key">"sku"</span>:                <span class="str">"AIRPODS-PRO2"</span>,
       <span class="key">"product_title"</span>:     <span class="str">"AirPods Pro 2"</span>,
       <span class="key">"variant_attributes"</span>: [],
+      <span class="key">"product_snapshot"</span>: {
+        <span class="key">"title"</span>:      <span class="str">"AirPods Pro 2"</span>,
+        <span class="key">"sku"</span>:        <span class="str">"AIRPODS-PRO2"</span>,
+        <span class="key">"image_url"</span>:  <span class="null-val">null</span>,
+        <span class="key">"attributes"</span>: {}
+      },
       <span class="key">"quantity"</span>:           <span class="num">1</span>,
       <span class="key">"price_per_unit"</span>:     <span class="num">89000000</span>,
       <span class="key">"line_total"</span>:         <span class="num">89000000</span>
@@ -2624,10 +2646,11 @@ await guestCartRequest('GET',  '/');
       <span class="key">"tax_amount"</span>:         <span class="num">0</span>,
       <span class="key">"shipment_method_id"</span>: <span class="num">1</span>,
       <span class="key">"shipping_address"</span>:   { <span class="comment">/* snapshotted address object */</span> },
+      <span class="key">"customer_snapshot"</span>:  { <span class="comment">/* {name, last_name, phone, email} — frozen at checkout, see note above */</span> },
       <span class="key">"transaction_ref"</span>:    <span class="null-val">null</span>,
       <span class="key">"notes"</span>:              <span class="null-val">null</span>,
       <span class="key">"created_at"</span>:         <span class="str">"2026-06-26T12:34:56.000000Z"</span>,
-      <span class="key">"items"</span>:              [ <span class="comment">/* same shape as POST response items */</span> ]
+      <span class="key">"items"</span>:              [ <span class="comment">/* same shape as POST response items, including per-item product_snapshot */</span> ]
     }
   ],
   <span class="key">"links"</span>: { <span class="key">"first"</span>: <span class="str">"..."</span>, <span class="key">"last"</span>: <span class="str">"..."</span>, <span class="key">"prev"</span>: <span class="null-val">null</span>, <span class="key">"next"</span>: <span class="null-val">null</span> },
@@ -2668,10 +2691,11 @@ await guestCartRequest('GET',  '/');
   <span class="key">"tax_amount"</span>:          <span class="num">0</span>,
   <span class="key">"shipment_method_id"</span>:  <span class="num">1</span>,
   <span class="key">"shipping_address"</span>:    { <span class="comment">/* snapshotted address object */</span> },
+  <span class="key">"customer_snapshot"</span>:   { <span class="comment">/* {name, last_name, phone, email} — frozen at checkout, see note above */</span> },
   <span class="key">"transaction_ref"</span>:     <span class="null-val">null</span>,
   <span class="key">"notes"</span>:               <span class="null-val">null</span>,
   <span class="key">"created_at"</span>:          <span class="str">"2026-06-26T12:34:56.000000Z"</span>,
-  <span class="key">"items"</span>:               [ <span class="comment">/* same shape as POST /orders response items */</span> ]
+  <span class="key">"items"</span>:               [ <span class="comment">/* same shape as POST /orders response items, including per-item product_snapshot */</span> ]
 }</pre>
       <div class="block-label">Error Responses</div>
       <table>
@@ -2852,7 +2876,7 @@ await guestCartRequest('GET',  '/');
   </div>
 
   <h3 id="shipment-admin">Admin / Operator Workflow</h3>
-  <p>Explicit business-action endpoints (permission-gated, 403 before validation). There is no generic "set status" endpoint — each action validates the method-specific transition. Base path <code>/admin/shipments/{publicCode}</code>.</p>
+  <p>Explicit business-action endpoints (permission-gated via <code>$user-&gt;can(...)</code>, <strong>403 before validation</strong>). There is no generic "set status" endpoint — each action validates its own method-specific transition and calling one out of order returns <strong>422</strong>, not 409. All routes require <code>auth:sanctum</code> + <code>throttle:api</code> and share the base path <code>/admin/shipments/{publicCode}</code> unless noted otherwise. <code>{publicCode}</code> is the same code shown to customers, e.g. <code>SH-X0T3K9ABCD</code>.</p>
   <table>
     <tr><th>Action (POST)</th><th>Permission</th><th>Transition</th><th>Body</th></tr>
     <tr><td><code>/start-preparing</code></td><td>shipment.start-preparing</td><td>pending → preparing (order → processing)</td><td><code>note?</code></td></tr>
@@ -2866,7 +2890,347 @@ await guestCartRequest('GET',  '/');
     <tr><td><code>/mark-ready-for-pickup</code></td><td>shipment.pickup.mark-ready</td><td>preparing → ready_for_pickup</td><td><code>note?</code></td></tr>
     <tr><td><code>/confirm-pickup</code></td><td>shipment.pickup.complete</td><td>ready_for_pickup → picked_up (order → completed)</td><td><code>receiver_name?</code>, <code>note?</code></td></tr>
   </table>
-  <p>Listing &amp; slot management: <code>GET /admin/shipments</code> (filters: status, method_code, method_type, order_id, tracking_number, delivery_date, delivery_slot_id, date_from/to; paginated <code>data</code>/<code>links</code>/<code>meta</code>, 15/page, per_page clamped to 100), <code>GET /admin/shipments/{publicCode}</code>, and delivery-slot admin: <code>GET</code> / <code>PATCH /admin/shipment/delivery-slots[/{slot}]</code> (change capacity / reserve part of it — never below active reservations), <code>POST .../close</code>, <code>POST .../open</code>.</p>
+  <div class="warn"><strong>Invalid transitions return 422, not 409.</strong> Calling an action that doesn't match the shipment's current status (e.g. <code>hand-to-post</code> on a shipment still <code>pending</code>) throws a domain exception rendered as: <pre>{ <span class="key">"message"</span>: <span class="str">"Cannot transition shipment from 'pending' to 'handed_to_post'."</span> }</pre></div>
+  <p>Every action below returns <strong>200 OK</strong> with the full updated shipment (same shape as <a href="#shipment-read">Read a Shipment</a>). Missing the required permission returns <strong>403</strong> before the request body is even validated.</p>
+
+  <h3 id="shipment-admin-list">Admin — List &amp; Read Shipments</h3>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/admin/shipments</span>
+      <span class="badge admin">Requires shipment.view-admin</span>
+      <span class="badge rate">60/min · per user</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Paginated, filterable list of every shipment in the system.</p>
+      <div class="block-label">Query Parameters</div>
+      <table>
+        <tr><th>Param</th><th>Type</th><th>Description</th></tr>
+        <tr><td>status</td><td class="opt">optional string</td><td>Exact match, e.g. <code>out_for_delivery</code></td></tr>
+        <tr><td>method_code</td><td class="opt">optional string</td><td><code>post_standard</code> / <code>post_express</code> / <code>local_delivery</code> / <code>in_person_pickup</code></td></tr>
+        <tr><td>method_type</td><td class="opt">optional string</td><td><code>postal</code> / <code>local_delivery</code> / <code>pickup</code></td></tr>
+        <tr><td>order_id</td><td class="opt">optional integer</td><td>Exact order match</td></tr>
+        <tr><td>tracking_number</td><td class="opt">optional string</td><td>Exact match</td></tr>
+        <tr><td>delivery_slot_id</td><td class="opt">optional integer</td><td>Shipments booked into this slot</td></tr>
+        <tr><td>delivery_date</td><td class="opt">optional date</td><td>Shipments whose booked slot falls on this date</td></tr>
+        <tr><td>date_from / date_to</td><td class="opt">optional date</td><td>Filters by <code>created_at</code></td></tr>
+        <tr><td>per_page</td><td class="opt">optional integer</td><td>Default 15, clamped 1–100</td></tr>
+        <tr><td>page</td><td class="opt">optional integer</td><td>Page number</td></tr>
+      </table>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{
+  <span class="key">"data"</span>: [
+    {
+      <span class="key">"id"</span>: <span class="str">"SH-X0T3K9ABCD"</span>, <span class="key">"order_id"</span>: <span class="num">42</span>,
+      <span class="key">"method_code"</span>: <span class="str">"local_delivery"</span>, <span class="key">"method_type"</span>: <span class="str">"local_delivery"</span>, <span class="key">"shipping_cost"</span>: <span class="num">300000</span>,
+      <span class="key">"status"</span>: <span class="str">"ready_for_dispatch"</span>, <span class="key">"status_label"</span>: <span class="str">"Ready for dispatch"</span>,
+      <span class="key">"tracking_number"</span>: <span class="null-val">null</span>,
+      <span class="key">"delivery_slot"</span>: { <span class="key">"slot_id"</span>: <span class="num">103</span>, <span class="key">"date"</span>: <span class="str">"2026-07-15"</span>, <span class="key">"starts_at"</span>: <span class="str">"15:00"</span>, <span class="key">"ends_at"</span>: <span class="str">"16:30"</span> },
+      <span class="key">"created_at"</span>: <span class="str">"2026-07-14T09:12:00.000000Z"</span>
+    }
+  ],
+  <span class="key">"links"</span>: { <span class="key">"first"</span>: <span class="str">"..."</span>, <span class="key">"last"</span>: <span class="str">"..."</span>, <span class="key">"prev"</span>: <span class="null-val">null</span>, <span class="key">"next"</span>: <span class="null-val">null</span> },
+  <span class="key">"meta"</span>: { <span class="key">"current_page"</span>: <span class="num">1</span>, <span class="key">"last_page"</span>: <span class="num">1</span>, <span class="key">"per_page"</span>: <span class="num">15</span>, <span class="key">"total"</span>: <span class="num">1</span> }
+}</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/admin/shipments/{publicCode}</span>
+      <span class="badge admin">Requires shipment.view-admin</span>
+      <span class="badge rate">60/min · per user</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Same response shape as the customer-facing <a href="#shipment-read">Read a Shipment</a> endpoint, but accessible to any operator regardless of order ownership.</p>
+    </div>
+  </div>
+
+  <h3 id="shipment-admin-actions">Admin — Status Transition Actions</h3>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/admin/shipments/{publicCode}/start-preparing</span>
+      <span class="badge admin">Requires shipment.start-preparing</span>
+    </div>
+    <div class="endpoint-body">
+      <p>First operator action on any method. <code>pending → preparing</code>; the order moves to <code>processing</code>.</p>
+      <div class="block-label">Request Body</div>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr><td>note</td><td class="opt">optional string</td><td>Max 1000 chars. Recorded on the status history entry.</td></tr>
+      </table>
+      <pre>{ <span class="key">"note"</span>: <span class="str">"Picking started"</span> }</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/admin/shipments/{publicCode}/mark-ready-for-post</span>
+      <span class="badge admin">Requires shipment.post.mark-ready</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Postal methods only (<code>post_standard</code> / <code>post_express</code>). <code>preparing → ready_for_post</code>.</p>
+      <div class="block-label">Request Body</div>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr><td>note</td><td class="opt">optional string</td><td>Max 1000 chars.</td></tr>
+      </table>
+      <pre>{ <span class="key">"note"</span>: <span class="str">"Packed, awaiting courier pickup"</span> }</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/admin/shipments/{publicCode}/hand-to-post</span>
+      <span class="badge admin">Requires shipment.post.hand-over</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Postal methods only. <code>ready_for_post → handed_to_post</code>; the order moves to <code>shipped</code>. This is the last status the app ever reports for a postal shipment.</p>
+      <div class="block-label">Request Body</div>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr><td>tracking_number</td><td class="req">required string</td><td>Max 255 chars. Shown to the customer from this point on.</td></tr>
+        <tr><td>carrier_name</td><td class="opt">optional string</td><td>Max 255 chars, e.g. <code>"Iran Post"</code>.</td></tr>
+        <tr><td>note</td><td class="opt">optional string</td><td>Max 1000 chars.</td></tr>
+        <tr><td>postal_receipt_media_id</td><td class="opt">optional integer</td><td>Pre-uploaded via <code>POST /media</code> — id of a scanned receipt/waybill image.</td></tr>
+      </table>
+      <pre>{
+  <span class="key">"tracking_number"</span>:          <span class="str">"TRK-999"</span>,
+  <span class="key">"carrier_name"</span>:             <span class="str">"Iran Post"</span>,
+  <span class="key">"note"</span>:                     <span class="str">"Handed to courier at 14:00"</span>,
+  <span class="key">"postal_receipt_media_id"</span>:  <span class="num">88</span>
+}</pre>
+      <div class="block-label">Error — 422 Unprocessable</div>
+      <pre>{
+  <span class="key">"message"</span>: <span class="str">"The tracking number field is required."</span>,
+  <span class="key">"errors"</span>:  { <span class="key">"tracking_number"</span>: [<span class="str">"The tracking number field is required."</span>] }
+}</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/admin/shipments/{publicCode}/mark-ready-for-dispatch</span>
+      <span class="badge admin">Requires shipment.delivery.mark-ready</span>
+    </div>
+    <div class="endpoint-body">
+      <p><code>local_delivery</code> only. <code>preparing → ready_for_dispatch</code>.</p>
+      <div class="block-label">Request Body</div>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr><td>note</td><td class="opt">optional string</td><td>Max 1000 chars.</td></tr>
+      </table>
+      <pre>{ <span class="key">"note"</span>: <span class="str">"Loaded onto the delivery van"</span> }</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/admin/shipments/{publicCode}/mark-out-for-delivery</span>
+      <span class="badge admin">Requires shipment.delivery.dispatch</span>
+    </div>
+    <div class="endpoint-body">
+      <p><code>local_delivery</code> only. <code>ready_for_dispatch → out_for_delivery</code>; the order moves to <code>shipped</code>.</p>
+      <div class="block-label">Request Body</div>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr><td>note</td><td class="opt">optional string</td><td>Max 1000 chars.</td></tr>
+      </table>
+      <pre>{ <span class="key">"note"</span>: <span class="str">"Driver en route"</span> }</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/admin/shipments/{publicCode}/mark-delivered</span>
+      <span class="badge admin">Requires shipment.delivery.complete</span>
+    </div>
+    <div class="endpoint-body">
+      <p><code>local_delivery</code> only. <code>out_for_delivery → delivered</code>; the order moves to <code>completed</code>.</p>
+      <div class="block-label">Request Body</div>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr><td>receiver_name</td><td class="opt">optional string</td><td>Max 255 chars. Who signed for the parcel.</td></tr>
+        <tr><td>note</td><td class="opt">optional string</td><td>Max 1000 chars.</td></tr>
+        <tr><td>proof_media_id</td><td class="opt">optional integer</td><td>Pre-uploaded via <code>POST /media</code> — id of a delivery-proof photo/signature.</td></tr>
+      </table>
+      <pre>{
+  <span class="key">"receiver_name"</span>:  <span class="str">"Sara Ahmadi"</span>,
+  <span class="key">"note"</span>:           <span class="str">"Left with receptionist"</span>,
+  <span class="key">"proof_media_id"</span>: <span class="num">91</span>
+}</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/admin/shipments/{publicCode}/mark-delivery-failed</span>
+      <span class="badge admin">Requires shipment.delivery.fail</span>
+    </div>
+    <div class="endpoint-body">
+      <p><code>local_delivery</code> only. <code>out_for_delivery → delivery_failed</code>. The order status is untouched — recover via <code>/reschedule</code>.</p>
+      <div class="block-label">Request Body</div>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr><td>failure_reason</td><td class="req">required string</td><td>Max 255 chars, e.g. <code>"Customer not present"</code>.</td></tr>
+        <tr><td>note</td><td class="opt">optional string</td><td>Max 1000 chars.</td></tr>
+      </table>
+      <pre>{
+  <span class="key">"failure_reason"</span>: <span class="str">"Customer not present"</span>,
+  <span class="key">"note"</span>:           <span class="str">"Attempted at 17:40, will retry tomorrow"</span>
+}</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/admin/shipments/{publicCode}/reschedule</span>
+      <span class="badge admin">Requires shipment.delivery.reschedule</span>
+    </div>
+    <div class="endpoint-body">
+      <p><code>local_delivery</code> only, and only from <code>delivery_failed</code>. <code>delivery_failed → ready_for_dispatch</code> against a new delivery slot.</p>
+      <div class="block-label">Request Body</div>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr><td>delivery_slot_id</td><td class="req">required integer</td><td>A new, bookable slot id from <a href="#shipment-slots">List Local-Delivery Sessions</a>.</td></tr>
+        <tr><td>note</td><td class="opt">optional string</td><td>Max 1000 chars.</td></tr>
+      </table>
+      <pre>{ <span class="key">"delivery_slot_id"</span>: <span class="num">118</span>, <span class="key">"note"</span>: <span class="str">"Rebooked per customer request"</span> }</pre>
+      <div class="note">The new slot's capacity is re-checked under a row lock, same as at checkout — a slot that filled up in the meantime returns <strong>422</strong> with <code>errors.delivery_slot_id</code>.</div>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/admin/shipments/{publicCode}/mark-ready-for-pickup</span>
+      <span class="badge admin">Requires shipment.pickup.mark-ready</span>
+    </div>
+    <div class="endpoint-body">
+      <p><code>in_person_pickup</code> only. <code>preparing → ready_for_pickup</code>. Show the customer <code>pickup_location</code> once this fires.</p>
+      <div class="block-label">Request Body</div>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr><td>note</td><td class="opt">optional string</td><td>Max 1000 chars.</td></tr>
+      </table>
+      <pre>{ <span class="key">"note"</span>: <span class="str">"Ready at the counter"</span> }</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/admin/shipments/{publicCode}/confirm-pickup</span>
+      <span class="badge admin">Requires shipment.pickup.complete</span>
+    </div>
+    <div class="endpoint-body">
+      <p><code>in_person_pickup</code> only. <code>ready_for_pickup → picked_up</code>; the order moves to <code>completed</code>.</p>
+      <div class="block-label">Request Body</div>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr><td>receiver_name</td><td class="opt">optional string</td><td>Max 255 chars.</td></tr>
+        <tr><td>note</td><td class="opt">optional string</td><td>Max 1000 chars.</td></tr>
+      </table>
+      <pre>{ <span class="key">"receiver_name"</span>: <span class="str">"Sara Ahmadi"</span> }</pre>
+    </div>
+  </div>
+
+  <h3 id="shipment-admin-slots">Admin — Delivery Slot Management</h3>
+  <p>Capacity management for dated <code>local_delivery</code> sessions. Slots themselves are generated by the <code>shipment:generate-delivery-slots</code> command from the <a href="#shipment-working-periods">working periods</a> below — these endpoints only adjust an already-generated slot.</p>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/admin/shipment/delivery-slots</span>
+      <span class="badge admin">Requires shipment.slot.view-admin</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="block-label">Query Parameters</div>
+      <table>
+        <tr><th>Param</th><th>Type</th><th>Description</th></tr>
+        <tr><td>date_from / date_to</td><td class="opt">optional date</td><td>Filters by <code>delivery_date</code></td></tr>
+        <tr><td>status</td><td class="opt">optional string</td><td><code>open</code> / <code>closed</code></td></tr>
+        <tr><td>per_page</td><td class="opt">optional integer</td><td>Default 15, clamped 1–100</td></tr>
+      </table>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{
+  <span class="key">"data"</span>: [
+    {
+      <span class="key">"id"</span>: <span class="num">103</span>, <span class="key">"date"</span>: <span class="str">"2026-07-15"</span>,
+      <span class="key">"starts_at"</span>: <span class="str">"15:00"</span>, <span class="key">"ends_at"</span>: <span class="str">"16:30"</span>,
+      <span class="key">"capacity"</span>: <span class="num">4</span>, <span class="key">"admin_reserved_capacity"</span>: <span class="num">1</span>, <span class="key">"remaining_capacity"</span>: <span class="num">1</span>,
+      <span class="key">"status"</span>: <span class="str">"open"</span>, <span class="key">"available"</span>: <span class="bool">true</span>, <span class="key">"note"</span>: <span class="null-val">null</span>
+    }
+  ],
+  <span class="key">"links"</span>: { <span class="comment">/* ... */</span> },
+  <span class="key">"meta"</span>: { <span class="comment">/* ... */</span> }
+}</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method patch">PATCH</span>
+      <span class="endpoint-path">/admin/shipment/delivery-slots/{slot}</span>
+      <span class="badge admin">Requires shipment.slot.manage</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Adjusts a slot's total capacity or how much of it is held back for operator/phone bookings. <code>remaining_capacity = capacity − admin_reserved_capacity − active(held + confirmed)</code> — see <a href="#shipment-slots">List Local-Delivery Sessions</a>.</p>
+      <div class="block-label">Request Body</div>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr><td>capacity</td><td class="opt">optional integer</td><td>Min 0. Cannot drop below active (held+confirmed) reservations.</td></tr>
+        <tr><td>admin_reserved_capacity</td><td class="opt">optional integer</td><td>Min 0. Units held back from customer booking.</td></tr>
+        <tr><td>note</td><td class="opt">optional string</td><td>Max 1000 chars.</td></tr>
+      </table>
+      <pre>{ <span class="key">"capacity"</span>: <span class="num">6</span>, <span class="key">"admin_reserved_capacity"</span>: <span class="num">2</span> }</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/admin/shipment/delivery-slots/{slot}/close</span>
+      <span class="badge admin">Requires shipment.slot.close</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Closes the slot to new customer bookings without touching existing reservations. Automated generation never reopens a slot an operator has closed.</p>
+      <div class="block-label">Request Body</div>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr><td>note</td><td class="opt">optional string</td><td>Max 1000 chars.</td></tr>
+      </table>
+      <pre>{ <span class="key">"note"</span>: <span class="str">"Driver called in sick"</span> }</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/admin/shipment/delivery-slots/{slot}/open</span>
+      <span class="badge admin">Requires shipment.slot.close</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Reopens a previously closed slot.</p>
+      <div class="block-label">Request Body</div>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr><td>note</td><td class="opt">optional string</td><td>Max 1000 chars.</td></tr>
+      </table>
+      <pre>{ <span class="key">"note"</span>: <span class="str">"Backup driver arranged"</span> }</pre>
+    </div>
+  </div>
 
   <!-- ============================ SHIPMENT — FRONTEND GUIDE ============================ -->
   <h2 id="shipment-frontend-guide">Shipment — Frontend Implementation Guide</h2>

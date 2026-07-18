@@ -12,6 +12,7 @@ class OrderItem extends Model
         'sku',
         'product_title',
         'variant_attributes',
+        'product_snapshot',
         'quantity',
         'max_quantity_per_order_snapshot',
         'price_per_unit',
@@ -20,6 +21,7 @@ class OrderItem extends Model
 
     protected $casts = [
         'variant_attributes' => 'array',
+        'product_snapshot' => 'array',
         'quantity' => 'integer',
         'max_quantity_per_order_snapshot' => 'integer',
         'price_per_unit' => 'integer',

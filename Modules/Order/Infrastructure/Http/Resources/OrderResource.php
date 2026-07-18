@@ -26,6 +26,7 @@ class OrderResource extends JsonResource
             'shipment_method_code' => $dto->shipmentMethodCode,
             'shipping_address' => $dto->shippingAddress,
             'shipment_snapshot' => $dto->shipmentSnapshot,
+            'customer_snapshot' => $dto->customerSnapshot,
             'transaction_ref' => $dto->transactionRef,
             'notes' => $dto->notes,
             'created_at' => $dto->createdAt->toISOString(),

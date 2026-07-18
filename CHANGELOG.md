@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Feature — Order: immutable customer &amp; product snapshots
+
+- Orders are historical transaction records — a customer editing their profile or an admin renaming/repricing a product must never change what a past order shows. `orders` gains nullable `customer_snapshot` (JSON: `name`, `last_name`, `phone`, `email`) and `order_items` gains nullable `product_snapshot` (JSON: `title`, `sku`, `image_url`, `attributes`), both captured once at checkout and never rewritten.
+- Identity's `IdentityManagerInterface` gains `getUserSummary(int $userId): UserSummaryDTO` (new `Domain/DTOs/UserSummaryDTO.php`), implemented in `EloquentIdentityManager`. This is the only way `CreateOrderAction` reads customer identity — the `User` model is never imported into Order.
+- The product snapshot is built entirely from the already-enriched `CartItemDTO` (`sku`, `productName`, `imageUrl`, `attributes`) inside `CreateOrderAction` — **no second Catalog call** and no `Product`/`ProductVariant` model access from Order.
+- `OrderDTO`/`OrderItemDTO` and `OrderResource`/`OrderItemResource` expose `customer_snapshot` / `product_snapshot` alongside the existing fields (`product_title`, `variant_attributes`, `sku`, `price_per_unit`, `quantity`, etc. — none removed).
+- Tests: `OrderTest` gains coverage for snapshot capture on creation and for immutability after a later profile update and a later product title update; existing inventory-reservation, shipment-hold, and pending-status behavior is unchanged and still green.
+- `OrderSampleDataSeeder` now populates both snapshots for every demo order (customer fields off the seeded `User`, product fields resolved once via `CatalogManagerInterface::findVariantBySku()`), so sample/demo data matches real checkout output instead of leaving the new columns null.
+- `API_DOCUMENTATION.html` — the Orders section (`create`/`list`/`cancel` response examples) now shows `customer_snapshot` and `product_snapshot`, plus a note explaining they're frozen at checkout and never rewritten.
+
 ### Feature — Shipment: delivery working-period admin API
 
 - Added permission-protected CRUD endpoints at `/api/v1/admin/shipment/delivery-working-periods` for recurring weekday/time templates used by `shipment:generate-delivery-slots`.

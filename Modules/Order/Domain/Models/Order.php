@@ -17,6 +17,7 @@ class Order extends Model
         'shipment_method_code',
         'shipping_address',
         'shipment_snapshot',
+        'customer_snapshot',
         'transaction_ref',
         'notes',
     ];
@@ -24,6 +25,7 @@ class Order extends Model
     protected $casts = [
         'shipping_address' => 'array',
         'shipment_snapshot' => 'array',
+        'customer_snapshot' => 'array',
         'total_amount' => 'integer',
         'shipping_cost' => 'integer',
         'tax_amount' => 'integer',
