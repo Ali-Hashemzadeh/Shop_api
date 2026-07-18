@@ -17,6 +17,7 @@ class OrderPermissionsSeeder extends Seeder
             'order.create',
             'order.view-own',
             'order.view-admin',
+            'order.cancel-admin',
         ];
 
         foreach ($permissions as $permission) {

@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\DB;
 use Modules\Inventory\Domain\Contracts\InventoryManagerInterface;
 use Modules\Order\Application\Actions\CreateOrderAction;
 use Modules\Order\Domain\Contracts\OrderManagerInterface;
+use Modules\Order\Domain\DTOs\AdminOrderDetailDTO;
 use Modules\Order\Domain\DTOs\OrderDTO;
 use Modules\Order\Domain\DTOs\OrderItemDTO;
 use Modules\Order\Domain\Enums\OrderStatus;
@@ -90,6 +91,49 @@ class EloquentOrderManager implements OrderManagerInterface
         $order = Order::with('items')->find($orderId);
 
         return $order ? $this->toDTO($order) : null;
+    }
+
+    public function getAdminOrders(array $filters = [], int $perPage = 15): LengthAwarePaginator
+    {
+        $query = Order::with('items')->orderByDesc('created_at');
+
+        if (! empty($filters['status'])) {
+            $query->where('status', $filters['status']);
+        }
+
+        if (! empty($filters['order_id'])) {
+            $query->where('id', (int) $filters['order_id']);
+        }
+
+        if (! empty($filters['user_id'])) {
+            $query->where('user_id', (int) $filters['user_id']);
+        }
+
+        if (! empty($filters['date_from'])) {
+            $query->whereDate('created_at', '>=', $filters['date_from']);
+        }
+
+        if (! empty($filters['date_to'])) {
+            $query->whereDate('created_at', '<=', $filters['date_to']);
+        }
+
+        return $query->paginate(min(max($perPage, 1), 100))
+            ->through(fn (Order $order) => $this->toDTO($order));
+    }
+
+    public function getAdminOrderDetail(int $orderId): ?AdminOrderDetailDTO
+    {
+        $order = Order::with('items')->find($orderId);
+
+        if ($order === null) {
+            return null;
+        }
+
+        // Current fulfillment state comes exclusively through the Shipment contract —
+        // never a Shipment model. Null until the order is paid and a shipment activates.
+        $shipment = app(ShipmentManagerInterface::class)->findForOrder($orderId);
+
+        return new AdminOrderDetailDTO($this->toDTO($order), $shipment);
     }
 
     private function toDTO(Order $order): OrderDTO

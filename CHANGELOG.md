@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Feature — Order: admin order management (view / search / cancel)
+
+- New admin/operator surface under `/api/v1/admin/orders`: `GET /` (paginated, filterable by `status`/`order_id`/`user_id`/`date_from`/`date_to`), `GET /{order}` (full detail), and `POST /{order}/cancel`. Deliberately **view/search/cancel only** — order status transitions remain owned by the Shipment module, so there is no status-change, create, or edit endpoint.
+- New `OrderPolicy` (`viewAny`/`view` → `order.view-admin`, `cancel` → `order.cancel-admin`), typehinted against `Authorizable` and registered via `Gate::policy()` in `OrderServiceProvider::boot()`. Adds the `order.cancel-admin` permission (granted to `admin` only); `order.view-admin` was already seeded and is now actually enforced.
+- `OrderManagerInterface` gains `getAdminOrders(array $filters, int $perPage)` (returns OrderDTO paginator) and `getAdminOrderDetail(int $orderId): ?AdminOrderDetailDTO`. The detail DTO composes the OrderDTO with the live shipment state resolved **only through `ShipmentManagerInterface::findForOrder`** — no Shipment model access from Order.
+- Admin list/detail read customer and product data from the frozen `customer_snapshot` / `product_snapshot` (no per-order Identity/Catalog queries). New `AdminOrderListResource` (lightweight row + `item_count`) and `AdminOrderResource` (full detail + shipment status block); customer `OrderResource`/`OrderItemResource` are untouched.
+- `AdminCancelOrderAction` reuses `CancelOrderAction::releaseAndCancel` (no duplicated release/cancel logic) and is restricted to `pending` orders; paid/shipped cancellation (refund + committed-stock return) remains a separate future flow.
+- Tests: `AdminOrderTest` (11) covers list + status filter, detail with snapshots and null shipment, 404, the full permission matrix (customer 403 on list/detail/cancel, 401 unauthenticated), admin cancel releasing inventory, non-pending 422, and asserts no status-mutation/create endpoints exist (404/405).
+
 ### Feature — Order: immutable customer &amp; product snapshots
 
 - Orders are historical transaction records — a customer editing their profile or an admin renaming/repricing a product must never change what a past order shows. `orders` gains nullable `customer_snapshot` (JSON: `name`, `last_name`, `phone`, `email`) and `order_items` gains nullable `product_snapshot` (JSON: `title`, `sku`, `image_url`, `attributes`), both captured once at checkout and never rewritten.

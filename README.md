@@ -208,6 +208,17 @@ Send `X-Session-Id: <uuid>` for guest carts. Authenticated users use their Beare
 |---|---|---|
 | `POST` | `/orders` | Place an order from the current cart |
 | `GET` | `/orders` | List authenticated user's order history (paginated) |
+| `POST` | `/orders/{order}/cancel` | Cancel your own pending order (releases stock) |
+
+### Admin Orders (`auth:sanctum` + `order.view-admin` / `order.cancel-admin`)
+
+View, search, and cancel only — order status transitions are owned by the Shipment module, so there is no status-change/create/edit endpoint here.
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/admin/orders` | Paginated all-orders list (filters: `status`, `order_id`, `user_id`, `date_from`, `date_to`); customer summary from `customer_snapshot` |
+| `GET` | `/admin/orders/{order}` | Full order detail: customer/product snapshots, shipping, and live shipment status (via the Shipment contract) |
+| `POST` | `/admin/orders/{order}/cancel` | Admin-cancel a pending order (releases inventory + slot hold; reuses the shared cancel primitive) |
 
 Auto-generated interactive API docs are available at `/docs/api` when running locally (powered by Scramble).
 
@@ -346,7 +357,8 @@ tests/
     ├── Cart/
     │   └── CartTest.php                 # Guest + auth carts, stock validation, isolation
     └── Order/
-        └── OrderTest.php                # Checkout flow, customer/product snapshots + immutability, auto-cancel, TTL expiry, auth matrix
+        ├── OrderTest.php                # Checkout flow, customer/product snapshots + immutability, auto-cancel, TTL expiry, auth matrix
+        └── AdminOrderTest.php           # Admin list/detail/cancel, permission matrix, no status-mutation endpoints
 ```
 
 ---

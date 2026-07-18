@@ -143,6 +143,13 @@
   <a href="#order-list">My Orders</a>
   <a href="#order-cancel">Cancel Order</a>
 
+  <div class="section-label">Admin — Orders</div>
+  <a href="#admin-order-overview">Overview</a>
+  <a href="#admin-order-list">List Orders</a>
+  <a href="#admin-order-detail">Order Detail</a>
+  <a href="#admin-order-cancel">Cancel Order</a>
+  <a href="#admin-order-frontend-guide">Frontend Guide</a>
+
   <div class="section-label">Payments</div>
   <a href="#payment-overview">Overview</a>
   <a href="#payment-initialize">Initialize Payment</a>
@@ -2708,6 +2715,307 @@ await guestCartRequest('GET',  '/');
       </table>
     </div>
   </div>
+
+
+  <!-- ═══ ADMIN ORDERS ═══ -->
+  <h2 id="admin-order-overview">Admin — Orders</h2>
+  <p>Admin/operator order management. This surface is deliberately limited to <strong>viewing, searching, and cancelling</strong> orders. Order <em>status transitions</em> (preparing → shipped → delivered, etc.) are owned by the <a href="#shipment-admin">Shipment</a> module and driven by its business-action endpoints — there is intentionally <strong>no</strong> status-change, mark-paid, create, or edit endpoint here.</p>
+
+  <div class="note">
+    <strong>Permissions.</strong> Listing and detail require <code>order.view-admin</code>; cancellation requires <code>order.cancel-admin</code>. A valid token without the permission returns <strong>403</strong>; no token returns <strong>401</strong>.
+  </div>
+  <div class="note">
+    <strong>Snapshots, not live lookups.</strong> Customer and product data in these responses come from the order's frozen <code>customer_snapshot</code> / <code>product_snapshot</code> — the admin views never re-query Identity or Catalog, so they always show the order exactly as placed. The live fulfillment <code>shipment</code> block is resolved through the Shipment module and is <code>null</code> until the order is paid.
+  </div>
+
+  <!-- GET /api/v1/admin/orders -->
+  <h3 id="admin-order-list">List Orders</h3>
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/admin/orders</span>
+      <span class="badge admin">Requires order.view-admin</span>
+      <span class="badge rate">throttle:api</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Paginated list of <strong>all</strong> orders, newest first, with a lightweight customer summary drawn from each order's snapshot.</p>
+      <div class="block-label">Query Parameters</div>
+      <table>
+        <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
+        <tr><td>status</td><td class="opt">string</td><td>Exact match: <code>pending</code>, <code>paid</code>, <code>processing</code>, <code>shipped</code>, <code>completed</code>, <code>cancelled</code>, <code>failed</code>.</td></tr>
+        <tr><td>order_id</td><td class="opt">integer</td><td>Exact order id.</td></tr>
+        <tr><td>user_id</td><td class="opt">integer</td><td>All orders belonging to a given customer.</td></tr>
+        <tr><td>date_from</td><td class="opt">date</td><td>Orders created on/after this date (by <code>created_at</code>).</td></tr>
+        <tr><td>date_to</td><td class="opt">date</td><td>Orders created on/before this date.</td></tr>
+        <tr><td>per_page</td><td class="opt">integer</td><td>Items per page, clamped 1–100 (default 15).</td></tr>
+        <tr><td>page</td><td class="opt">integer</td><td>Page number.</td></tr>
+      </table>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{
+  <span class="key">"data"</span>: [
+    {
+      <span class="key">"id"</span>:           <span class="num">42</span>,
+      <span class="key">"status"</span>:       <span class="str">"pending"</span>,
+      <span class="key">"total_amount"</span>: <span class="num">267000000</span>,   <span class="comment">// rials, integer</span>
+      <span class="key">"created_at"</span>:   <span class="str">"2026-06-26T12:34:56.000000Z"</span>,
+      <span class="key">"customer"</span>: {                <span class="comment">// from customer_snapshot — not a live Identity lookup</span>
+        <span class="key">"name"</span>:      <span class="str">"Sara"</span>,
+        <span class="key">"last_name"</span>: <span class="str">"Ahmadi"</span>,
+        <span class="key">"phone"</span>:     <span class="str">"09123456789"</span>
+      },
+      <span class="key">"item_count"</span>:  <span class="num">2</span>
+    }
+  ],
+  <span class="key">"meta"</span>:  { <span class="key">"current_page"</span>: <span class="num">1</span>, <span class="key">"last_page"</span>: <span class="num">1</span>, <span class="key">"per_page"</span>: <span class="num">15</span>, <span class="key">"total"</span>: <span class="num">1</span>, <span class="key">"from"</span>: <span class="num">1</span>, <span class="key">"to"</span>: <span class="num">1</span> },
+  <span class="key">"links"</span>: { <span class="key">"first"</span>: <span class="str">"..."</span>, <span class="key">"last"</span>: <span class="str">"..."</span>, <span class="key">"prev"</span>: <span class="null-val">null</span>, <span class="key">"next"</span>: <span class="null-val">null</span> }
+}</pre>
+    </div>
+  </div>
+
+  <!-- GET /api/v1/admin/orders/{order} -->
+  <h3 id="admin-order-detail">Order Detail</h3>
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/admin/orders/{order}</span>
+      <span class="badge admin">Requires order.view-admin</span>
+      <span class="badge rate">throttle:api</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Full order record: amounts, the frozen customer and per-item product snapshots, the shipping snapshots, and the current shipment status (resolved through the Shipment module).</p>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{
+  <span class="key">"data"</span>: {
+    <span class="key">"id"</span>:              <span class="num">42</span>,
+    <span class="key">"status"</span>:          <span class="str">"paid"</span>,
+    <span class="key">"total_amount"</span>:    <span class="num">267000000</span>,
+    <span class="key">"shipping_cost"</span>:   <span class="num">0</span>,
+    <span class="key">"tax_amount"</span>:      <span class="num">0</span>,
+    <span class="key">"transaction_ref"</span>: <span class="str">"REF-9F2A7C..."</span>,
+    <span class="key">"notes"</span>:           <span class="null-val">null</span>,
+    <span class="key">"created_at"</span>:      <span class="str">"2026-06-26T12:34:56.000000Z"</span>,
+    <span class="key">"customer"</span>: {                <span class="comment">// from orders.customer_snapshot</span>
+      <span class="key">"name"</span>:      <span class="str">"Sara"</span>,
+      <span class="key">"last_name"</span>: <span class="str">"Ahmadi"</span>,
+      <span class="key">"phone"</span>:     <span class="str">"09123456789"</span>,
+      <span class="key">"email"</span>:     <span class="str">"sara@example.com"</span>
+    },
+    <span class="key">"shipping_address"</span>:  { <span class="comment">/* snapshotted address object */</span> },
+    <span class="key">"shipment_snapshot"</span>: { <span class="comment">/* immutable method/cost/address/slot selection */</span> },
+    <span class="key">"shipment"</span>: {                <span class="comment">// live status via ShipmentManagerInterface; null until paid</span>
+      <span class="key">"public_code"</span>:     <span class="str">"SH-X0T3K9ABCD"</span>,
+      <span class="key">"status"</span>:          <span class="str">"handed_to_post"</span>,
+      <span class="key">"status_label"</span>:    <span class="str">"Handed to postal service"</span>,
+      <span class="key">"method_code"</span>:     <span class="str">"post_standard"</span>,
+      <span class="key">"method_type"</span>:     <span class="str">"postal"</span>,
+      <span class="key">"tracking_number"</span>: <span class="str">"TRK-999"</span>
+    },
+    <span class="key">"items"</span>: [
+      {
+        <span class="key">"id"</span>:                 <span class="num">101</span>,
+        <span class="key">"sku"</span>:                <span class="str">"S25U-TBK-256"</span>,
+        <span class="key">"product_title"</span>:     <span class="str">"Samsung Galaxy S25 Ultra"</span>,
+        <span class="key">"variant_attributes"</span>: { <span class="key">"color"</span>: <span class="str">"Titanium Black"</span> },
+        <span class="key">"product_snapshot"</span>: {      <span class="comment">// from order_items.product_snapshot</span>
+          <span class="key">"title"</span>:      <span class="str">"Samsung Galaxy S25 Ultra"</span>,
+          <span class="key">"sku"</span>:        <span class="str">"S25U-TBK-256"</span>,
+          <span class="key">"image_url"</span>:  <span class="str">"/storage/products/s25u-titanium-black.webp"</span>,
+          <span class="key">"attributes"</span>: { <span class="key">"color"</span>: <span class="str">"Titanium Black"</span>, <span class="key">"storage"</span>: <span class="str">"256GB"</span> }
+        },
+        <span class="key">"quantity"</span>:           <span class="num">2</span>,
+        <span class="key">"price_per_unit"</span>:     <span class="num">89000000</span>,
+        <span class="key">"line_total"</span>:         <span class="num">178000000</span>
+      }
+    ]
+  }
+}</pre>
+      <div class="block-label">Error Responses</div>
+      <table>
+        <tr><th>Status</th><th>Condition</th></tr>
+        <tr><td>401</td><td class="opt">No Bearer token provided</td></tr>
+        <tr><td>403</td><td class="opt">Missing <code>order.view-admin</code> permission</td></tr>
+        <tr><td>404</td><td class="opt">Order not found</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- POST /api/v1/admin/orders/{order}/cancel -->
+  <h3 id="admin-order-cancel">Cancel Order</h3>
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/admin/orders/{order}/cancel</span>
+      <span class="badge admin">Requires order.cancel-admin</span>
+      <span class="badge rate">throttle:api</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Cancels a <strong>pending</strong> order regardless of which customer owns it. Reuses the same release/cancel primitive as the customer flow: every reserved unit is released back to available stock, any held local-delivery slot is released, and the order moves to <code>cancelled</code>. No request body.</p>
+      <div class="warn"><strong>Pending only.</strong> Only <code>pending</code> orders can be cancelled here — once an order is <code>paid</code>/<code>processing</code>/<code>shipped</code> this returns <strong>422</strong> (refund + committed-stock return is a separate future flow). This is <em>not</em> a status-override endpoint.</div>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{
+  <span class="key">"data"</span>: { <span class="comment">/* same shape as GET /admin/orders/{order}, now status: "cancelled" */</span> }
+}</pre>
+      <div class="block-label">Error Responses</div>
+      <table>
+        <tr><th>Status</th><th>Condition</th></tr>
+        <tr><td>401</td><td class="opt">No Bearer token provided</td></tr>
+        <tr><td>403</td><td class="opt">Missing <code>order.cancel-admin</code> permission</td></tr>
+        <tr><td>404</td><td class="opt">Order not found</td></tr>
+        <tr><td>422</td><td class="opt">Order is not in <code>pending</code> status</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- ============================ ADMIN ORDERS — FRONTEND GUIDE ============================ -->
+  <h2 id="admin-order-frontend-guide">Admin Orders — Frontend Implementation Guide</h2>
+  <p>This is the complete guide for building the admin dashboard's <strong>Orders</strong> screens. Read it before wiring the UI — the most important thing to understand is <strong>what this module deliberately does not do</strong>, so you don't build buttons the API will never support. All examples use the native <code>fetch</code> API with an admin's Bearer token; adapt to your HTTP client.</p>
+
+  <div class="warn">
+    <strong>The golden rule: the admin Orders screen is read-only except for one action — cancel.</strong> An admin can <em>view</em>, <em>search/filter</em>, and <em>cancel a pending order</em>. That's it. There is <strong>no</strong> endpoint to edit an order, create one on a customer's behalf, or change its status (mark-paid, mark-shipped, mark-complete, etc.). Do not build those controls — they will always 404/405.
+  </div>
+
+  <h3>Where order status actually changes (and why it's not here)</h3>
+  <p>An order's <code>status</code> is a <em>summary</em> that the backend keeps in sync automatically. It moves forward as a side effect of two things:</p>
+  <ol>
+    <li><strong>Payment</strong> — when a payment succeeds, the order becomes <code>paid</code> and a shipment record is created (see <a href="#payment-overview">Payments</a>).</li>
+    <li><strong>Fulfillment</strong> — the operator drives the parcel through the <a href="#shipment-admin">Shipment admin workflow</a> (start-preparing → hand-to-post / out-for-delivery / picked-up …). Each shipment transition <em>automatically</em> syncs the order's summary status (<code>processing</code> → <code>shipped</code> → <code>completed</code>).</li>
+  </ol>
+  <p>So if your admin UI needs a "mark this order as shipped" button, that button belongs on the <strong>Shipment</strong> screen and calls a <a href="#shipment-admin">Shipment admin action</a> — never an Order endpoint. The Order detail here simply <em>reflects</em> the resulting status.</p>
+  <div class="note">
+    <strong>Mental model:</strong> <code>Payment → order paid → shipment activated → operator runs shipment actions → order status auto-syncs</code>. The admin Orders screen sits at the end of that chain as a viewer, plus a cancel escape hatch for orders that never got paid.
+  </div>
+
+  <h3>Step 1 — Gate the whole screen on permissions</h3>
+  <p>Two permissions govern this screen. Fetch the admin's permissions once at login (from your auth/profile response) and use them to decide what to render:</p>
+  <table>
+    <tr><th>Permission</th><th>Unlocks</th></tr>
+    <tr><td><code>order.view-admin</code></td><td>The list page and the detail page (<code>GET /admin/orders</code>, <code>GET /admin/orders/{order}</code>).</td></tr>
+    <tr><td><code>order.cancel-admin</code></td><td>The Cancel button (<code>POST /admin/orders/{order}/cancel</code>).</td></tr>
+  </table>
+  <pre>// Render-time guards — hide what the admin can't use.
+const canViewOrders   = perms.includes('order.view-admin');
+const canCancelOrders = perms.includes('order.cancel-admin');
+
+if (!canViewOrders) return renderNoAccess();      // don't even mount the Orders route
+// ...later, in the detail view:
+if (canCancelOrders && order.status === 'pending') renderCancelButton();</pre>
+  <div class="note">Client-side gating is only for UX — the server still enforces both permissions. A missing permission returns <strong>403</strong>, a missing token <strong>401</strong>. Always handle both (see Step 5).</div>
+
+  <h3>Step 2 — Build the list page (search + filter + paginate)</h3>
+  <p>The list is a standard paginated table. Every filter is optional and combinable; send only the ones the user set. The customer name/phone shown in each row comes from the order's <strong>snapshot</strong>, so it's the name as it was at checkout — you don't need a second call to look the customer up.</p>
+  <pre>async function loadAdminOrders(token, { status, orderId, userId, dateFrom, dateTo, page = 1, perPage = 15 } = {}) {
+  const params = new URLSearchParams();
+  if (status)   params.set('status', status);
+  if (orderId)  params.set('order_id', orderId);
+  if (userId)   params.set('user_id', userId);
+  if (dateFrom) params.set('date_from', dateFrom);   // 'YYYY-MM-DD'
+  if (dateTo)   params.set('date_to', dateTo);       // 'YYYY-MM-DD'
+  params.set('page', page);
+  params.set('per_page', perPage);
+
+  const res = await fetch(`/api/v1/admin/orders?${params}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (res.status === 403) throw { type: 'forbidden' };
+  const body = await res.json();
+
+  return body; // { data: [...rows], meta: {current_page,last_page,per_page,total,from,to}, links }
+}
+
+// Render each row:
+//   #{row.id} · {row.status} · {formatRials(row.total_amount)} · {row.item_count} items
+//   {row.customer.name} {row.customer.last_name} — {row.customer.phone}
+// Use meta.current_page / meta.last_page to render the pager; links.next / links.prev for prev/next.</pre>
+  <div class="note"><strong>Status filter values:</strong> <code>pending</code>, <code>paid</code>, <code>processing</code>, <code>shipped</code>, <code>completed</code>, <code>cancelled</code>, <code>failed</code>. Render these as a dropdown; the same set is the order's lifecycle (see the reference table at the end).</div>
+  <div class="warn"><strong>Money is integer rials.</strong> <code>total_amount</code> is a raw integer (e.g. <code>267000000</code>). Divide by 10 for tomans and format for display — never show the raw number.</div>
+
+  <h3>Step 3 — Build the detail page</h3>
+  <p>The detail response is a single object under <code>data</code>. It stitches together four things the UI should render as distinct blocks:</p>
+  <ul>
+    <li><strong>Order</strong> — <code>id</code>, <code>status</code>, the amounts (<code>total_amount</code>, <code>shipping_cost</code>, <code>tax_amount</code>), <code>transaction_ref</code>, <code>notes</code>, <code>created_at</code>.</li>
+    <li><strong>Customer</strong> — from <code>data.customer</code> (the order's <code>customer_snapshot</code>): <code>name</code>, <code>last_name</code>, <code>phone</code>, <code>email</code>.</li>
+    <li><strong>Items</strong> — <code>data.items[]</code>. Render each from its <code>product_snapshot</code> (<code>title</code>, <code>sku</code>, <code>image_url</code>, <code>attributes</code>) plus <code>quantity</code> and <code>price_per_unit</code>.</li>
+    <li><strong>Shipping &amp; fulfillment</strong> — <code>shipping_address</code> + <code>shipment_snapshot</code> (what was chosen at checkout), and <code>data.shipment</code> (the live status).</li>
+  </ul>
+  <pre>async function loadAdminOrder(token, orderId) {
+  const res = await fetch(`/api/v1/admin/orders/${orderId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (res.status === 403) throw { type: 'forbidden' };
+  if (res.status === 404) throw { type: 'not_found' };
+  const { data } = await res.json();
+  return data;
+}
+
+// Customer block  → data.customer.{name,last_name,phone,email}
+// Items block     → data.items.map(i => ({
+//                      img:   i.product_snapshot?.image_url,
+//                      title: i.product_snapshot?.title ?? i.product_title,
+//                      sku:   i.sku,
+//                      attrs: i.product_snapshot?.attributes ?? i.variant_attributes,
+//                      qty:   i.quantity,
+//                      price: i.price_per_unit,   // integer rials, per unit
+//                    }))
+// Shipment block  → see Step 4</pre>
+  <div class="note">
+    <strong>Why snapshots instead of live product/customer data?</strong> An order is a historical record. If the customer later edits their profile, or an admin renames or re-prices the product, the order must still show what was actually bought and who bought it. That's exactly what <code>customer_snapshot</code> / <code>product_snapshot</code> give you — render them verbatim and do <strong>not</strong> try to "freshen" them with a separate customer/product lookup.
+  </div>
+
+  <h3>Step 4 — Render the shipment status block</h3>
+  <p><code>data.shipment</code> is the order's live fulfillment status, resolved through the Shipment module. It is <strong>null until the order is paid</strong> — an unpaid/pending order has no shipment yet, so show an "Awaiting payment" placeholder.</p>
+  <pre>function renderShipmentBlock(order) {
+  const s = order.shipment;
+  if (!s) return 'Awaiting payment — no shipment yet';
+
+  // s = { public_code, status, status_label, method_code, method_type, tracking_number }
+  let line = `${s.status_label} · ${s.method_type}`;
+  if (s.tracking_number) line += ` · Tracking: ${s.tracking_number}`;
+  return line; // e.g. "Handed to postal service · postal · Tracking: TRK-999"
+}</pre>
+  <p>Use <code>status_label</code> for a ready-made human string. If the admin needs to <em>act</em> on the shipment (advance its status, add a tracking number, mark delivered/picked-up), link out to the <a href="#shipment-admin">Shipment admin screen</a> keyed by <code>shipment.public_code</code> — those actions live there, not on this page.</p>
+  <div class="note"><strong>Postal tracking ends at <code>handed_to_post</code>.</strong> For postal orders the app deliberately stops reporting carrier progress after handoff — show the <code>tracking_number</code> and tell the operator to track via the postal service. (See the <a href="#shipment">Shipment</a> section.)</div>
+
+  <h3>Step 5 — The Cancel action (the only mutation)</h3>
+  <p>Cancel is allowed <strong>only while the order is <code>pending</code></strong> (not yet paid). This is the escape hatch for orders that were placed but never paid — cancelling releases the reserved stock and any held delivery slot, and flips the order to <code>cancelled</code>. Show the button only when both conditions hold: the admin has <code>order.cancel-admin</code> <em>and</em> <code>order.status === 'pending'</code>.</p>
+  <pre>async function cancelAdminOrder(token, orderId) {
+  const res = await fetch(`/api/v1/admin/orders/${orderId}/cancel`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (res.status === 403) throw { type: 'forbidden' };        // missing order.cancel-admin
+  if (res.status === 404) throw { type: 'not_found' };
+  if (res.status === 422) throw { type: 'not_pending' };      // someone paid it first — refresh the page
+  const { data } = await res.json();
+  return data; // the same detail shape, now status: "cancelled"
+}</pre>
+  <div class="warn">
+    <strong>Handle the 422 race.</strong> Between loading the detail and clicking Cancel, the order may have been paid (its status left <code>pending</code>). The server rejects the cancel with <strong>422</strong> — don't treat this as a fatal error. Reload the order and show its new status; the Cancel button should now be gone.
+  </div>
+  <p>Always confirm before cancelling (it releases inventory and cannot be undone), then re-render the page from the returned <code>data</code> (or reload) so the status, the vanished Cancel button, and the released stock are all reflected.</p>
+
+  <h3>What you should NOT build</h3>
+  <table>
+    <tr><th>Tempting control</th><th>Why it doesn't exist here</th><th>Where it lives instead</th></tr>
+    <tr><td>Edit order / change items or amounts</td><td>Orders are immutable financial records.</td><td class="opt">Nowhere — not supported by design.</td></tr>
+    <tr><td>Create an order for a customer</td><td>Orders are created only from a customer's own cart at checkout.</td><td class="opt">Customer checkout (<a href="#order-create">POST /orders</a>).</td></tr>
+    <tr><td>Change status / mark paid</td><td>Status is a synced summary, never set directly.</td><td class="opt"><a href="#payment-overview">Payments</a> (paid) + <a href="#shipment-admin">Shipment actions</a> (fulfillment).</td></tr>
+    <tr><td>Mark shipped / delivered / picked up</td><td>Fulfillment is the Shipment module's job.</td><td class="opt"><a href="#shipment-admin">Shipment admin workflow</a>.</td></tr>
+    <tr><td>Cancel a paid/shipped order</td><td>Requires refund + committed-stock return — a separate future flow.</td><td class="opt">Not yet available (returns 422).</td></tr>
+  </table>
+
+  <h3>Order status reference</h3>
+  <table>
+    <tr><th>Status</th><th>Meaning</th><th>Admin can cancel?</th></tr>
+    <tr><td><code>pending</code></td><td>Placed, awaiting payment (auto-expires after 15 min).</td><td class="req">Yes</td></tr>
+    <tr><td><code>paid</code></td><td>Payment confirmed; shipment activated.</td><td class="opt">No (422)</td></tr>
+    <tr><td><code>processing</code></td><td>Operator started preparing the shipment.</td><td class="opt">No (422)</td></tr>
+    <tr><td><code>shipped</code></td><td>Handed to post / out for local delivery.</td><td class="opt">No (422)</td></tr>
+    <tr><td><code>completed</code></td><td>Delivered or picked up (final).</td><td class="opt">No (422)</td></tr>
+    <tr><td><code>cancelled</code></td><td>Cancelled by customer, admin, or TTL expiry.</td><td class="opt">No (already cancelled)</td></tr>
+    <tr><td><code>failed</code></td><td>Payment or fulfilment failure.</td><td class="opt">No (422)</td></tr>
+  </table>
+  <div class="note">The only row where the Cancel button should appear is <code>pending</code> — every other status returns 422. Drive the button's visibility off <code>order.status === 'pending'</code> and never assume; the status can change between requests.</div>
 
 
   <!-- ═══ PAYMENTS ═══ -->

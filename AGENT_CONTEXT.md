@@ -197,13 +197,18 @@ Modules/
       6. `holdForPendingOrder()` on the Shipment contract (local-delivery slot; no-op otherwise).
   * **`CancelOrderAction`** — dep: `InventoryManagerInterface`. Owns the single "release reservations + mark cancelled" primitive (`releaseAndCancel(Order)`, caller-transactional) reused by `CreateOrderAction` (pending replacement) and `CancelExpiredOrdersAction`. `handle(orderId, userId)` is the user-facing cancel: 404 if missing, **403 if the order is not owned by `userId`**, 422 unless status is `pending`; otherwise releases every item's reservation and sets `cancelled` inside a transaction.
   * **`CancelExpiredOrdersAction`** — dep: `CancelOrderAction`. Finds pending orders with `created_at < now() - 15 min` and calls `releaseAndCancel` per order (each wrapped in its own transaction). Run every minute by `orders:cancel-expired` Artisan command scheduled in `routes/console.php`.
-  * **HTTP Endpoints:**
+  * **`AdminCancelOrderAction`** — dep: `CancelOrderAction`. Admin/operator cancel: no ownership check, but reuses `CancelOrderAction::releaseAndCancel` (no duplicated release/cancel logic). Restricted to `pending` orders only — 404 if missing, 422 if not pending. Paid/shipped cancellation (refund + committed-stock return) is a deliberate future flow, not exposed here.
+  * **HTTP Endpoints (customer):**
       * `POST /api/v1/orders` — body `{address_id, shipment_method_id, notes?}`; requires `auth:sanctum` + `order.create`; returns 201 OrderResource. 422 on empty cart or invalid address.
       * `GET /api/v1/orders` — paginated order history for the authenticated user; requires `auth:sanctum`; returns paginated OrderResource collection.
       * `POST /api/v1/orders/{order}/cancel` — user cancels **their own** pending order; releases reserved stock and returns 200 OrderResource. `auth:sanctum`; 403 for another user's order, 404 if missing, 422 if not `pending`.
-  * **Authorization:** `StoreOrderRequest::authorize()` checks `order.create` → 403 before validation. Cancellation is ownership-gated in `CancelOrderAction` (self-service, like Cart). No `OrderPolicy` yet — admin order management is a future concern.
-  * **Permissions:** `order.create`, `order.view-own`, `order.view-admin` — admin receives all three; customer receives `order.create` + `order.view-own`.
-  * **Test suite:** `OrderTest` — **14 tests**: price snapshot + stock reservation, immutable customer/product snapshot creation + post-update immutability (profile edit / catalog title edit do not alter a placed order), auto-cancel pending, TTL expiry command, user cancel releases stock, cancel ownership 403 / 404 / non-pending 422, 401/422 auth matrix.
+  * **HTTP Endpoints (admin/operator — `AdminOrderController`, view/search/cancel only, no status/create/edit):**
+      * `GET /api/v1/admin/orders` — paginated `{data, meta, links}`. `viewAny` policy → `order.view-admin`. Filters (via `IndexAdminOrdersRequest`): `status`, `order_id`, `user_id`, `date_from`, `date_to`, `per_page` (1–100). Rows (`AdminOrderListResource`): id, status, total_amount, created_at, customer summary (from `customer_snapshot` — never re-queries Identity), `item_count`.
+      * `GET /api/v1/admin/orders/{order}` — full detail (`AdminOrderResource`). `view` policy → `order.view-admin`. Order fields + customer (from `customer_snapshot`) + items (from `product_snapshot`) + `shipping_address`/`shipment_snapshot` + live `shipment` status **resolved only via `ShipmentManagerInterface::findForOrder`** (null until paid). 404 via route-model binding.
+      * `POST /api/v1/admin/orders/{order}/cancel` — admin cancel via `AdminCancelOrderAction`. `cancel` policy → `order.cancel-admin`. Returns 200 detail; 422 if not pending. Order status transitions otherwise belong to Shipment — there is intentionally no status-mutation / create / edit endpoint.
+  * **Authorization:** `StoreOrderRequest::authorize()` checks `order.create` → 403 before validation (customer). Customer cancellation is ownership-gated in `CancelOrderAction` (self-service, like Cart). **Admin reads/cancel go through `OrderPolicy`** (`viewAny`/`view` → `order.view-admin`, `cancel` → `order.cancel-admin`), typehinted against `Authorizable`, registered via `Gate::policy(Order::class, OrderPolicy::class)` in `OrderServiceProvider::boot()`.
+  * **Permissions:** `order.create`, `order.view-own`, `order.view-admin`, `order.cancel-admin` — admin receives all four; customer receives `order.create` + `order.view-own`.
+  * **Test suite:** `OrderTest` — **14 tests**: price snapshot + stock reservation, immutable customer/product snapshot creation + post-update immutability (profile edit / catalog title edit do not alter a placed order), auto-cancel pending, TTL expiry command, user cancel releases stock, cancel ownership 403 / 404 / non-pending 422, 401/422 auth matrix. `AdminOrderTest` — **11 tests**: admin list (+status filter), admin detail (customer/product snapshots + null shipment), 404, customer-forbidden list/detail/cancel (403), admin cancel releases inventory, non-pending 422, no status-mutation endpoints exist (404/405), 401 matrix.
 
 ### 💳 7. Payment Module (Status: Active & Complete)
 * **Responsibility:** Hybrid payment processing — cash/offline (`in_person`) and online gateway (`online`) via the Strategy Pattern.
@@ -245,7 +250,7 @@ Modules/
 | Catalog | ✅ Complete | 128 passing across 4 test classes |
 | Inventory | ✅ Complete | 24 passing across 2 test classes |
 | Cart | ✅ Complete | 22 passing (CartTest) |
-| Order | ✅ Complete | 11 passing (OrderTest) |
+| Order | ✅ Complete | 14 OrderTest + 11 AdminOrderTest passing |
 | Payment | ✅ Complete | 12 passing (PaymentTest) |
 | Shipment | ✅ Complete | 55 passing across 7 test classes |
 
