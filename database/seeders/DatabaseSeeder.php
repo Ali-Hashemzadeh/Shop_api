@@ -14,6 +14,7 @@ use Modules\Order\Infrastructure\Persistence\Seeders\OrderPermissionsSeeder;
 use Modules\Order\Infrastructure\Persistence\Seeders\OrderSampleDataSeeder;
 use Modules\Payment\Infrastructure\Persistence\Seeders\PaymentPermissionsSeeder;
 use Modules\Payment\Infrastructure\Persistence\Seeders\PaymentSampleDataSeeder;
+use Modules\Shipment\Infrastructure\Persistence\Seeders\ShipmentPermissionsSeeder;
 
 class DatabaseSeeder extends Seeder
 {
@@ -31,6 +32,7 @@ class DatabaseSeeder extends Seeder
             InventoryPermissionsSeeder::class,
             OrderPermissionsSeeder::class,
             PaymentPermissionsSeeder::class,
+            ShipmentPermissionsSeeder::class,
             CatalogSampleDataSeeder::class,
             InventorySampleDataSeeder::class,
             OrderSampleDataSeeder::class,
