@@ -10,6 +10,7 @@ use Modules\Identity\Infrastructure\Persistence\Seeders\IdentityModuleSeeder;
 use Modules\Inventory\Infrastructure\Persistence\Seeders\InventoryPermissionsSeeder;
 use Modules\Inventory\Infrastructure\Persistence\Seeders\InventorySampleDataSeeder;
 use Modules\Media\Infrastructure\Persistence\Seeders\MediaModuleSeeder;
+use Modules\Notification\Infrastructure\Persistence\Seeders\NotificationPermissionsSeeder;
 use Modules\Order\Infrastructure\Persistence\Seeders\OrderPermissionsSeeder;
 use Modules\Order\Infrastructure\Persistence\Seeders\OrderSampleDataSeeder;
 use Modules\Payment\Infrastructure\Persistence\Seeders\PaymentPermissionsSeeder;
@@ -33,6 +34,7 @@ class DatabaseSeeder extends Seeder
             OrderPermissionsSeeder::class,
             PaymentPermissionsSeeder::class,
             ShipmentPermissionsSeeder::class,
+            NotificationPermissionsSeeder::class,
             CatalogSampleDataSeeder::class,
             InventorySampleDataSeeder::class,
             OrderSampleDataSeeder::class,

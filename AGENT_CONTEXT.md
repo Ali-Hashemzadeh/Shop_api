@@ -240,6 +240,29 @@ Modules/
   * **Permissions:** `shipment.view-own`, `shipment.view-admin`, `shipment.start-preparing`, `shipment.post.{mark-ready,hand-over}`, `shipment.delivery.{mark-ready,dispatch,complete,fail,reschedule}`, `shipment.pickup.{mark-ready,complete}`, `shipment.slot.{view-admin,manage,close,reserve-capacity}` (admin gets all; customer gets `view-own`). Permission-based, 403-before-validation on admin action Form Requests.
   * **Test suite:** `tests/Feature/Shipment/` (ShipmentMethods, ShipmentSlot, ShipmentPaymentIntegration, ShipmentWorkflow, ShipmentAuthorization, AdminDeliverySlot, AdminShipmentIndex) + `tests/Unit/Shipment/ShipmentWorkflowTest` — **55 tests, 225 assertions**.
 
+### 📣 9. Notification Module (Status: Infrastructure Ready — events not wired)
+* **Responsibility:** Store in-app notifications, expose the customer notification API, and fan a notification out across channels. It owns **no business copy and no event policy** — the caller supplies type/title/message/data and the channel list.
+  * **Tables:** `notifications` (`user_id` plain reference — no FK, no join to Identity; `type`, `title`, `message`, JSON `data`, nullable `read_at`, indexes `[user_id, created_at]` + `[user_id, read_at]`), `notification_deliveries` (external-delivery audit: `notification_id` **nullable** — SMS-only notifications have no in-app row — `channel`, `status`, `provider`, `provider_reference`, `sent_at`, `failed_at`, `error`).
+  * **Enums:** `NotificationChannel` (database, sms — no email/push), `DeliveryStatus` (pending, sent, failed, **skipped**), `NotificationTemplate` (internal SMS template constants: payment_success, order_cancelled, shipment_preparing, shipment_sent, shipment_delivered — `SmsPayloadDTO` takes the enum, never a raw string).
+  * **SMS is optional, never mandatory.** If the active provider has no template id configured for a template name (or no credentials), the send is **skipped**: no exception, no HTTP call, an info log, an `SmsResultDTO::skipped()`, and a `skipped` delivery row. A recipient with no phone on file is likewise skipped. `failed` is reserved for real attempts that did not succeed (transport error, provider rejection) and for caller misuse (SMS channel requested with no payload), so unconfigured templates never look like delivery incidents.
+  * **Public Contract:** `Modules\Notification\Domain\Contracts\NotificationManagerInterface` — `send(NotificationRequestDTO): ?NotificationDTO` (null when no in-app row was requested), `getUserNotifications`, `markAsRead`, `unreadCount`. DTOs: `NotificationRequestDTO` (userId, type, title, message, data, channels, optional `SmsPayloadDTO`), `NotificationDTO`, `SmsPayloadDTO` (template + business parameters).
+  * **Channels:** `NotificationChannelInterface` resolved by `NotificationChannelFactory`. `DatabaseChannel` is the only writer of `notifications`; `SmsChannel` converts the request into `SmsMessageDTO`, sends it through `SmsManagerInterface`, and records a delivery row. The database channel runs first so external deliveries can attach to the stored notification.
+  * **Failure isolation:** external delivery is best-effort. A failing/misconfigured provider, a missing SMS payload, or a recipient without a phone produce a **failed delivery record**, never an exception into the caller — SMS must never roll back a payment or shipment.
+  * **Cross-module rules:** recipient phone is resolved via `IdentityManagerInterface::getUserSummary()` (never the `User` model); SMS goes only through `SmsManagerInterface` (never a provider).
+  * **Endpoints:** `GET /api/v1/notifications` (paginated, caller-scoped), `POST /api/v1/notifications/{notification}/read`. Both `auth:sanctum` + `throttle:api`. `NotificationResource` exposes `id/type/title/message/data/read_at/created_at` only — never providers, references, or errors.
+  * **Permissions:** `notification.view-own`, `notification.mark-read-own` (customer + admin). `NotificationPolicy` (typehinted `Authorizable&Authenticatable`) enforces ownership → 403 on another user's notification.
+  * **Deliberately absent (future phase):** no domain events, listeners, or `EventServiceProvider` changes; nothing in Order/Payment/Shipment calls this module yet. Planned integration points — payment success (SMS + in-app), payment failed (in-app), order cancelled (SMS + in-app), shipment preparing (SMS), shipment sent (SMS + in-app), shipment delivered (SMS + in-app), admin paid-order-created (in-app).
+  * **Tests:** `tests/Feature/Notification/` (NotificationApiTest 9, NotificationDispatchTest 9) — **18 tests**.
+
+### 📨 10. Sms Module (Status: Infrastructure Ready)
+* **Responsibility:** Provider selection, provider abstraction, and provider-specific API formatting. It knows nothing about orders, payments, shipments, or notification rules.
+  * **Three outcomes, not two.** `SmsResultDTO` is `success` / `skipped` (nothing attempted — provider not configured for this template; expected, logged at info) / `failure` (a real attempt failed; worth alerting on). Provider template ids stay configuration; template names stay internal constants.
+  * **Public Contract:** `Modules\Sms\Domain\Contracts\SmsManagerInterface` — `send(SmsMessageDTO): SmsResultDTO`, `providerName()`. `SmsMessageDTO` is the stable internal format: `receiver` (canonical `09XXXXXXXXX`), `template` (**our** template name, e.g. `payment_success`), `parameters` (**our** business names, e.g. `OrderId`) — identical across providers.
+  * **Providers:** `SmsProviderInterface` (internal to the module) implemented by `SmsIrProvider` (maps template name → SMS.ir `templateId`, parameters → `[{name,value}]`, `09…` → `98…`), `LogSmsProvider` (dev default, no network), `FakeSmsProvider` (in-memory singleton for tests). Resolved by `SmsProviderFactory` (mirrors `PaymentGatewayFactory`); unknown name → `UnknownSmsProviderException`, which `SmsManager` degrades into a failed `SmsResultDTO`.
+  * **Config:** `config/sms.php` — `sms.default` (`SMS_PROVIDER`) and `sms.providers.smsir.{api_key, endpoint, templates.*}` (`SMS_SMSIR_*_TEMPLATE_ID`). Template ids are provider-specific; template **names** and parameter names are ours and never live in env.
+  * **Explicitly not OTP.** Identity's `OtpSenderInterface`/`SmsIrOtpSender` is untouched and unreused — same vendor, different responsibility and contract.
+  * **Tests:** `tests/Feature/Sms/SmsManagerTest.php` — **13 tests**, all under `Http::preventStrayRequests()` so no real SMS API can be reached.
+
 ---
 
 ## 8. Completed & Ready
@@ -254,6 +277,8 @@ Modules/
 | Order | ✅ Complete | 14 OrderTest + 11 AdminOrderTest passing |
 | Payment | ✅ Complete | 12 passing (PaymentTest) |
 | Shipment | ✅ Complete | 55 passing across 7 test classes |
+| Notification | ✅ Infrastructure ready (events pending) | 18 passing across 2 test classes |
+| Sms | ✅ Infrastructure ready | 13 passing (SmsManagerTest) |
 
 **Shipment adds 55 tests, 225 assertions — all green.** (5 unrelated, pre-existing ProfileTest/ProductsTest failures are out of scope.)
 

@@ -9,6 +9,7 @@ use Modules\Identity\Domain\Models\User;
 use Modules\Identity\Infrastructure\Persistence\Seeders\RolesAndPermissionsSeeder;
 use Modules\Inventory\Infrastructure\Persistence\Seeders\InventoryPermissionsSeeder;
 use Modules\Media\Infrastructure\Persistence\Seeders\MediaPermissionsSeeder;
+use Modules\Notification\Infrastructure\Persistence\Seeders\NotificationPermissionsSeeder;
 use Modules\Order\Infrastructure\Persistence\Seeders\OrderPermissionsSeeder;
 use Modules\Payment\Infrastructure\Persistence\Seeders\PaymentPermissionsSeeder;
 use Modules\Shipment\Infrastructure\Persistence\Seeders\ShipmentPermissionsSeeder;
@@ -48,6 +49,11 @@ abstract class TestCase extends BaseTestCase
     protected function seedShipmentPermissions(): void
     {
         $this->seed(ShipmentPermissionsSeeder::class);
+    }
+
+    protected function seedNotificationPermissions(): void
+    {
+        $this->seed(NotificationPermissionsSeeder::class);
     }
 
     protected function actingAsCustomer(?User $user = null): User
