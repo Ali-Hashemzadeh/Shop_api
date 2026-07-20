@@ -3088,7 +3088,7 @@ if (canCancelOrders && order.status === 'pending') renderCancelButton();</pre>
     </div>
     <div class="endpoint-body">
       <p>The gateway redirects the shopper back here after payment. It is <strong>called by Zarinpal</strong>, not by your frontend — it verifies the transaction and captures (or fails) the payment. Public (no token) because the caller is the gateway. <strong>The callback stays on the backend domain; verification never moves to the frontend.</strong></p>
-      <div class="note"><strong>This endpoint returns HTML, not JSON.</strong> After server-side verification and persistence (and <code>markAsPaid()</code> on success), it renders the Payment module result page <code>payment::payment</code> and always responds <strong>200</strong>. The shopper sees a success or failure page and clicks a button to return to the frontend application. Do not parse this response programmatically.</div>
+      <div class="note"><strong>This endpoint returns HTML, not JSON.</strong> After server-side verification and persistence (and <code>markAsPaid()</code> on success), it renders the Payment module result page <code>payment::result</code> and always responds <strong>200</strong>. The shopper sees a success or failure page and clicks a button to return to the frontend application. Do not parse this response programmatically.</div>
       <div class="block-label">Query Parameters</div>
       <table>
         <tr><th>Param</th><th>Type</th><th>Description</th></tr>
@@ -3110,7 +3110,7 @@ if (canCancelOrders && order.status === 'pending') renderCancelButton();</pre>
         <tr><td>بازگشت به فروشگاه</td><td class="opt"><code>FRONTEND_URL</code> (falls back to <code>APP_URL</code>; trailing slashes normalized)</td></tr>
         <tr><td>پیگیری سفارش</td><td class="opt"><code>{FRONTEND_URL}/{FRONTEND_ORDER_PATH}/{orderId}</code> — default <code>{FRONTEND_URL}/orders/{id}</code>. <code>orderId</code> comes from the stored Payment record, never from the query string. Rendered disabled when no order resolves.</td></tr>
       </table>
-      <p>Config lives in <code>config/frontend.php</code> (<code>frontend.url</code>, <code>frontend.order_path</code>) backed by the <code>FRONTEND_URL</code> / <code>FRONTEND_ORDER_PATH</code> env keys. The view is <code>Modules/Payment/Infrastructure/Resources/views/payment.blade.php</code> (registered as the <code>payment</code> view namespace in <code>PaymentServiceProvider::boot()</code>) and its stylesheet is served from <code>public/modules/payment/app.css</code>.</p>
+      <p>Config lives in <code>config/frontend.php</code> (<code>frontend.url</code>, <code>frontend.order_path</code>) backed by the <code>FRONTEND_URL</code> / <code>FRONTEND_ORDER_PATH</code> env keys. The view is <code>Modules/Payment/Infrastructure/Resources/views/result.blade.php</code> (registered as the <code>payment</code> view namespace in <code>PaymentServiceProvider::boot()</code>) and its stylesheet is served from <code>public/modules/payment/app.css</code>. The page renders the storefront breadcrumb plus the result card; the template's header/footer are omitted because they depend on assets that do not ship with this backend.</p>
     </div>
   </div>
 

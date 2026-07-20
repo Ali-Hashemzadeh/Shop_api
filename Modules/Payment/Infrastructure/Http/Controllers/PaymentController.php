@@ -50,7 +50,7 @@ class PaymentController extends Controller
             ? ['payment_id' => null]
             : $this->handleCallback->handle($status, $authority);
 
-        return view('payment::payment', $this->buildResultView($result));
+        return view('payment::result', $this->buildResultView($result));
     }
 
     /**

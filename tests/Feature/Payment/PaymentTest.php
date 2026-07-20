@@ -132,7 +132,7 @@ class PaymentTest extends TestCase
 
         $this->get("/api/v1/payments/zarinpal/callback?Status=OK&Authority={$authority}")
             ->assertStatus(200)
-            ->assertViewIs('payment::payment')
+            ->assertViewIs('payment::result')
             ->assertViewHas('success', true)
             ->assertViewHas('gateway', 'mock')
             ->assertViewHas('trackId', $driver->fakeRefId);
@@ -164,7 +164,7 @@ class PaymentTest extends TestCase
 
         $this->get("/api/v1/payments/zarinpal/callback?Status=NOK&Authority={$authority}")
             ->assertStatus(200)
-            ->assertViewIs('payment::payment')
+            ->assertViewIs('payment::result')
             ->assertViewHas('success', false);
 
         $this->assertDatabaseHas('payments', [
@@ -194,7 +194,7 @@ class PaymentTest extends TestCase
 
         $this->get("/api/v1/payments/zarinpal/callback?Status=OK&Authority={$authority}")
             ->assertStatus(200)
-            ->assertViewIs('payment::payment')
+            ->assertViewIs('payment::result')
             ->assertViewHas('success', false);
 
         $this->assertDatabaseHas('payments', [
@@ -230,7 +230,7 @@ class PaymentTest extends TestCase
 
         $this->get("/api/v1/payments/zarinpal/callback?Status=OK&Authority={$authority}")
             ->assertStatus(200)
-            ->assertViewIs('payment::payment')
+            ->assertViewIs('payment::result')
             ->assertViewHas('success', true);
 
         // Idempotent: the already-captured guard short-circuits, so the order is
@@ -277,7 +277,7 @@ class PaymentTest extends TestCase
         // design (the gateway calls this endpoint without a user session).
         $this->get('/api/v1/payments/zarinpal/callback?Status=OK')
             ->assertStatus(200)
-            ->assertViewIs('payment::payment')
+            ->assertViewIs('payment::result')
             ->assertViewHas('success', false);
     }
 
@@ -312,7 +312,7 @@ class PaymentTest extends TestCase
         // internal exception/message leakage. Runs unauthenticated on purpose.
         $this->get('/api/v1/payments/zarinpal/callback?Status=OK&Authority=UNKNOWN-AUTH-XYZ')
             ->assertStatus(200)
-            ->assertViewIs('payment::payment')
+            ->assertViewIs('payment::result')
             ->assertViewHas('success', false)
             ->assertViewHas('trackId', null)
             ->assertSee('نامشخص')
