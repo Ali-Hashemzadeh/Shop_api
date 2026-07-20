@@ -130,10 +130,12 @@ class PaymentTest extends TestCase
         $authority = 'TEST-AUTH-SUCCESS-001';
         $this->createInitiatedPayment($order->id, $authority);
 
-        $this->getJson("/api/v1/payments/zarinpal/callback?Status=OK&Authority={$authority}")
+        $this->get("/api/v1/payments/zarinpal/callback?Status=OK&Authority={$authority}")
             ->assertStatus(200)
-            ->assertJsonPath('success', true)
-            ->assertJsonPath('reference_id', $driver->fakeRefId);
+            ->assertViewIs('payment::payment')
+            ->assertViewHas('success', true)
+            ->assertViewHas('gateway', 'mock')
+            ->assertViewHas('trackId', $driver->fakeRefId);
 
         $this->assertDatabaseHas('payments', [
             'transaction_reference' => $driver->fakeRefId,
@@ -160,9 +162,10 @@ class PaymentTest extends TestCase
         $authority = 'TEST-AUTH-CANCEL-001';
         $this->createInitiatedPayment($order->id, $authority);
 
-        $this->getJson("/api/v1/payments/zarinpal/callback?Status=NOK&Authority={$authority}")
-            ->assertStatus(422)
-            ->assertJsonPath('success', false);
+        $this->get("/api/v1/payments/zarinpal/callback?Status=NOK&Authority={$authority}")
+            ->assertStatus(200)
+            ->assertViewIs('payment::payment')
+            ->assertViewHas('success', false);
 
         $this->assertDatabaseHas('payments', [
             'transaction_reference' => $authority,
@@ -189,9 +192,10 @@ class PaymentTest extends TestCase
         $authority = 'TEST-AUTH-VERIFY-FAIL-001';
         $this->createInitiatedPayment($order->id, $authority);
 
-        $this->getJson("/api/v1/payments/zarinpal/callback?Status=OK&Authority={$authority}")
-            ->assertStatus(422)
-            ->assertJsonPath('success', false);
+        $this->get("/api/v1/payments/zarinpal/callback?Status=OK&Authority={$authority}")
+            ->assertStatus(200)
+            ->assertViewIs('payment::payment')
+            ->assertViewHas('success', false);
 
         $this->assertDatabaseHas('payments', [
             'transaction_reference' => $authority,
@@ -200,6 +204,10 @@ class PaymentTest extends TestCase
 
         $this->assertDatabaseHas('orders', ['id' => $order->id, 'status' => 'pending']);
         $this->assertDatabaseHas('cart_items', ['id' => $cartItem->id]);
+
+        // Failed verification must not commit inventory or activate a shipment
+        // (both happen only inside the shared markAsPaid path, never reached here).
+        $this->assertDatabaseCount('shipments', 0);
     }
 
     // ── Scenario 6: Idempotency — already captured skips re-processing ────────
@@ -220,12 +228,13 @@ class PaymentTest extends TestCase
             'status' => 'captured',
         ]);
 
-        $this->getJson("/api/v1/payments/zarinpal/callback?Status=OK&Authority={$authority}")
+        $this->get("/api/v1/payments/zarinpal/callback?Status=OK&Authority={$authority}")
             ->assertStatus(200)
-            ->assertJsonPath('success', true)
-            ->assertJsonPath('message', 'Payment already captured.')
-            ->assertJsonPath('payment_id', $payment->id);
+            ->assertViewIs('payment::payment')
+            ->assertViewHas('success', true);
 
+        // Idempotent: the already-captured guard short-circuits, so the order is
+        // not re-marked paid and no second capture is attempted.
         $this->assertDatabaseHas('payments', ['id' => $payment->id, 'status' => 'captured']);
     }
 
@@ -261,10 +270,62 @@ class PaymentTest extends TestCase
     }
 
     /** @test */
-    public function callback_returns_400_when_authority_parameter_is_missing(): void
+    public function callback_renders_generic_failure_page_when_authority_is_missing(): void
     {
-        $this->getJson('/api/v1/payments/zarinpal/callback?Status=OK')
-            ->assertStatus(400);
+        // No Authority → no Payment can be resolved → safe generic failure page,
+        // never a JSON error or a leaked internal message. Unauthenticated by
+        // design (the gateway calls this endpoint without a user session).
+        $this->get('/api/v1/payments/zarinpal/callback?Status=OK')
+            ->assertStatus(200)
+            ->assertViewIs('payment::payment')
+            ->assertViewHas('success', false);
+    }
+
+    /** @test */
+    public function callback_page_links_use_configured_frontend_url_and_real_order(): void
+    {
+        config()->set('frontend.url', 'https://shop.example.com');
+        config()->set('frontend.order_path', 'orders');
+
+        $user = $this->actingAsCustomer();
+        $order = $this->createPendingOrder($user->id, 100000);
+        $this->createCartItem($user->id);
+
+        $driver = new MockGatewayDriver;
+        $this->app->instance(MockGatewayDriver::class, $driver);
+
+        $authority = 'TEST-AUTH-URLS-001';
+        $this->createInitiatedPayment($order->id, $authority);
+
+        // An attacker-supplied query param must never influence navigation URLs.
+        $this->get("/api/v1/payments/zarinpal/callback?Status=OK&Authority={$authority}&frontend=https://evil.test")
+            ->assertStatus(200)
+            ->assertViewHas('frontendHomeUrl', 'https://shop.example.com')
+            ->assertViewHas('frontendOrderUrl', "https://shop.example.com/orders/{$order->id}")
+            ->assertDontSee('evil.test');
+    }
+
+    /** @test */
+    public function callback_shows_neutral_placeholder_and_no_internal_message_when_unresolved(): void
+    {
+        // Unknown Authority resolves to no Payment: neutral placeholders, no
+        // internal exception/message leakage. Runs unauthenticated on purpose.
+        $this->get('/api/v1/payments/zarinpal/callback?Status=OK&Authority=UNKNOWN-AUTH-XYZ')
+            ->assertStatus(200)
+            ->assertViewIs('payment::payment')
+            ->assertViewHas('success', false)
+            ->assertViewHas('trackId', null)
+            ->assertSee('نامشخص')
+            ->assertDontSee('Payment record not found')
+            ->assertDontSee('Exception');
+    }
+
+    /** @test */
+    public function callback_page_loads_the_module_css_asset(): void
+    {
+        $this->get('/api/v1/payments/zarinpal/callback?Status=OK&Authority=UNKNOWN-AUTH-XYZ')
+            ->assertStatus(200)
+            ->assertSee('modules/payment/app.css', false);
     }
 
     /** @test */

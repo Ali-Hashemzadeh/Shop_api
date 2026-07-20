@@ -30,7 +30,7 @@ class HandleZarinpalCallbackAction
         if ($status !== 'OK') {
             $payment->update(['status' => PaymentStatus::FAILED->value]);
 
-            return ['success' => false, 'message' => 'Payment was cancelled by the user.'];
+            return ['success' => false, 'message' => 'Payment was cancelled by the user.', 'payment_id' => $payment->id];
         }
 
         // Idempotency guard — already captured by a prior callback delivery
@@ -48,7 +48,7 @@ class HandleZarinpalCallbackAction
                     'gateway_response' => $result['raw_response'],
                 ]);
 
-                return ['success' => false, 'message' => 'Payment verification failed.'];
+                return ['success' => false, 'message' => 'Payment verification failed.', 'payment_id' => $payment->id];
             }
 
             $payment->update([

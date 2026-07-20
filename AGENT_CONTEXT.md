@@ -219,11 +219,12 @@ Modules/
   * **Actions:** `InitializePaymentAction` — **aborts 403 unless the order belongs to the calling `userId`** (checked right after the 404 guard), then in_person → pending_cash + markAsPaid; online → gateway redirect + initiated row. `HandleZarinpalCallbackAction` (idempotency guard, verify, capture/fail, markAsPaid).
   * **HTTP Endpoints:**
       * `POST /api/v1/payments/initialize` — auth:sanctum + throttle:api. Requires `payment.create` **and** ownership of the target order (403 otherwise). Returns `{type, payment_id, status, redirect_url}`.
-      * `GET /api/v1/payments/zarinpal/callback` — PUBLIC + throttle:public. Returns `{success, message, payment_id?, reference_id?}`.
-  * **Config:** `config/payment.php` — `PAYMENT_DEFAULT_GATEWAY`, `ZARINPAL_MERCHANT_ID`, `ZARINPAL_SANDBOX`.
+      * `GET /api/v1/payments/zarinpal/callback` — PUBLIC + throttle:public. The gateway returns here on the **backend** domain; the endpoint still runs server-side verify/capture/`markAsPaid`, then **renders the Blade result page `payment::payment`** (HTTP 200 for both success and failure) instead of JSON. Success is derived from the **persisted** Payment status (never from raw `Status`/`Authority` params); page buttons link to the configured frontend (`config('frontend.*')`), and the order-tracking URL is built from the stored Payment's real `order_id`.
+  * **View + assets:** `Modules/Payment/Infrastructure/Resources/views/payment.blade.php` (self-contained RTL page, registered as the `payment` view namespace in `PaymentServiceProvider::boot()` via `loadViewsFrom`). Page CSS loads from the public disk at `public/modules/payment/app.css` via `asset()`.
+  * **Config:** `config/payment.php` — `PAYMENT_DEFAULT_GATEWAY`, `ZARINPAL_MERCHANT_ID`, `ZARINPAL_SANDBOX`. `config/frontend.php` — `url` (`FRONTEND_URL`, falls back to `APP_URL`, trailing slash normalized) + `order_path` (`FRONTEND_ORDER_PATH`, default `orders`). Controller/Blade read these via `config()` only — never `env()`.
   * **Permissions:** `payment.create` — granted to admin + customer.
   * **Cross-module:** `OrderManagerInterface` only (contract boundary, no Order model imported).
-  * **Test suite:** `PaymentTest` — **12 tests** covering both flows, callback success/cancel/verify-fail, idempotency, ownership 403, auth matrix.
+  * **Test suite:** `PaymentTest` — **15 tests** covering both flows, callback rendering the Blade page on success/cancel/verify-fail, idempotency, ownership 403, auth matrix, frontend-URL wiring (params can't override the domain), neutral placeholders, no internal-message leakage, and the CSS asset URL.
 
 ### 🚚 8. Shipment Module (Status: Active & Complete)
 * **Responsibility:** Fulfillment lifecycle from checkout → payment → delivery/postal handoff/pickup. Owns the four fixed, **config-backed** methods, local-delivery working periods + generated dated slots + capacity/reservations, the operational shipment record, method-specific status workflows, and status history.

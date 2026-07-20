@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace Modules\Payment\Infrastructure\Http\Controllers;
 
+use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Modules\Payment\Application\Actions\HandleZarinpalCallbackAction;
 use Modules\Payment\Domain\Contracts\PaymentManagerInterface;
+use Modules\Payment\Domain\Enums\PaymentStatus;
+use Modules\Payment\Domain\Models\Payment;
 use Modules\Payment\Infrastructure\Http\Requests\InitializePaymentRequest;
 
 class PaymentController extends Controller
@@ -30,19 +33,62 @@ class PaymentController extends Controller
         return response()->json($result);
     }
 
-    public function zarinpalCallback(Request $request): JsonResponse
+    /**
+     * Gateway return endpoint. The gateway hits this backend URL; we still run
+     * server-side verification and persistence, then render the Payment result
+     * page (Blade) instead of JSON. Buttons on the page navigate to the
+     * configured frontend domain — the callback itself never leaves the backend.
+     */
+    public function zarinpalCallback(Request $request): View
     {
         $status = (string) $request->query('Status', '');
         $authority = (string) $request->query('Authority', '');
 
-        if (empty($authority)) {
-            return response()->json(['success' => false, 'message' => 'Missing Authority parameter.'], 400);
+        // Without an Authority we cannot safely resolve a Payment record, so
+        // fall through to a generic failure page (no internal details leaked).
+        $result = $authority === ''
+            ? ['payment_id' => null]
+            : $this->handleCallback->handle($status, $authority);
+
+        return view('payment::payment', $this->buildResultView($result));
+    }
+
+    /**
+     * Assemble the result-page data purely from the persisted, server-verified
+     * Payment state — never from raw callback query parameters. Navigation URLs
+     * come from config only, so they cannot be overridden by the caller.
+     *
+     * @param  array<string, mixed>  $result
+     * @return array<string, mixed>
+     */
+    private function buildResultView(array $result): array
+    {
+        $paymentId = $result['payment_id'] ?? null;
+        $payment = $paymentId !== null ? Payment::find($paymentId) : null;
+
+        $success = $payment !== null
+            && $payment->status === PaymentStatus::CAPTURED->value;
+
+        $home = rtrim((string) config('frontend.url'), '/');
+        if ($home === '') {
+            $home = rtrim((string) config('app.url'), '/');
         }
 
-        $result = $this->handleCallback->handle($status, $authority);
+        $orderUrl = null;
+        if ($payment !== null && $home !== '') {
+            $orderPath = trim((string) config('frontend.order_path'), '/');
+            $orderUrl = $orderPath === ''
+                ? $home.'/'.$payment->order_id
+                : $home.'/'.$orderPath.'/'.$payment->order_id;
+        }
 
-        $httpStatus = $result['success'] ? 200 : 422;
-
-        return response()->json($result, $httpStatus);
+        return [
+            'success' => $success,
+            'gateway' => $payment?->gateway,
+            'trackId' => $payment?->transaction_reference,
+            'date' => $payment?->updated_at?->format('Y-m-d H:i'),
+            'frontendHomeUrl' => $home !== '' ? $home : null,
+            'frontendOrderUrl' => $orderUrl,
+        ];
     }
 }

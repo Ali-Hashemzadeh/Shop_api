@@ -3087,30 +3087,30 @@ if (canCancelOrders && order.status === 'pending') renderCancelButton();</pre>
       <span class="badge rate">120/min · per IP</span>
     </div>
     <div class="endpoint-body">
-      <p>The gateway redirects the shopper back here after payment. It is <strong>called by Zarinpal</strong>, not by your frontend — it verifies the transaction and captures (or fails) the payment. Public (no token) because the caller is the gateway.</p>
+      <p>The gateway redirects the shopper back here after payment. It is <strong>called by Zarinpal</strong>, not by your frontend — it verifies the transaction and captures (or fails) the payment. Public (no token) because the caller is the gateway. <strong>The callback stays on the backend domain; verification never moves to the frontend.</strong></p>
+      <div class="note"><strong>This endpoint returns HTML, not JSON.</strong> After server-side verification and persistence (and <code>markAsPaid()</code> on success), it renders the Payment module result page <code>payment::payment</code> and always responds <strong>200</strong>. The shopper sees a success or failure page and clicks a button to return to the frontend application. Do not parse this response programmatically.</div>
       <div class="block-label">Query Parameters</div>
       <table>
         <tr><th>Param</th><th>Type</th><th>Description</th></tr>
-        <tr><td>Authority</td><td class="req">required string</td><td>Gateway transaction reference. Missing → 400.</td></tr>
-        <tr><td>Status</td><td class="opt">string</td><td><code>OK</code> when the shopper approved payment; anything else is treated as a cancellation.</td></tr>
+        <tr><td>Authority</td><td class="req">required string</td><td>Gateway transaction reference. Missing → generic failure page (still 200).</td></tr>
+        <tr><td>Status</td><td class="opt">string</td><td><code>OK</code> when the shopper approved payment; anything else is treated as a cancellation. <strong>Never used to decide the displayed success state</strong> — that comes from the persisted, verified Payment record.</td></tr>
       </table>
-      <div class="block-label">Response — 200 OK (captured)</div>
-      <pre>{
-  <span class="key">"success"</span>:    <span class="bool">true</span>,
-  <span class="key">"message"</span>:    <span class="str">"Payment captured successfully."</span>,
-  <span class="key">"payment_id"</span>: <span class="num">7</span>
-}</pre>
-      <div class="block-label">Response — 422 (verification failed / cancelled)</div>
-      <pre>{
-  <span class="key">"success"</span>: <span class="bool">false</span>,
-  <span class="key">"message"</span>: <span class="str">"Payment verification failed."</span>
-}</pre>
-      <div class="block-label">Error Responses</div>
+      <div class="block-label">Response — 200 OK (HTML)</div>
+      <p>The rendered page shows درگاه پرداختی (gateway), تاریخ تراکنش (date), شماره پیگیری (transaction reference) and the success/failure state, all read from the stored Payment row. Unknown values render as <code>نامشخص</code> / <code>—</code>; internal messages, stack traces, gateway credentials and raw callback payloads are never shown.</p>
       <table>
-        <tr><th>Status</th><th>Condition</th></tr>
-        <tr><td>400</td><td class="opt">Missing <code>Authority</code> query parameter</td></tr>
-        <tr><td>422</td><td class="opt">Payment record not found, cancelled by user, or gateway verification failed</td></tr>
+        <tr><th>Case</th><th>Rendered state</th></tr>
+        <tr><td>Verified &amp; captured</td><td class="opt">Success page; order marked paid (inventory committed + shipment activated exactly once, idempotent on repeat callbacks)</td></tr>
+        <tr><td>Cancelled at gateway / verification rejected</td><td class="opt">Failure page; payment recorded <code>failed</code>, order stays <code>pending</code></td></tr>
+        <tr><td>Missing or unknown <code>Authority</code></td><td class="opt">Generic failure page with neutral placeholders</td></tr>
       </table>
+      <div class="block-label">Frontend navigation</div>
+      <p>The page's buttons are the hand-off back to your app. They are built from configuration only — callback query parameters can never override them, and no payment status, transaction id, or other sensitive value is placed in the URL.</p>
+      <table>
+        <tr><th>Button</th><th>Target</th></tr>
+        <tr><td>بازگشت به فروشگاه</td><td class="opt"><code>FRONTEND_URL</code> (falls back to <code>APP_URL</code>; trailing slashes normalized)</td></tr>
+        <tr><td>پیگیری سفارش</td><td class="opt"><code>{FRONTEND_URL}/{FRONTEND_ORDER_PATH}/{orderId}</code> — default <code>{FRONTEND_URL}/orders/{id}</code>. <code>orderId</code> comes from the stored Payment record, never from the query string. Rendered disabled when no order resolves.</td></tr>
+      </table>
+      <p>Config lives in <code>config/frontend.php</code> (<code>frontend.url</code>, <code>frontend.order_path</code>) backed by the <code>FRONTEND_URL</code> / <code>FRONTEND_ORDER_PATH</code> env keys. The view is <code>Modules/Payment/Infrastructure/Resources/views/payment.blade.php</code> (registered as the <code>payment</code> view namespace in <code>PaymentServiceProvider::boot()</code>) and its stylesheet is served from <code>public/modules/payment/app.css</code>.</p>
     </div>
   </div>
 
