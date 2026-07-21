@@ -17,4 +17,13 @@ interface IdentityManagerInterface
      * immutable customer_snapshot). Never leak the User model across this boundary.
      */
     public function getUserSummary(int $userId): UserSummaryDTO;
+
+    /**
+     * Ids of every user holding the administrator role — the audience for
+     * operational, admin-facing notifications. Ids only; no User model crosses
+     * this boundary.
+     *
+     * @return list<int>
+     */
+    public function getAdminUserIds(): array;
 }

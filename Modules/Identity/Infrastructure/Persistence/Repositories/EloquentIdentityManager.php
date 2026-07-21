@@ -19,4 +19,9 @@ class EloquentIdentityManager implements IdentityManagerInterface
     {
         return UserSummaryDTO::fromModel(User::findOrFail($userId));
     }
+
+    public function getAdminUserIds(): array
+    {
+        return User::role('admin')->pluck('id')->map(fn ($id) => (int) $id)->all();
+    }
 }

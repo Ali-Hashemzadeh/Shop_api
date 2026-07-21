@@ -5,11 +5,15 @@ declare(strict_types=1);
 namespace Modules\Shipment\Application\Services;
 
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Modules\Order\Domain\Contracts\OrderManagerInterface;
 use Modules\Shipment\Domain\DTOs\ShipmentDTO;
 use Modules\Shipment\Domain\DTOs\ShipmentStatusHistoryDTO;
 use Modules\Shipment\Domain\Enums\ReservationStatus;
 use Modules\Shipment\Domain\Enums\ShipmentStatus;
+use Modules\Shipment\Domain\Events\ShipmentDeliveredEvent;
+use Modules\Shipment\Domain\Events\ShipmentPreparingStartedEvent;
+use Modules\Shipment\Domain\Events\ShipmentSentEvent;
 use Modules\Shipment\Domain\Models\DeliverySlotReservation;
 use Modules\Shipment\Domain\Models\Shipment;
 use Modules\Shipment\Domain\Models\ShipmentStatusHistory;
@@ -87,8 +91,42 @@ class ShipmentTransitionService
 
             $this->syncReservation($shipment, $to);
 
+            $this->announce($shipment, $to);
+
             return $this->toDTO($shipment->fresh());
         });
+    }
+
+    /**
+     * Publish the customer-facing milestones of an existing transition. No new
+     * status is introduced: `handed_to_post` and `out_for_delivery` are exactly
+     * the two the module already maps to the order status `shipped`.
+     *
+     * `picked_up` is intentionally silent — the customer is at the counter.
+     * Listeners run after commit, so a rolled-back transition notifies nobody.
+     */
+    private function announce(Shipment $shipment, ShipmentStatus $to): void
+    {
+        $event = match ($to) {
+            ShipmentStatus::Preparing => new ShipmentPreparingStartedEvent(
+                orderId: $shipment->order_id,
+                userId: $shipment->user_id,
+            ),
+            ShipmentStatus::HandedToPost, ShipmentStatus::OutForDelivery => new ShipmentSentEvent(
+                orderId: $shipment->order_id,
+                userId: $shipment->user_id,
+                trackingCode: $shipment->tracking_number,
+            ),
+            ShipmentStatus::Delivered => new ShipmentDeliveredEvent(
+                orderId: $shipment->order_id,
+                userId: $shipment->user_id,
+            ),
+            default => null,
+        };
+
+        if ($event !== null) {
+            Event::dispatch($event);
+        }
     }
 
     private function syncReservation(Shipment $shipment, ShipmentStatus $to): void
