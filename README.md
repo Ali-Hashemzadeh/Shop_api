@@ -130,7 +130,8 @@ Fulfillment lifecycle from checkout through payment to delivery, postal handoff,
 - **Key contract:** `ShipmentManagerInterface` — `getAvailableMethods`, `getAvailableDeliverySlots`, `validateSelection`, `holdForPendingOrder`, `releasePendingOrder`, `activateForPaidOrder`, `findForOrder`. Supported-region rule isolated behind `LocalDeliveryEligibilityInterface`.
 - **Lifecycle:** a held local-delivery slot is reserved at pending-order creation, confirmed when the order is **paid**, released on cancel/expiry. The operational `shipments` record is created only when the order becomes paid (idempotent by `order_id`, at the shared `markAsPaid` path, which also commits inventory once).
 - **Status mapping:** shipment → order summary (`handed_to_post`/`out_for_delivery` → `shipped`; `delivered`/`picked_up` → `completed`). Postal tracking intentionally ends at `handed_to_post`.
-- **Slots:** `shipment:generate-delivery-slots` generates dated cinema-session slots from recurring working periods (idempotent, scheduled daily). Remaining capacity = capacity − admin-reserved − active reservations; overbooking prevented with row locks.
+- **Slots:** `shipment:generate-delivery-slots` generates dated cinema-session slots from recurring working periods (idempotent, scheduled daily). `POST /admin/shipment/delivery-slots/generate` triggers the identical run on demand — useful in local development, where no cron is running. Remaining capacity = capacity − admin-reserved − active reservations; overbooking prevented with row locks.
+- **Default working hours** are seeded (Sat–Thu, 09:00–13:00 and 16:00–21:00, Friday closed) as *starting values only* — the admin owns the schedule from there via `/admin/shipment/delivery-working-periods`, and re-seeding never overwrites those edits.
 - **Working-period admin API:** GET/POST /api/v1/admin/shipment/delivery-working-periods and PATCH/DELETE /api/v1/admin/shipment/delivery-working-periods/{id} manage recurring weekday templates through existing shipment.slot.view-admin / shipment.slot.manage permissions. Same-day periods cannot overlap; changes affect future generation and do not rewrite existing dated slots.
 - **Endpoints:** customer `GET /shipment/methods`, `/shipment/delivery-slots`, `/shipments/{publicCode}`, `/orders/{order}/shipment`; admin `/admin/shipments*` (business-action POSTs) and `/admin/shipment/delivery-slots*`.
 - **Authorization:** permission-based (`shipment.*`); customer gets `shipment.view-own`, admin gets all.
@@ -145,7 +146,19 @@ In-app notification storage plus multi-channel delivery. The module owns no busi
 - **Failure isolation:** a real SMS failure (provider down or rejecting) creates a *failed delivery record* — it never throws into the caller and never rolls back a payment or shipment.
 - **Boundaries:** the recipient's phone comes from `IdentityManagerInterface::getUserSummary()`; SMS leaves only through `SmsManagerInterface`. No SMS provider is ever referenced here.
 - **Endpoints:** `GET /api/v1/notifications`, `POST /api/v1/notifications/{id}/read` (`auth:sanctum`, `notification.view-own` / `notification.mark-read-own`; another user's notification returns 403).
-- **Not yet wired:** no events or listeners exist. Payment/order/shipment integration is a later phase.
+- **Wired to the business flows via events.** Business modules dispatch primitives-only integration events; listeners in this module react. Nothing else calls `NotificationManagerInterface`.
+
+| Event | Raised when | Customer | Admin |
+|---|---|---|---|
+| `OrderPaidEvent` | `markAsPaid` completes a real pending → paid transition | in-app + SMS | in-app |
+| `PaymentFailedEvent` | server-side gateway verification rejects the payment | in-app | — |
+| `OrderCancelledEvent` | customer or operator cancels an order | in-app + SMS | — |
+| `ShipmentPreparingStartedEvent` | shipment enters `preparing` | SMS | — |
+| `ShipmentSentEvent` | shipment reaches `handed_to_post` or `out_for_delivery` | in-app + SMS | — |
+| `ShipmentDeliveredEvent` | shipment reaches `delivered` | in-app + SMS | — |
+
+- **Transaction-safe:** every listener implements `ShouldHandleEventsAfterCommit`, so a rolled-back business transaction sends nothing. Repeat payment callbacks cannot duplicate notifications — the already-paid early return in `markAsPaid` means the event is never re-dispatched.
+- **Silent by design:** the internal pending-order replacement during checkout, TTL order expiry, and in-store `picked_up`.
 
 ### Sms (Infrastructure ready)
 Provider abstraction for notification SMS: provider selection, provider-specific formatting, nothing else.
@@ -341,6 +354,9 @@ That one line is all that's needed — do **not** add a separate cron entry per 
 ```bash
 php artisan shipment:generate-delivery-slots            # uses config('shipment.delivery.generation_days'), default 30
 php artisan shipment:generate-delivery-slots --days=60  # generate 60 days ahead
+
+# Same generation over HTTP, for environments with no cron (admin token + shipment.slot.manage):
+#   POST /api/v1/admin/shipment/delivery-slots/generate   {"days": 30}   // days optional, 1-90
 ```
 
 Before slots can be generated you must seed the recurring templates in `delivery_working_periods` (weekday `0`=Sun … `6`=Sat, plus `starts_at`/`ends_at`), and optionally `delivery_schedule_exceptions` (`closed` / `custom_hours`) for holidays or special hours. Slot duration, capacity, booking horizon, and lead time are all tunable in `config/shipment.php` (env-backed).

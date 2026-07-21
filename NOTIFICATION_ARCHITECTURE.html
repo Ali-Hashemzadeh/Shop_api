@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Notification &amp; SMS — Architecture Guide</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #222537;
+      --border: #2e3147;
+      --text: #e2e4f0;
+      --muted: #8b8fa8;
+      --accent: #7c6af7;
+      --ok: #22c55e;
+      --info: #3b82f6;
+      --warnc: #f59e0b;
+      --bad: #ef4444;
+      --cyan: #22d3ee;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); display: flex; min-height: 100vh; }
+
+    nav { width: 260px; min-width: 260px; background: var(--surface); border-right: 1px solid var(--border); height: 100vh; overflow-y: auto; position: sticky; top: 0; padding: 24px 0; }
+    nav .logo { padding: 0 20px 24px; font-size: 15px; font-weight: 700; color: var(--accent); border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+    nav .logo span { color: var(--muted); font-weight: 400; font-size: 12px; display: block; margin-top: 3px; }
+    nav a { display: block; padding: 6px 20px; font-size: 13px; color: var(--muted); text-decoration: none; border-left: 2px solid transparent; transition: all .15s; }
+    nav a:hover { color: var(--text); background: var(--surface2); }
+    nav a.active { color: var(--text); background: var(--surface2); border-left-color: var(--accent); }
+    nav .section-label { padding: 16px 20px 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: #4a4d65; }
+
+    main { flex: 1; padding: 48px 56px; max-width: 1000px; }
+    h1 { font-size: 32px; font-weight: 700; margin-bottom: 8px; }
+    .subtitle { font-size: 15px; color: var(--muted); margin-bottom: 28px; }
+    h2 { font-size: 22px; font-weight: 700; margin: 56px 0 20px; padding-top: 56px; border-top: 1px solid var(--border); }
+    h2:first-of-type { border-top: none; padding-top: 0; margin-top: 32px; }
+    h3 { font-size: 14px; font-weight: 600; margin: 32px 0 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+    h4 { font-size: 14px; margin-bottom: 8px; color: var(--text); }
+    p { font-size: 14px; line-height: 1.7; color: var(--muted); margin-bottom: 12px; }
+    p strong, li strong, td strong { color: var(--text); }
+    ul, ol { font-size: 14px; color: var(--muted); padding-left: 20px; line-height: 1.9; margin-bottom: 12px; }
+    a { color: var(--accent); }
+
+    code { font-family: 'SF Mono', 'Fira Code', Consolas, monospace; font-size: 12.5px; background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; color: var(--text); }
+    pre { font-family: 'SF Mono', 'Fira Code', Consolas, monospace; font-size: 12.5px; line-height: 1.65; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px; overflow-x: auto; color: var(--text); margin: 14px 0; }
+    pre code { background: none; border: none; padding: 0; }
+    .cmt { color: var(--muted); }
+    .kw { color: var(--accent); }
+    .str { color: var(--ok); }
+
+    table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13px; display: block; overflow-x: auto; }
+    th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    th { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; font-weight: 700; white-space: nowrap; }
+    td { color: var(--muted); line-height: 1.6; }
+    tr:last-child td { border-bottom: none; }
+
+    .note, .warn, .good { border-radius: 8px; padding: 13px 16px; font-size: 13.5px; line-height: 1.65; margin: 16px 0; border: 1px solid; }
+    .note { background: rgba(59,130,246,.07); border-color: rgba(59,130,246,.35); color: #b8cdf0; }
+    .warn { background: rgba(245,158,11,.07); border-color: rgba(245,158,11,.35); color: #f0d9ae; }
+    .good { background: rgba(34,197,94,.07); border-color: rgba(34,197,94,.35); color: #b6ecc8; }
+    .note strong, .warn strong, .good strong { color: #fff; }
+
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px; margin: 16px 0; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; margin: 16px 0; }
+
+    .pill { display: inline-block; font-size: 10px; padding: 2px 8px; border-radius: 99px; background: var(--surface2); border: 1px solid var(--border); color: var(--muted); white-space: nowrap; }
+    .pill.db { border-color: var(--info); color: var(--info); }
+    .pill.sms { border-color: var(--cyan); color: var(--cyan); }
+    .pill.sent { border-color: var(--ok); color: var(--ok); }
+    .pill.skip { border-color: var(--warnc); color: var(--warnc); }
+    .pill.fail { border-color: var(--bad); color: var(--bad); }
+
+    .rule { display: flex; gap: 12px; align-items: flex-start; font-size: 13.5px; line-height: 1.65; color: var(--muted); padding: 11px 0; border-bottom: 1px solid var(--border); }
+    .rule:last-child { border-bottom: none; }
+    .rule .mark { font-size: 15px; line-height: 1.3; }
+    .yes { color: var(--ok); }
+    .no { color: var(--bad); }
+
+    footer { margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--border); font-size: 12.5px; color: #5b5f78; }
+
+    @media (max-width: 860px) {
+      body { flex-direction: column; }
+      nav { width: 100%; height: auto; position: static; }
+      main { padding: 32px 20px; }
+    }
+  </style>
+</head>
+<body>
+<nav>
+  <div class="logo">Notifications &amp; SMS <span>Architecture Guide</span></div>
+
+  <div class="section-label">Concepts</div>
+  <a href="#what">What This Is</a>
+  <a href="#bigpicture">The Big Picture</a>
+  <a href="#why">Why Events</a>
+
+  <div class="section-label">The Modules</div>
+  <a href="#notification-module">Notification Module</a>
+  <a href="#sms-module">Sms Module</a>
+  <a href="#schema">Database Schema</a>
+
+  <div class="section-label">Delivery</div>
+  <a href="#channels">Channels</a>
+  <a href="#optional-sms">Optional SMS &amp; Skipping</a>
+  <a href="#outcomes">Three Outcomes</a>
+
+  <div class="section-label">Integration</div>
+  <a href="#events">Events &amp; Listeners</a>
+  <a href="#timing">Timing &amp; Idempotency</a>
+  <a href="#walkthrough">Full Walkthrough</a>
+
+  <div class="section-label">Working On It</div>
+  <a href="#recipes">Common Changes</a>
+  <a href="#rules">Rules &amp; Boundaries</a>
+  <a href="#config">Configuration</a>
+  <a href="#testing">Testing</a>
+  <a href="#gaps">Known Gaps</a>
+</nav>
+
+<main>
+  <h1>Notifications &amp; SMS</h1>
+  <p class="subtitle">How a paid order turns into a message on a customer's phone — and why the code is arranged the way it is.</p>
+
+  <h2 id="what">What This Is</h2>
+  <p>Two modules that together answer one question: <em>"something happened in the shop — who needs to know, and how?"</em></p>
+  <div class="grid">
+    <div class="card">
+      <h4>Modules/Notification</h4>
+      <p style="margin:0">Stores in-app notifications, exposes the customer API, and fans a single request out across delivery channels. It knows <em>how</em> to notify, never <em>when</em>.</p>
+    </div>
+    <div class="card">
+      <h4>Modules/Sms</h4>
+      <p style="margin:0">Picks the active SMS provider and translates our internal message shape into that provider's API format. It has never heard of orders, payments, or shipments.</p>
+    </div>
+  </div>
+  <p>Everything else — Order, Payment, Shipment — simply announces facts. They have no idea notifications exist.</p>
+
+  <h2 id="bigpicture">The Big Picture</h2>
+  <pre><span class="cmt">Business module (Order / Payment / Shipment)</span>
+        │
+        │  dispatches a published integration event
+        │  (primitives only — ids, strings, numbers)
+        ▼
+<span class="cmt">Event</span>  OrderPaidEvent { orderId, userId, totalAmount }
+        │
+        │  registered in NotificationServiceProvider::boot()
+        ▼
+<span class="cmt">Listener</span>  SendOrderPaidNotifications   <span class="cmt">(ShouldHandleEventsAfterCommit)</span>
+        │
+        │  builds a NotificationRequestDTO — copy lives here
+        ▼
+<span class="cmt">Contract</span>  NotificationManagerInterface::send()
+        │
+        ├──▶ DatabaseChannel ──▶ notifications table ──▶ GET /api/v1/notifications
+        │
+        └──▶ SmsChannel
+                 │  resolves phone via IdentityManagerInterface
+                 ▼
+             SmsManagerInterface
+                 │  reads config('sms.default')
+                 ▼
+             SmsProviderFactory ──▶ SmsProviderInterface
+                                        ├── SmsIrProvider   <span class="cmt">(live)</span>
+                                        ├── LogSmsProvider  <span class="cmt">(dev)</span>
+                                        └── FakeSmsProvider <span class="cmt">(tests)</span>
+                 │
+                 ▼
+             notification_deliveries row  <span class="cmt">(sent / skipped / failed)</span></pre>
+  <p>Every arrow crosses a boundary through an interface or a primitives-only event. No module ever hands another one an Eloquent model.</p>
+
+  <h2 id="why">Why Events Instead of Direct Calls</h2>
+  <p>The obvious implementation is to call the notification manager straight from the payment callback. We deliberately don't, for three reasons:</p>
+  <ul>
+    <li><strong>Dependency direction.</strong> If Order called Notification, Order would depend on Notification — and on SMS by extension. With events, the arrow points the other way: Notification depends on Order's <em>published event</em>, a class with three integers in it. Delete the Notification module tomorrow and Order still compiles.</li>
+    <li><strong>One dispatch, many reactions.</strong> A future "loyalty points" or "analytics" module listens to the same <code>OrderPaidEvent</code> without anyone editing <code>markAsPaid</code>.</li>
+    <li><strong>Transaction safety.</strong> Listeners can be deferred until commit. A direct call inside a transaction would send an SMS for an order that later rolls back — and you cannot un-send an SMS.</li>
+  </ul>
+  <div class="note"><strong>On the enclosure rules.</strong> The project's core rule says a module never listens to another module's <em>internal</em> events. These events are different: they live in <code>Domain/Events/</code>, carry primitives only, and are documented as public contract — the same status as an interface or a DTO. Internal events, if any are ever added, stay private.</div>
+
+  <h2 id="notification-module">The Notification Module</h2>
+  <pre>Modules/Notification/
+├── Domain/
+│   ├── Contracts/
+│   │   ├── NotificationManagerInterface.php   <span class="cmt">← the only public entry point</span>
+│   │   └── NotificationChannelInterface.php
+│   ├── DTOs/
+│   │   ├── NotificationRequestDTO.php         <span class="cmt">← "notify this user, this way"</span>
+│   │   ├── NotificationDTO.php                <span class="cmt">← a stored notification</span>
+│   │   └── SmsPayloadDTO.php                  <span class="cmt">← template + business parameters</span>
+│   ├── Enums/
+│   │   ├── NotificationChannel.php            <span class="cmt">database | sms</span>
+│   │   ├── NotificationType.php               <span class="cmt">payment_success, order_cancelled, …</span>
+│   │   ├── NotificationTemplate.php           <span class="cmt">internal SMS template names</span>
+│   │   └── DeliveryStatus.php                 <span class="cmt">pending | sent | failed | skipped</span>
+│   ├── Models/        Notification, NotificationDelivery
+│   └── Policies/      NotificationPolicy      <span class="cmt">owner-only</span>
+├── Application/
+│   ├── Actions/       SendNotificationAction, MarkNotificationAsReadAction
+│   └── Listeners/     Send*Notifications      <span class="cmt">← the integration layer</span>
+└── Infrastructure/
+    ├── Channels/      DatabaseChannel, SmsChannel, NotificationChannelFactory
+    ├── Http/          NotificationController, NotificationResource
+    ├── Persistence/   migrations, EloquentNotificationManager, permissions seeder
+    ├── Providers/     NotificationServiceProvider  <span class="cmt">← listener registration</span>
+    └── Routes/        api.php</pre>
+
+  <h3>The request DTO is the whole API</h3>
+  <p>Everything a caller can express is one object:</p>
+  <pre>new NotificationRequestDTO(
+    userId:   $event->userId,
+    type:     NotificationType::PAYMENT_SUCCESS->value,
+    title:    <span class="str">'پرداخت موفق'</span>,
+    message:  <span class="str">'پرداخت سفارش شما با موفقیت انجام شد.'</span>,
+    data:     [<span class="str">'order_id'</span> => $event->orderId],
+    channels: [NotificationChannel::DATABASE, NotificationChannel::SMS],
+    sms:      new SmsPayloadDTO(NotificationTemplate::PAYMENT_SUCCESS, [<span class="str">'OrderId'</span> => $event->orderId]),
+);</pre>
+  <p>The module stores and delivers it. It does not decide the copy, the type, or which channels apply — that judgement belongs to the flow raising it, which is why it lives in the listener.</p>
+
+  <h3>The customer-facing API</h3>
+  <table>
+    <tr><th>Endpoint</th><th>Behavior</th></tr>
+    <tr><td><code>GET /api/v1/notifications</code></td><td>Paginated, newest first, always scoped to the caller. Permission <code>notification.view-own</code>.</td></tr>
+    <tr><td><code>POST /api/v1/notifications/{id}/read</code></td><td>Stamps <code>read_at</code>; idempotent. Another user's notification → <strong>403</strong>, nothing mutated. Permission <code>notification.mark-read-own</code>.</td></tr>
+  </table>
+  <div class="note"><strong>The API never leaks delivery internals.</strong> <code>NotificationResource</code> exposes exactly <code>id, type, title, message, data, read_at, created_at</code>. Provider names, provider references, and error strings stay in <code>notification_deliveries</code>, which has no HTTP surface at all.</div>
+
+  <h2 id="sms-module">The Sms Module</h2>
+  <p>A deliberately small module with one job: hide the provider.</p>
+  <pre>Modules/Sms/
+├── Domain/
+│   ├── Contracts/  SmsManagerInterface   <span class="cmt">← what the rest of the app uses</span>
+│   │               SmsProviderInterface  <span class="cmt">← internal; one per vendor</span>
+│   ├── DTOs/       SmsMessageDTO, SmsResultDTO
+│   └── Exceptions/ UnknownSmsProviderException
+└── Infrastructure/
+    ├── Drivers/    SmsIrProvider, LogSmsProvider, FakeSmsProvider
+    ├── Services/   SmsManager, SmsProviderFactory
+    └── Providers/  SmsServiceProvider</pre>
+
+  <h3>The stable internal format</h3>
+  <p><code>SmsMessageDTO</code> is what <em>we</em> mean, never what a vendor wants:</p>
+  <pre>{
+  <span class="str">"receiver"</span>:   <span class="str">"09121234567"</span>,      <span class="cmt">// canonical local format</span>
+  <span class="str">"template"</span>:   <span class="str">"payment_success"</span>,  <span class="cmt">// our name, not a vendor id</span>
+  <span class="str">"parameters"</span>: { <span class="str">"OrderId"</span>: 123 } <span class="cmt">// our business names</span>
+}</pre>
+  <p>The provider does the translating. SMS.ir wants this:</p>
+  <pre>{
+  <span class="str">"mobile"</span>:     <span class="str">"989121234567"</span>,   <span class="cmt">// provider converts 09… → 98…</span>
+  <span class="str">"templateId"</span>: 424242,            <span class="cmt">// resolved from config by template name</span>
+  <span class="str">"parameters"</span>: [{ <span class="str">"name"</span>: <span class="str">"OrderId"</span>, <span class="str">"value"</span>: <span class="str">"123"</span> }]
+}</pre>
+  <p>A different vendor might want <code>{ phone_number, template_id, variables: {...} }</code>. That difference lives entirely inside its driver class. Nothing upstream changes — not the listener, not the channel, not the manager.</p>
+
+  <div class="warn"><strong>This is not the OTP sender.</strong> Identity has its own <code>OtpSenderInterface</code> / <code>SmsIrOtpSender</code> for login codes. Same vendor, different responsibility, separate contract — deliberately not shared. Do not merge them: OTP is an authentication primitive with its own throttle, TTL, and failure semantics.</div>
+
+  <h2 id="schema">Database Schema</h2>
+  <div class="grid">
+    <div class="card">
+      <h4><code>notifications</code></h4>
+      <p style="margin:0">What the customer sees in-app.</p>
+      <table>
+        <tr><td><code>user_id</code></td><td>plain reference — no FK, no join into Identity</td></tr>
+        <tr><td><code>type</code></td><td>machine key (<code>NotificationType</code>)</td></tr>
+        <tr><td><code>title</code>, <code>message</code></td><td>rendered Persian copy</td></tr>
+        <tr><td><code>data</code></td><td>JSON, nullable — deep-link payload</td></tr>
+        <tr><td><code>read_at</code></td><td>nullable timestamp</td></tr>
+      </table>
+    </div>
+    <div class="card">
+      <h4><code>notification_deliveries</code></h4>
+      <p style="margin:0">Audit trail for <em>external</em> attempts. Never exposed via HTTP.</p>
+      <table>
+        <tr><td><code>notification_id</code></td><td><strong>nullable</strong> — see below</td></tr>
+        <tr><td><code>channel</code>, <code>status</code></td><td><code>sms</code> / sent, skipped, failed</td></tr>
+        <tr><td><code>provider</code>, <code>provider_reference</code></td><td>who sent it, and their message id</td></tr>
+        <tr><td><code>sent_at</code>, <code>failed_at</code></td><td>only one is ever set; both null on skip</td></tr>
+        <tr><td><code>error</code></td><td>failure message or skip reason</td></tr>
+      </table>
+    </div>
+  </div>
+  <div class="note"><strong>Why <code>notification_id</code> is nullable.</strong> Some notifications are SMS-only by design — "your order is being prepared" is an operational nudge, not something worth a permanent row in the customer's in-app list. There is no parent notification to attach the delivery to, but we still want the attempt audited.</div>
+  <p>Indexes: <code>[user_id, created_at]</code> drives the listing, <code>[user_id, read_at]</code> drives the unread count, <code>[channel, status]</code> makes "show me today's failures" cheap.</p>
+
+  <h2 id="channels">Channels</h2>
+  <p>A channel knows <em>how</em> to deliver. Adding one means implementing an interface and adding a line to a map — nothing else in the system changes.</p>
+  <table>
+    <tr><th>Channel</th><th>Does</th><th>Writes</th></tr>
+    <tr><td><span class="pill db">database</span></td><td>Creates the in-app row the customer reads</td><td><code>notifications</code></td></tr>
+    <tr><td><span class="pill sms">sms</span></td><td>Resolves the phone via Identity, builds an <code>SmsMessageDTO</code>, hands it to <code>SmsManagerInterface</code>, records the outcome</td><td><code>notification_deliveries</code></td></tr>
+  </table>
+  <p><strong>Order matters.</strong> <code>SendNotificationAction</code> always runs the database channel first, so external channels can attach their delivery rows to a real notification id. External channels are then dispatched in a <code>try/catch</code> — a channel that explodes is logged, never rethrown.</p>
+  <p>Email and push are intentionally absent. Adding them would be a new enum case plus a new class; nothing in the listeners or business modules would need to change.</p>
+
+  <h2 id="optional-sms">Optional SMS &amp; Skipping</h2>
+  <p>The single most important operational property: <strong>SMS is never mandatory and never fatal.</strong></p>
+  <pre><span class="cmt">payment_success</span>  ──▶ config lookup: sms.providers.smsir.templates.payment_success
+                        │
+       configured ──────┤────── missing
+            │                     │
+            ▼                     ▼
+      send via provider     skip: info log
+            │               + skipped delivery row
+            ▼               + no HTTP call
+    sent / failed row       <span class="cmt">business flow completely unaffected</span></pre>
+  <p>A shop that has configured three of six SMS templates simply sends three kinds of message. Nothing throws, nothing rolls back, and the missing ones are visible in the delivery audit as <code>skipped</code> with a reason.</p>
+  <div class="good"><strong>Why "skipped" is its own status.</strong> If an unconfigured template were recorded as <code>failed</code>, the delivery table would be full of red that nobody should act on — and a genuine provider outage would be invisible in the noise. <code>failed</code> means "we tried and it didn't work"; that's the signal worth alerting on.</div>
+
+  <h2 id="outcomes">The Three Outcomes</h2>
+  <table>
+    <tr><th>Result</th><th>Means</th><th>Typical cause</th><th>Action</th></tr>
+    <tr><td><span class="pill sent">success</span></td><td>The provider accepted the message</td><td>—</td><td>none</td></tr>
+    <tr><td><span class="pill skip">skipped</span></td><td>Nothing was attempted, and that's fine</td><td>No template id configured, no API key, customer has no phone on file</td><td>configure it if you want that message</td></tr>
+    <tr><td><span class="pill fail">failed</span></td><td>A real attempt did not succeed</td><td>Provider down, HTTP 5xx, message rejected, caller requested SMS with no payload</td><td>investigate</td></tr>
+  </table>
+  <p>These map straight onto <code>SmsResultDTO</code> (<code>success</code> / <code>skipped</code> / failure) and <code>DeliveryStatus</code> (<code>sent</code> / <code>skipped</code> / <code>failed</code>).</p>
+
+  <h2 id="events">Events &amp; Listeners</h2>
+  <p>Six events, six listeners, one registration point.</p>
+  <table>
+    <tr><th>Event</th><th>Dispatched from</th><th>Listener</th><th>Channels</th></tr>
+    <tr>
+      <td><code>OrderPaidEvent</code><br><span class="pill">Order</span></td>
+      <td><code>EloquentOrderManager::markAsPaid</code> — after status change, inventory commit, and shipment activation</td>
+      <td><code>SendOrderPaidNotifications</code></td>
+      <td>customer <span class="pill db">db</span> <span class="pill sms">sms</span><br>admin <span class="pill db">db</span></td>
+    </tr>
+    <tr>
+      <td><code>PaymentFailedEvent</code><br><span class="pill">Payment</span></td>
+      <td><code>HandleZarinpalCallbackAction</code> — verification-failure branch only</td>
+      <td><code>SendPaymentFailedNotification</code></td>
+      <td>customer <span class="pill db">db</span></td>
+    </tr>
+    <tr>
+      <td><code>OrderCancelledEvent</code><br><span class="pill">Order</span></td>
+      <td><code>CancelOrderAction::handle</code> + <code>AdminCancelOrderAction::handle</code></td>
+      <td><code>SendOrderCancelledNotifications</code></td>
+      <td>customer <span class="pill db">db</span> <span class="pill sms">sms</span></td>
+    </tr>
+    <tr>
+      <td><code>ShipmentPreparingStartedEvent</code><br><span class="pill">Shipment</span></td>
+      <td><code>ShipmentTransitionService</code> → <code>preparing</code></td>
+      <td><code>SendShipmentPreparingNotification</code></td>
+      <td>customer <span class="pill sms">sms</span></td>
+    </tr>
+    <tr>
+      <td><code>ShipmentSentEvent</code><br><span class="pill">Shipment</span></td>
+      <td><code>ShipmentTransitionService</code> → <code>handed_to_post</code> or <code>out_for_delivery</code></td>
+      <td><code>SendShipmentSentNotifications</code></td>
+      <td>customer <span class="pill db">db</span> <span class="pill sms">sms</span></td>
+    </tr>
+    <tr>
+      <td><code>ShipmentDeliveredEvent</code><br><span class="pill">Shipment</span></td>
+      <td><code>ShipmentTransitionService</code> → <code>delivered</code></td>
+      <td><code>SendShipmentDeliveredNotifications</code></td>
+      <td>customer <span class="pill db">db</span> <span class="pill sms">sms</span></td>
+    </tr>
+  </table>
+
+  <h3>Why shipment events live in one place</h3>
+  <p>Shipment already funnels every status change through a single atomic primitive, <code>ShipmentTransitionService::transition()</code>. Hooking in there — one <code>announce()</code> call driven by a <code>match</code> on the new status — means every workflow (postal, local delivery, pickup) is covered without touching a single action class, and no new status was invented. <code>handed_to_post</code> and <code>out_for_delivery</code> both raise <code>ShipmentSentEvent</code> because the module <em>already</em> maps both to the order status <code>shipped</code>.</p>
+
+  <h3>Registration</h3>
+  <pre><span class="cmt">// NotificationServiceProvider::boot()</span>
+Event::listen(OrderPaidEvent::class, SendOrderPaidNotifications::class);
+Event::listen(OrderCancelledEvent::class, SendOrderCancelledNotifications::class);
+Event::listen(PaymentFailedEvent::class, SendPaymentFailedNotification::class);
+<span class="cmt">// …plus the three shipment events</span></pre>
+  <p>This is the only file where the two sides meet. Laravel's auto-discovery only scans <code>app/Listeners</code>, so module listeners are registered explicitly — which is better anyway: one file tells you the entire integration surface.</p>
+
+  <h2 id="timing">Timing &amp; Idempotency</h2>
+  <p>Two hard requirements, solved by two different mechanisms.</p>
+
+  <h3>1. Never notify for work that rolled back</h3>
+  <p>Every listener implements <code>Illuminate\Contracts\Events\ShouldHandleEventsAfterCommit</code>. Laravel's dispatcher then holds the listener until the <strong>outermost</strong> transaction commits. If the inventory commit throws, or the shipment activation fails, or an enclosing transaction rolls back, the listener simply never runs.</p>
+  <pre>DB::transaction:
+    lock order
+    status → paid
+    save transaction reference
+    commit inventory reservation
+    activate shipment
+    Event::dispatch(OrderPaidEvent)   <span class="cmt">← queued, not executed</span>
+COMMIT ─────────────────────────────▶ listener runs here
+   or
+ROLLBACK ───────────────────────────▶ listener never runs, nothing sent</pre>
+  <div class="warn"><strong>This matters more than it looks.</strong> The payment callback wraps <code>markAsPaid</code> in its own transaction. Without after-commit handling, a failure <em>after</em> the inner transaction but before the outer commit would leave a customer holding an SMS for an order that no longer exists.</div>
+
+  <h3>2. Never notify twice for the same fact</h3>
+  <p>Payment gateways retry callbacks. <code>markAsPaid</code> was already idempotent — if the order is in a sold state it returns the existing DTO early. The event dispatch sits <em>after</em> that early return, so it is physically unreachable on a repeat call:</p>
+  <pre><span class="kw">if</span> (already paid) {
+    <span class="kw">return</span> $this->toDTO($order);   <span class="cmt">← second callback exits here</span>
+}
+
+<span class="cmt">// …transition work…</span>
+Event::dispatch(<span class="kw">new</span> OrderPaidEvent(...));  <span class="cmt">← only the real transition reaches this</span></pre>
+  <p>No dedupe table, no "already notified" flag, no cache key. The idempotency of the business operation <em>is</em> the idempotency of the notification.</p>
+
+  <h2 id="walkthrough">Full Walkthrough: A Customer Pays</h2>
+  <ol>
+    <li>Shopper is redirected back from Zarinpal; the gateway hits <code>GET /api/v1/payments/zarinpal/callback</code>.</li>
+    <li><code>HandleZarinpalCallbackAction</code> verifies server-side, marks the payment <code>captured</code>, and calls <code>OrderManagerInterface::markAsPaid()</code>. <em>The controller contains no notification code whatsoever.</em></li>
+    <li><code>markAsPaid</code> locks the order, sets <code>paid</code>, commits the inventory reservation, activates the shipment, and dispatches <code>OrderPaidEvent(orderId, userId, totalAmount)</code>.</li>
+    <li>Transactions commit. Laravel now runs <code>SendOrderPaidNotifications</code>.</li>
+    <li>The listener builds two requests: the customer's (<code>database</code> + <code>sms</code>) and — for every id returned by <code>IdentityManagerInterface::getAdminUserIds()</code> — an admin one (<code>database</code> only).</li>
+    <li><code>DatabaseChannel</code> inserts the customer's row. The customer's next <code>GET /notifications</code> shows <em>پرداخت موفق</em>.</li>
+    <li><code>SmsChannel</code> resolves the phone through Identity's contract, builds <code>SmsMessageDTO('09…', 'payment_success', ['OrderId' =&gt; 42])</code>, and hands it to <code>SmsManagerInterface</code>.</li>
+    <li><code>SmsManager</code> reads <code>config('sms.default')</code>, asks the factory for that driver, and calls it. <code>SmsIrProvider</code> looks up the template id, converts the number to <code>98…</code>, and POSTs.</li>
+    <li>The result comes back as an <code>SmsResultDTO</code>; <code>SmsChannel</code> writes a <code>sent</code> / <code>skipped</code> / <code>failed</code> delivery row.</li>
+    <li>The gateway callback renders its Blade result page, oblivious to all of the above.</li>
+  </ol>
+  <div class="good"><strong>Notice what never happened.</strong> No controller touched a notification. No business module imported an SMS class. No model crossed a module boundary. Any single step from 5 onward could fail without affecting the payment.</div>
+
+  <h2 id="recipes">Common Changes</h2>
+
+  <div class="card">
+    <h4>Add a new notification for an existing event</h4>
+    <p style="margin:0">Edit that event's listener. Copy, type, and channels all live there — one file, no infrastructure change.</p>
+  </div>
+
+  <div class="card">
+    <h4>Notify on a new business moment</h4>
+    <ol style="margin-bottom:0">
+      <li>Add an event class to the <em>emitting</em> module's <code>Domain/Events/</code>. Primitives only.</li>
+      <li>Dispatch it from the application-layer action or manager that owns the transition — never a controller.</li>
+      <li>Add a listener in <code>Notification/Application/Listeners</code> implementing <code>ShouldHandleEventsAfterCommit</code>.</li>
+      <li>Register it in <code>NotificationServiceProvider::boot()</code>.</li>
+      <li>Add a <code>NotificationType</code> case (and a <code>NotificationTemplate</code> case + config key if it sends SMS).</li>
+    </ol>
+  </div>
+
+  <div class="card">
+    <h4>Add a new SMS provider</h4>
+    <ol style="margin-bottom:0">
+      <li>Implement <code>SmsProviderInterface</code> in <code>Sms/Infrastructure/Drivers</code>; do all format translation inside it.</li>
+      <li>Add one entry to <code>SmsProviderFactory</code>'s driver map.</li>
+      <li>Add its config block (api key, endpoint, template ids) to <code>config/sms.php</code>.</li>
+      <li>Set <code>SMS_PROVIDER=yourprovider</code>. Nothing else in the codebase changes.</li>
+    </ol>
+  </div>
+
+  <div class="card">
+    <h4>Turn one SMS on or off</h4>
+    <p style="margin:0">Set or clear its <code>SMS_SMSIR_*_TEMPLATE_ID</code>. Empty means that message is skipped — no code change, no deploy risk.</p>
+  </div>
+
+  <h2 id="rules">Rules &amp; Boundaries</h2>
+  <div class="card">
+    <div class="rule"><span class="mark no">✗</span><div>Never call <code>NotificationManagerInterface</code> from a controller, a gateway callback, an API resource, or an unrelated service. Dispatch an event instead.</div></div>
+    <div class="rule"><span class="mark no">✗</span><div>Never call an SMS provider directly. Everything goes through <code>SmsManagerInterface</code>.</div></div>
+    <div class="rule"><span class="mark no">✗</span><div>Never put a model in an event. Ids, strings, and numbers only — an event may be serialized, queued, or replayed.</div></div>
+    <div class="rule"><span class="mark no">✗</span><div>Never reuse Identity's <code>OtpSenderInterface</code> for notifications, or vice versa.</div></div>
+    <div class="rule"><span class="mark no">✗</span><div>Never let a notification failure break a business flow. If you add a channel, it swallows and records its own errors.</div></div>
+    <div class="rule"><span class="mark yes">✓</span><div>Dispatch from the application layer (action / manager) that owns the state transition, after the work succeeds.</div></div>
+    <div class="rule"><span class="mark yes">✓</span><div>Implement <code>ShouldHandleEventsAfterCommit</code> on every listener.</div></div>
+    <div class="rule"><span class="mark yes">✓</span><div>Keep business copy in listeners; keep machine keys in <code>NotificationType</code> / <code>NotificationTemplate</code>.</div></div>
+    <div class="rule"><span class="mark yes">✓</span><div>Resolve customer identity through <code>IdentityManagerInterface</code>, never the <code>User</code> model.</div></div>
+  </div>
+
+  <h2 id="config">Configuration</h2>
+  <pre><span class="cmt"># Which provider is live: smsir | log | fake</span>
+SMS_PROVIDER=log
+
+<span class="cmt"># SMS.ir credentials</span>
+SMS_SMSIR_API_KEY=
+SMS_SMSIR_ENDPOINT=https://api.sms.ir/v1/send/verify
+
+<span class="cmt"># One id per internal template. Empty ⇒ that message is skipped.</span>
+SMS_SMSIR_PAYMENT_SUCCESS_TEMPLATE_ID=
+SMS_SMSIR_ORDER_CANCELLED_TEMPLATE_ID=
+SMS_SMSIR_SHIPMENT_PREPARING_TEMPLATE_ID=
+SMS_SMSIR_SHIPMENT_SENT_TEMPLATE_ID=
+SMS_SMSIR_SHIPMENT_DELIVERED_TEMPLATE_ID=</pre>
+  <table>
+    <tr><th>Provider</th><th>Behavior</th><th>Use in</th></tr>
+    <tr><td><code>log</code></td><td>Writes the message to the log. No network I/O, no credentials needed.</td><td>local development (default)</td></tr>
+    <tr><td><code>smsir</code></td><td>Live delivery via SMS.ir.</td><td>production</td></tr>
+    <tr><td><code>fake</code></td><td>In-memory recorder; a container singleton tests can inspect.</td><td>tests</td></tr>
+  </table>
+  <div class="note"><strong>Template <em>names</em> never appear in env.</strong> <code>payment_success</code> is ours; <code>424242</code> is SMS.ir's. Only the mapping is configuration. Business parameter names like <code>OrderId</code> are code, not config — a provider that wants them differently translates internally.</div>
+
+  <h2 id="testing">Testing</h2>
+  <table>
+    <tr><th>Suite</th><th>Covers</th></tr>
+    <tr><td><code>tests/Feature/Sms/SmsManagerTest.php</code></td><td>Provider resolution and switching, unknown-provider handling, SMS.ir payload translation, transport failure, rejection, skip-on-missing-template/credentials</td></tr>
+    <tr><td><code>tests/Feature/Notification/NotificationApiTest.php</code></td><td>The two endpoints: ownership, 401/403/404, idempotent read, resource field allowlist</td></tr>
+    <tr><td><code>tests/Feature/Notification/NotificationDispatchTest.php</code></td><td>Channel fan-out: db+sms, db-only, sms-only, failed vs skipped delivery records</td></tr>
+    <tr><td><code>tests/Feature/Notification/NotificationIntegrationTest.php</code></td><td>Business flows: event dispatch, duplicate-callback safety, admin notification, missing template not breaking payment</td></tr>
+    <tr><td><code>tests/Feature/Shipment/ShipmentNotificationTest.php</code></td><td>Transitions → notifications, tracking code present/absent, skip not breaking fulfillment</td></tr>
+  </table>
+  <p>Two habits worth keeping:</p>
+  <ul>
+    <li><strong><code>Http::preventStrayRequests()</code> in every SMS-touching test.</strong> Any unfaked outbound call fails the suite, so no test can ever hit a real SMS API — including by accident, in CI, on someone else's credentials.</li>
+    <li><strong>Use <code>FakeSmsProvider</code>, not mocks.</strong> Set <code>config('sms.default')</code> to <code>fake</code>, resolve the singleton, and assert on <code>sent()</code> / <code>lastMessage()</code>. It also has <code>shouldFail</code> and <code>shouldSkip</code> flags to exercise both failure modes.</li>
+  </ul>
+
+  <h2 id="gaps">Known Gaps &amp; Deliberate Silence</h2>
+  <p>These are decisions, not oversights. Each is a one-line change if the business wants it.</p>
+  <table>
+    <tr><th>Not notified</th><th>Why</th></tr>
+    <tr><td>In-store pickup (<code>picked_up</code>)</td><td>The customer is standing at the counter; "your order was delivered" is redundant.</td></tr>
+    <tr><td>TTL order expiry (<code>orders:cancel-expired</code>)</td><td>Every abandoned checkout would send an SMS. Likely spam, so it's off pending a product decision.</td></tr>
+    <tr><td>Superseded pending order during checkout</td><td>The shared <code>releaseAndCancel</code> primitive also retires a draft the customer never asked about. Dispatching there would notify people about orders they never knew existed — there's a test asserting it stays silent.</td></tr>
+    <tr><td>Email / push / marketing</td><td>Out of scope by design. The channel abstraction accommodates them; nothing implements them.</td></tr>
+    <tr><td>Admin notifications beyond paid orders</td><td>Only <code>admin_order_paid</code> exists today.</td></tr>
+  </table>
+  <div class="note"><strong>Delivery is synchronous.</strong> Listeners run in-process after commit, so a slow SMS provider adds latency to the request that triggered it. If that becomes a problem, the listeners can implement <code>ShouldQueue</code> alongside the after-commit contract — the architecture already accounts for it, and no other code would change.</div>
+
+  <footer>
+    Companion to <code>API_DOCUMENTATION.html</code> (endpoint reference), <code>AGENT_CONTEXT.md</code> (module ledger), and <code>CLAUDE.md</code> (engineering rules).
+  </footer>
+</main>
+
+<script>
+  const sections = document.querySelectorAll('h2[id], h3[id]');
+  const navLinks = document.querySelectorAll('nav a[href^="#"]');
+  window.addEventListener('scroll', function () {
+    let current = '';
+    sections.forEach(function (section) {
+      if (window.scrollY >= section.offsetTop - 120) current = section.id;
+    });
+    navLinks.forEach(function (link) {
+      link.classList.toggle('active', link.getAttribute('href') === '#' + current);
+    });
+  });
+</script>
+</body>
+</html>

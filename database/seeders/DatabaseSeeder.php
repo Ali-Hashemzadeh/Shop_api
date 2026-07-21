@@ -16,6 +16,8 @@ use Modules\Order\Infrastructure\Persistence\Seeders\OrderSampleDataSeeder;
 use Modules\Payment\Infrastructure\Persistence\Seeders\PaymentPermissionsSeeder;
 use Modules\Payment\Infrastructure\Persistence\Seeders\PaymentSampleDataSeeder;
 use Modules\Shipment\Infrastructure\Persistence\Seeders\ShipmentPermissionsSeeder;
+use Modules\Shipment\Infrastructure\Persistence\Seeders\ShipmentSampleDataSeeder;
+use Modules\Shipment\Infrastructure\Persistence\Seeders\ShipmentScheduleSeeder;
 
 class DatabaseSeeder extends Seeder
 {
@@ -37,8 +39,13 @@ class DatabaseSeeder extends Seeder
             NotificationPermissionsSeeder::class,
             CatalogSampleDataSeeder::class,
             InventorySampleDataSeeder::class,
+            // Working periods + generated sessions must exist before orders are seeded:
+            // the local-delivery demo orders book a real, bookable slot at "checkout".
+            ShipmentScheduleSeeder::class,
             OrderSampleDataSeeder::class,
             PaymentSampleDataSeeder::class,
+            // Runs last — activates a shipment per paid order and drives it to its state.
+            ShipmentSampleDataSeeder::class,
         ]);
     }
 }

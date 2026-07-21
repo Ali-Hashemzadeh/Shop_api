@@ -41,6 +41,9 @@ Route::middleware(['api', 'auth:sanctum', 'throttle:api'])
         });
 
         Route::get('shipment/delivery-slots', [AdminDeliverySlotController::class, 'index']);
+        // Manual trigger for the nightly shipment:generate-delivery-slots command.
+        // Declared before the {slot} routes so "generate" is never read as a slot id.
+        Route::post('shipment/delivery-slots/generate', [AdminDeliverySlotController::class, 'generate']);
         Route::patch('shipment/delivery-slots/{slot}', [AdminDeliverySlotController::class, 'update'])->whereNumber('slot');
         Route::post('shipment/delivery-slots/{slot}/close', [AdminDeliverySlotController::class, 'close'])->whereNumber('slot');
         Route::post('shipment/delivery-slots/{slot}/open', [AdminDeliverySlotController::class, 'open'])->whereNumber('slot');
