@@ -16,6 +16,7 @@ use Modules\Inventory\Domain\Contracts\InventoryManagerInterface;
 use Modules\Order\Application\Actions\SyncSalesCountsAction;
 use Modules\Order\Domain\Models\Order;
 use Modules\Order\Domain\Models\OrderItem;
+use Modules\Shipment\Domain\Contracts\ShipmentManagerInterface;
 
 /**
  * Seeds carts + orders + order items and drives the real Inventory reservation
@@ -23,6 +24,12 @@ use Modules\Order\Domain\Models\OrderItem;
  * record of what the orders actually did. Payments are seeded separately by the
  * Payment module's PaymentSampleDataSeeder, keyed off the order status + the
  * transaction_ref prefix written here (CASH- = in-person, REF- = online).
+ *
+ * Fulfillment is seeded separately too, by the Shipment module's
+ * ShipmentSampleDataSeeder. Each order carries a real, validated shipment selection
+ * (resolved through ShipmentManagerInterface, exactly like checkout) plus a
+ * "shipment: <status>" marker in its notes naming the state that seeder should drive
+ * the shipment to — the same keyed-off-the-order trick PaymentSampleDataSeeder uses.
  */
 class OrderSampleDataSeeder extends Seeder
 {
@@ -30,8 +37,15 @@ class OrderSampleDataSeeder extends Seeder
 
     private CatalogManagerInterface $catalog;
 
+    private ShipmentManagerInterface $shipment;
+
     /** @var array<int, ProductVariant> */
     private array $variants = [];
+
+    /** Bookable slot ids, cycled so no single session is overbooked. @var int[]|null */
+    private ?array $slotIds = null;
+
+    private int $slotCursor = 0;
 
     public function run(): void
     {
@@ -51,6 +65,7 @@ class OrderSampleDataSeeder extends Seeder
 
         $this->inventory = app(InventoryManagerInterface::class);
         $this->catalog = app(CatalogManagerInterface::class);
+        $this->shipment = app(ShipmentManagerInterface::class);
 
         [$sara, $reza, $nima] = $this->demoCustomers();
 
@@ -59,26 +74,52 @@ class OrderSampleDataSeeder extends Seeder
 
         // Variant index map (ordered by id): 0-2 Galaxy S25 (128/256/512), 3-4 iPhone 16
         // (128/256), 5-6 MacBook Pro 14 (M4/M4 Pro), 7 AirPods Pro 2, 8-9 USB-C Hub (grey/silver).
-        // Blueprint: [customer, status, method, daysAgo, lines[[variantIndex, qty]]].
+        // Blueprint: [customer, status, paymentMethod, daysAgo, lines[[variantIndex, qty]],
+        //             shipmentMethodCode, targetShipmentStatus|null].
         // Quantities stay small so no SKU is over-reserved against its 50-unit opening stock.
+        //
+        // Every paid order names the shipment state ShipmentSampleDataSeeder must drive it
+        // to, so the three workflows are covered end to end. Order status is left at 'paid'
+        // here — the shipment transitions are what move it to processing/shipped/completed,
+        // exactly as they do in production via ShipmentStatus::toOrderStatus().
+        //
+        // Local-delivery orders stay recent (0-2 days) because their booked session is a
+        // real, future slot; backdating them further would read as a delivery in the past.
         $blueprints = [
-            // Realized online sales (captured) — count toward best-sellers + physical stock drop.
-            [$sara, 'paid',       'online',    9,  [[0, 1], [7, 2]]],      // Galaxy S25 128 + AirPods x2
-            [$reza, 'shipped',    'online',    20, [[3, 1]]],             // iPhone 16 128
-            [$nima, 'processing', 'online',    5,  [[5, 1], [7, 1]]],     // MacBook M4 + AirPods
-            [$sara, 'shipped',    'online',    30, [[7, 3]]],             // AirPods x3 (best-seller)
-            [$reza, 'paid',       'online',    2,  [[1, 1]]],             // Galaxy S25 256
-            // Realized in-person (cash) sale — paid at counter, pending_cash payment.
-            [$nima, 'paid',       'in_person', 12, [[9, 2], [8, 1]]],     // USB-C Hub silver x2 + grey
-            // Open order — reservation still held, not yet paid.
-            [$reza, 'pending',    'online',    0,  [[5, 1]]],             // MacBook M4 (reserved)
-            // Abandoned / failed — reservation released, no physical stock change.
-            [$sara, 'cancelled',  'online',    3,  [[3, 1]]],             // iPhone 16 128
-            [$nima, 'failed',     'online',    1,  [[6, 1]]],             // MacBook M4 Pro
+            // ── Postal workflow (pending → preparing → ready_for_post → handed_to_post) ──
+            [$sara, 'paid', 'online', 9,  [[0, 1], [7, 2]], 'post_standard',    'pending'],
+            [$reza, 'paid', 'online', 7,  [[1, 1]],         'post_standard',    'preparing'],
+            [$nima, 'paid', 'online', 6,  [[3, 1]],         'post_express',     'ready_for_post'],
+            [$reza, 'paid', 'online', 20, [[3, 1]],         'post_standard',    'handed_to_post'],
+            [$sara, 'paid', 'online', 15, [[8, 1]],         'post_express',     'cancelled'],
+
+            // ── Local delivery (pending → preparing → ready_for_dispatch → out_for_delivery
+            //    → delivered / delivery_failed), each booking its own session ──
+            [$sara, 'paid', 'online', 0,  [[7, 1]],         'local_delivery',   'pending'],
+            [$reza, 'paid', 'online', 0,  [[2, 1]],         'local_delivery',   'preparing'],
+            [$nima, 'paid', 'online', 1,  [[5, 1], [7, 1]], 'local_delivery',   'ready_for_dispatch'],
+            [$sara, 'paid', 'online', 1,  [[9, 1]],         'local_delivery',   'out_for_delivery'],
+            [$reza, 'paid', 'online', 2,  [[4, 1]],         'local_delivery',   'delivered'],
+            [$nima, 'paid', 'online', 1,  [[8, 2]],         'local_delivery',   'delivery_failed'],
+            [$sara, 'paid', 'online', 2,  [[6, 1]],         'local_delivery',   'cancelled'],
+
+            // ── Pickup (pending → preparing → ready_for_pickup → picked_up), paid at the
+            //    counter so these carry a CASH- ref + pending_cash payment ──
+            [$nima, 'paid', 'in_person', 12, [[9, 2], [8, 1]], 'in_person_pickup', 'pending'],
+            [$sara, 'paid', 'in_person', 8,  [[0, 1]],         'in_person_pickup', 'preparing'],
+            [$reza, 'paid', 'in_person', 4,  [[7, 1]],         'in_person_pickup', 'ready_for_pickup'],
+            [$nima, 'paid', 'in_person', 10, [[1, 1]],         'in_person_pickup', 'picked_up'],
+
+            // ── Never paid → no shipment is ever activated ──
+            // Open order: inventory reservation AND delivery-slot hold both still held.
+            [$reza, 'pending',   'online', 0, [[5, 1]], 'local_delivery', null],
+            // Abandoned / failed — reservations released, no physical stock change.
+            [$sara, 'cancelled', 'online', 3, [[3, 1]], 'post_standard',  null],
+            [$nima, 'failed',    'online', 1, [[6, 1]], 'post_express',   null],
         ];
 
-        foreach ($blueprints as [$user, $status, $method, $daysAgo, $lines]) {
-            $this->seedOrder($user, $status, $method, $daysAgo, $lines);
+        foreach ($blueprints as [$user, $status, $method, $daysAgo, $lines, $shipmentMethod, $shipmentState]) {
+            $this->seedOrder($user, $status, $method, $daysAgo, $lines, $shipmentMethod, $shipmentState);
         }
 
         // Populate Catalog products.sales_count from the realized orders just seeded,
@@ -142,8 +183,15 @@ class OrderSampleDataSeeder extends Seeder
     }
 
     /** @param array<int, array{0:int,1:int}> $lines */
-    private function seedOrder(User $user, string $status, string $method, int $daysAgo, array $lines): void
-    {
+    private function seedOrder(
+        User $user,
+        string $status,
+        string $method,
+        int $daysAgo,
+        array $lines,
+        string $shipmentMethod,
+        ?string $shipmentState,
+    ): void {
         $placedAt = Carbon::now()->subDays($daysAgo)->subHours(random_int(0, 12));
 
         $items = [];
@@ -173,7 +221,18 @@ class OrderSampleDataSeeder extends Seeder
         }
 
         $address = $user->addresses()->first();
-        $snapshot = [
+
+        // Resolve the fulfillment selection through the Shipment contract exactly like
+        // checkout does: it validates address ownership + local-delivery eligibility +
+        // slot bookability, and hands back the immutable snapshot Order persists.
+        $selection = $this->shipment->validateSelection(
+            userId: $user->id,
+            methodCode: $shipmentMethod,
+            addressId: $address?->id,
+            deliverySlotId: $shipmentMethod === 'local_delivery' ? $this->nextDeliverySlotId($user->id, (int) $address?->id) : null,
+        );
+
+        $snapshot = $selection->address ?? [
             'id' => $address?->id,
             'title' => $address?->title,
             'province_id' => $address?->province_id,
@@ -192,15 +251,22 @@ class OrderSampleDataSeeder extends Seeder
             'email' => $user->email,
         ];
 
+        $note = "[demo] {$status} order";
+        if ($shipmentState !== null) {
+            $note .= " (shipment: {$shipmentState})";
+        }
+
         $order = Order::create([
             'user_id' => $user->id,
             'status' => 'pending',
-            'total_amount' => $total,
-            'shipping_cost' => 0,
+            'total_amount' => $total + $selection->shippingCost,
+            'shipping_cost' => $selection->shippingCost,
             'tax_amount' => 0,
+            'shipment_method_code' => $selection->methodCode,
             'shipping_address' => $snapshot,
+            'shipment_snapshot' => $selection->toSnapshot(),
             'customer_snapshot' => $customerSnapshot,
-            'notes' => "[demo] {$status} order",
+            'notes' => $note,
         ]);
 
         foreach ($items as $item) {
@@ -208,6 +274,14 @@ class OrderSampleDataSeeder extends Seeder
             // Every order reserves stock at creation, exactly like checkout.
             $this->inventory->reserveStock($item['sku'], $item['quantity'], $order->id);
         }
+
+        // Local delivery consumes slot capacity from the moment the order is placed.
+        $this->shipment->holdForPendingOrder(
+            $order->id,
+            $user->id,
+            $selection,
+            Carbon::now()->addMinutes((int) config('shipment.pending_order_ttl_minutes', 15)),
+        );
 
         // Advance the reservation lifecycle to match the final status.
         if (in_array($status, ['paid', 'processing', 'shipped'], true)) {
@@ -222,10 +296,46 @@ class OrderSampleDataSeeder extends Seeder
             foreach ($items as $item) {
                 $this->inventory->releaseReservation($item['sku'], $item['quantity'], $order->id);
             }
+            // Terminal unpaid order — give the delivery session's capacity back too.
+            $this->shipment->releasePendingOrder($order->id);
             $order->update(['status' => $status]);
         }
-        // 'pending' keeps its reservation held (no commit/release).
+        // 'pending' keeps its reservation and its slot hold (no commit/release).
 
         $order->forceFill(['created_at' => $placedAt, 'updated_at' => $placedAt])->save();
+    }
+
+    /**
+     * Round-robin over the bookable sessions so the demo local-delivery orders spread
+     * across dates instead of exhausting the capacity of the first slot. Returns null
+     * when no session is bookable, which surfaces as a clear validation error rather
+     * than a silently address-less order.
+     */
+    private function nextDeliverySlotId(int $userId, int $addressId): ?int
+    {
+        if ($this->slotIds === null) {
+            $this->slotIds = [];
+
+            $grouped = $this->shipment->getAvailableDeliverySlots(
+                $userId,
+                $addressId,
+                Carbon::now(),
+                Carbon::now()->addDays((int) config('shipment.delivery.booking_horizon_days', 14)),
+            );
+
+            foreach ($grouped as $day) {
+                foreach ($day['slots'] as $slot) {
+                    if ($slot->available) {
+                        $this->slotIds[] = $slot->id;
+                    }
+                }
+            }
+        }
+
+        if ($this->slotIds === []) {
+            return null;
+        }
+
+        return $this->slotIds[$this->slotCursor++ % count($this->slotIds)];
     }
 }

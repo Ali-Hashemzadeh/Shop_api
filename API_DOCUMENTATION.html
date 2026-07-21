@@ -162,6 +162,12 @@
   <a href="#shipment-admin">Admin Workflow</a>
   <a href="#shipment-frontend-guide">Frontend Guide</a>
   <a href="#shipment-working-periods">Working Periods</a>
+
+  <div class="section-label">Notifications</div>
+  <a href="#notifications-overview">Overview</a>
+  <a href="#notifications-list">List Notifications</a>
+  <a href="#notifications-read">Mark as Read</a>
+  <a href="#notifications-triggers">When They Appear</a>
 </nav>
 
 <main>
@@ -3694,6 +3700,122 @@ async function deleteWorkingPeriod(token, id) {
     <tr><td><code>local_delivery</code></td><td>required (must be eligible)</td><td>required</td><td>from method <code>price</code></td><td>chosen slot date/time on order</td></tr>
     <tr><td><code>in_person_pickup</code></td><td>hidden</td><td>hidden</td><td>free (0)</td><td>show <code>pickup_location</code></td></tr>
   </table>
+
+  <h2 id="notifications-overview">Notifications</h2>
+  <p>In-app notifications for the signed-in user: payment results, cancellations, and fulfillment milestones. They are created <strong>server-side</strong> as a side effect of business events — there is no endpoint that creates one, and none is needed. Poll <code>GET /notifications</code> (for example on app focus, or after a payment returns) and render the list.</p>
+  <div class="note"><strong>SMS is separate and invisible here.</strong> Some events also send an SMS. That delivery is tracked internally and never exposed through this API — you will not see provider names, message ids, or delivery errors in any response.</div>
+  <div class="note"><strong>Every notification belongs to exactly one user.</strong> The list is always scoped to the caller; there is no <code>user_id</code> filter and no admin browse endpoint. Admin-facing notifications (e.g. a new paid order) are delivered to admin accounts through the same two endpoints.</div>
+
+  <!-- GET /api/v1/notifications -->
+  <h3 id="notifications-list">List Notifications</h3>
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/notifications</span>
+      <span class="badge auth">Requires auth:sanctum</span>
+      <span class="badge admin">Requires notification.view-own</span>
+      <span class="badge rate">throttle:api</span>
+    </div>
+    <div class="endpoint-body">
+      <p>The caller's notifications, newest first, paginated. Another user's notifications are never included.</p>
+      <div class="block-label">Query Parameters</div>
+      <table>
+        <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
+        <tr><td>page</td><td class="opt">optional integer</td><td>Page number. Default <code>1</code>.</td></tr>
+        <tr><td>per_page</td><td class="opt">optional integer</td><td>Items per page, clamped to 1–100. Default <code>15</code>.</td></tr>
+      </table>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{
+  <span class="key">"data"</span>: [
+    {
+      <span class="key">"id"</span>:         <span class="num">128</span>,
+      <span class="key">"type"</span>:       <span class="str">"payment_success"</span>,
+      <span class="key">"title"</span>:      <span class="str">"پرداخت موفق"</span>,
+      <span class="key">"message"</span>:    <span class="str">"پرداخت سفارش شما با موفقیت انجام شد."</span>,
+      <span class="key">"data"</span>:       { <span class="key">"order_id"</span>: <span class="num">42</span> },
+      <span class="key">"read_at"</span>:    <span class="null-val">null</span>,
+      <span class="key">"created_at"</span>: <span class="str">"2026-07-20T09:12:33.000000Z"</span>
+    },
+    {
+      <span class="key">"id"</span>:         <span class="num">127</span>,
+      <span class="key">"type"</span>:       <span class="str">"shipment_sent"</span>,
+      <span class="key">"title"</span>:      <span class="str">"ارسال سفارش"</span>,
+      <span class="key">"message"</span>:    <span class="str">"سفارش شما ارسال شد."</span>,
+      <span class="key">"data"</span>:       { <span class="key">"order_id"</span>: <span class="num">41</span>, <span class="key">"tracking_code"</span>: <span class="str">"TRACK-123"</span> },
+      <span class="key">"read_at"</span>:    <span class="str">"2026-07-19T18:40:02.000000Z"</span>,
+      <span class="key">"created_at"</span>: <span class="str">"2026-07-19T18:02:10.000000Z"</span>
+    }
+  ],
+  <span class="key">"links"</span>: { <span class="key">"first"</span>: <span class="str">"…"</span>, <span class="key">"last"</span>: <span class="str">"…"</span>, <span class="key">"prev"</span>: <span class="null-val">null</span>, <span class="key">"next"</span>: <span class="null-val">null</span> },
+  <span class="key">"meta"</span>:  { <span class="key">"current_page"</span>: <span class="num">1</span>, <span class="key">"last_page"</span>: <span class="num">1</span>, <span class="key">"per_page"</span>: <span class="num">15</span>, <span class="key">"total"</span>: <span class="num">2</span> }
+}</pre>
+      <div class="block-label">Field Reference</div>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr><td>id</td><td>integer</td><td>Notification id. Use it for the mark-as-read call.</td></tr>
+        <tr><td>type</td><td>string</td><td>Stable machine key — switch on it for icons, grouping, and deep links. See the table below.</td></tr>
+        <tr><td>title</td><td>string</td><td>Short Persian headline, ready to render.</td></tr>
+        <tr><td>message</td><td>string</td><td>Body text, ready to render.</td></tr>
+        <tr><td>data</td><td>object | null</td><td>Structured payload for deep-linking. Always contains <code>order_id</code> for the current types; <code>shipment_sent</code> may also carry <code>tracking_code</code>.</td></tr>
+        <tr><td>read_at</td><td>string | null</td><td>ISO-8601 timestamp, or <code>null</code> when unread. Count the nulls for an unread badge.</td></tr>
+        <tr><td>created_at</td><td>string</td><td>ISO-8601 creation time.</td></tr>
+      </table>
+      <div class="block-label">Error Responses</div>
+      <table>
+        <tr><th>Status</th><th>Condition</th></tr>
+        <tr><td>401</td><td>Not authenticated.</td></tr>
+        <tr><td>403</td><td>Authenticated but lacking <code>notification.view-own</code>.</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- POST /api/v1/notifications/{id}/read -->
+  <h3 id="notifications-read">Mark as Read</h3>
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/notifications/{id}/read</span>
+      <span class="badge auth">Requires auth:sanctum</span>
+      <span class="badge admin">Requires notification.mark-read-own</span>
+      <span class="badge rate">throttle:api</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Stamps <code>read_at</code> on one of the caller's own notifications and returns the updated object (unwrapped — no <code>data</code> envelope). <strong>Idempotent:</strong> calling it again keeps the original timestamp, so an optimistic UI can fire it freely.</p>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{
+  <span class="key">"id"</span>:         <span class="num">128</span>,
+  <span class="key">"type"</span>:       <span class="str">"payment_success"</span>,
+  <span class="key">"title"</span>:      <span class="str">"پرداخت موفق"</span>,
+  <span class="key">"message"</span>:    <span class="str">"پرداخت سفارش شما با موفقیت انجام شد."</span>,
+  <span class="key">"data"</span>:       { <span class="key">"order_id"</span>: <span class="num">42</span> },
+  <span class="key">"read_at"</span>:    <span class="str">"2026-07-20T09:31:00.000000Z"</span>,
+  <span class="key">"created_at"</span>: <span class="str">"2026-07-20T09:12:33.000000Z"</span>
+}</pre>
+      <div class="block-label">Error Responses</div>
+      <table>
+        <tr><th>Status</th><th>Condition</th></tr>
+        <tr><td>401</td><td>Not authenticated.</td></tr>
+        <tr><td>403</td><td>The notification belongs to another user, or the caller lacks <code>notification.mark-read-own</code>. Nothing is mutated.</td></tr>
+        <tr><td>404</td><td>No notification with that id.</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <h3 id="notifications-triggers">When Notifications Appear</h3>
+  <p>Notifications are raised by the backend when a business flow completes. Nothing in the frontend triggers them, and a rolled-back operation never produces one.</p>
+  <table>
+    <tr><th><code>type</code></th><th>Raised when</th><th>Audience</th><th>Also sends SMS</th><th><code>data</code></th></tr>
+    <tr><td><code>payment_success</code></td><td>An order transitions to <code>paid</code> — online capture or in-person payment</td><td>customer</td><td>yes</td><td><code>order_id</code></td></tr>
+    <tr><td><code>admin_order_paid</code></td><td>Same moment, delivered to every admin account</td><td>admin</td><td>no</td><td><code>order_id</code></td></tr>
+    <tr><td><code>payment_failed</code></td><td>Gateway verification rejects the payment</td><td>customer</td><td>no</td><td><code>order_id</code></td></tr>
+    <tr><td><code>order_cancelled</code></td><td>The customer or an operator cancels a pending order</td><td>customer</td><td>yes</td><td><code>order_id</code></td></tr>
+    <tr><td><code>shipment_preparing</code></td><td>Shipment enters <code>preparing</code></td><td>customer</td><td>SMS only — <em>no in-app row</em></td><td>—</td></tr>
+    <tr><td><code>shipment_sent</code></td><td>Shipment reaches <code>handed_to_post</code> or <code>out_for_delivery</code></td><td>customer</td><td>yes</td><td><code>order_id</code>, <code>tracking_code</code>?</td></tr>
+    <tr><td><code>shipment_delivered</code></td><td>Shipment reaches <code>delivered</code></td><td>customer</td><td>yes</td><td><code>order_id</code></td></tr>
+  </table>
+  <div class="warn"><strong><code>shipment_preparing</code> is SMS-only.</strong> It never appears in <code>GET /notifications</code>. Do not build UI that waits for it — use the shipment status endpoints for live fulfillment state.</div>
+  <div class="note"><strong>A repeated gateway callback will not duplicate anything.</strong> Payment notifications fire only on the real pending → paid transition, so retried callbacks are silent.</div>
+  <p>Deep-linking: every payload carries <code>order_id</code>, so a notification row can link straight to <code>GET /orders</code> detail or the order tracking page. Unread badge = count of items with <code>read_at === null</code> on page 1 (or track it client-side after each mark-as-read).</p>
 
   <section id="variant-order-limits">
     <h2>Variant per-order quantity limits</h2>

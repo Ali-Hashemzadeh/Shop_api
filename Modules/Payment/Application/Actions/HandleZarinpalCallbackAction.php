@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace Modules\Payment\Application\Actions;
 
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Modules\Cart\Domain\Contracts\CartManagerInterface;
 use Modules\Order\Domain\Contracts\OrderManagerInterface;
 use Modules\Payment\Domain\Enums\PaymentStatus;
+use Modules\Payment\Domain\Events\PaymentFailedEvent;
 use Modules\Payment\Domain\Models\Payment;
 use Modules\Payment\Infrastructure\Gateways\PaymentGatewayFactory;
 
@@ -47,6 +49,18 @@ class HandleZarinpalCallbackAction
                     'status' => PaymentStatus::FAILED->value,
                     'gateway_response' => $result['raw_response'],
                 ]);
+
+                // Server-side verification rejected the payment. The owning user
+                // comes from the Order contract — the Payment record has only an
+                // order id, and no User model crosses this boundary.
+                $order = $this->orderManager->findOrder($payment->order_id);
+
+                if ($order !== null) {
+                    Event::dispatch(new PaymentFailedEvent(
+                        orderId: $order->id,
+                        userId: $order->userId,
+                    ));
+                }
 
                 return ['success' => false, 'message' => 'Payment verification failed.', 'payment_id' => $payment->id];
             }

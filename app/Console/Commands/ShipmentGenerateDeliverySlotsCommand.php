@@ -16,7 +16,6 @@ class ShipmentGenerateDeliverySlotsCommand extends Command
     public function handle(GenerateDeliverySlotsAction $action): int
     {
         $days = $this->option('days') !== null ? (int) $this->option('days') : null;
-        $this->info("days are {$days}");
         $created = $action->handle($days);
 
         $this->info("Generated {$created} new delivery slot(s).");

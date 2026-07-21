@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace Modules\Order\Application\Actions;
 
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Modules\Order\Domain\DTOs\OrderDTO;
 use Modules\Order\Domain\DTOs\OrderItemDTO;
 use Modules\Order\Domain\Enums\OrderStatus;
+use Modules\Order\Domain\Events\OrderCancelledEvent;
 use Modules\Order\Domain\Models\Order;
 use Modules\Order\Domain\Models\OrderItem;
 
@@ -39,6 +41,13 @@ class AdminCancelOrderAction
 
         return DB::transaction(function () use ($order) {
             $this->cancelOrder->releaseAndCancel($order);
+
+            // Same customer-facing outcome as a self-service cancellation, so the
+            // customer is notified here too.
+            Event::dispatch(new OrderCancelledEvent(
+                orderId: $order->id,
+                userId: $order->user_id,
+            ));
 
             $items = $order->items->map(fn (OrderItem $item) => OrderItemDTO::fromModel($item))->all();
 

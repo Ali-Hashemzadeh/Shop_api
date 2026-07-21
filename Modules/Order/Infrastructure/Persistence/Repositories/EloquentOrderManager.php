@@ -6,6 +6,7 @@ namespace Modules\Order\Infrastructure\Persistence\Repositories;
 
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Modules\Inventory\Domain\Contracts\InventoryManagerInterface;
 use Modules\Order\Application\Actions\CreateOrderAction;
 use Modules\Order\Domain\Contracts\OrderManagerInterface;
@@ -13,6 +14,7 @@ use Modules\Order\Domain\DTOs\AdminOrderDetailDTO;
 use Modules\Order\Domain\DTOs\OrderDTO;
 use Modules\Order\Domain\DTOs\OrderItemDTO;
 use Modules\Order\Domain\Enums\OrderStatus;
+use Modules\Order\Domain\Events\OrderPaidEvent;
 use Modules\Order\Domain\Models\Order;
 use Modules\Shipment\Domain\Contracts\ShipmentManagerInterface;
 use Modules\Shipment\Domain\DTOs\ShipmentSelectionDTO;
@@ -59,6 +61,16 @@ class EloquentOrderManager implements OrderManagerInterface
                 userId: $order->user_id,
                 shipmentSnapshot: $order->shipment_snapshot ?? [],
             );
+
+            // Announce the real transition only — the early return above means a
+            // repeated callback never reaches this line, so notifications are not
+            // duplicated. Listeners implement ShouldHandleEventsAfterCommit, so
+            // nothing is sent if this (or an enclosing) transaction rolls back.
+            Event::dispatch(new OrderPaidEvent(
+                orderId: $order->id,
+                userId: $order->user_id,
+                totalAmount: (int) $order->total_amount,
+            ));
 
             return $this->toDTO($order->fresh('items'));
         });

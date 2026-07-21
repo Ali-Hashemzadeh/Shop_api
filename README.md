@@ -130,10 +130,44 @@ Fulfillment lifecycle from checkout through payment to delivery, postal handoff,
 - **Key contract:** `ShipmentManagerInterface` — `getAvailableMethods`, `getAvailableDeliverySlots`, `validateSelection`, `holdForPendingOrder`, `releasePendingOrder`, `activateForPaidOrder`, `findForOrder`. Supported-region rule isolated behind `LocalDeliveryEligibilityInterface`.
 - **Lifecycle:** a held local-delivery slot is reserved at pending-order creation, confirmed when the order is **paid**, released on cancel/expiry. The operational `shipments` record is created only when the order becomes paid (idempotent by `order_id`, at the shared `markAsPaid` path, which also commits inventory once).
 - **Status mapping:** shipment → order summary (`handed_to_post`/`out_for_delivery` → `shipped`; `delivered`/`picked_up` → `completed`). Postal tracking intentionally ends at `handed_to_post`.
-- **Slots:** `shipment:generate-delivery-slots` generates dated cinema-session slots from recurring working periods (idempotent, scheduled daily). Remaining capacity = capacity − admin-reserved − active reservations; overbooking prevented with row locks.
+- **Slots:** `shipment:generate-delivery-slots` generates dated cinema-session slots from recurring working periods (idempotent, scheduled daily). `POST /admin/shipment/delivery-slots/generate` triggers the identical run on demand — useful in local development, where no cron is running. Remaining capacity = capacity − admin-reserved − active reservations; overbooking prevented with row locks.
+- **Default working hours** are seeded (Sat–Thu, 09:00–13:00 and 16:00–21:00, Friday closed) as *starting values only* — the admin owns the schedule from there via `/admin/shipment/delivery-working-periods`, and re-seeding never overwrites those edits.
 - **Working-period admin API:** GET/POST /api/v1/admin/shipment/delivery-working-periods and PATCH/DELETE /api/v1/admin/shipment/delivery-working-periods/{id} manage recurring weekday templates through existing shipment.slot.view-admin / shipment.slot.manage permissions. Same-day periods cannot overlap; changes affect future generation and do not rewrite existing dated slots.
 - **Endpoints:** customer `GET /shipment/methods`, `/shipment/delivery-slots`, `/shipments/{publicCode}`, `/orders/{order}/shipment`; admin `/admin/shipments*` (business-action POSTs) and `/admin/shipment/delivery-slots*`.
 - **Authorization:** permission-based (`shipment.*`); customer gets `shipment.view-own`, admin gets all.
+
+### Notification (Infrastructure ready — business events pending)
+In-app notification storage plus multi-channel delivery. The module owns no business copy: the caller supplies the type, title, message, `data` payload, and channel list.
+
+- **Channels:** `database` (in-app row) and `sms`. `NotificationChannelInterface` + `NotificationChannelFactory`; email and push are intentionally not implemented.
+- **Key contract:** `NotificationManagerInterface` — `send(NotificationRequestDTO)`, `getUserNotifications`, `markAsRead`, `unreadCount`.
+- **Tables:** `notifications` (`user_id`, `type`, `title`, `message`, JSON `data`, `read_at`) and `notification_deliveries` (external-attempt audit: `channel`, `status`, `provider`, `provider_reference`, `sent_at`, `failed_at`, `error`; `notification_id` is nullable because an SMS-only notification has no in-app row).
+- **SMS is optional:** template names are the internal `NotificationTemplate` enum. If the active provider has no template id configured for one, the message is **skipped** — logged, recorded as a `skipped` delivery, never thrown and never counted as a failure. A recipient with no phone on file is skipped too.
+- **Failure isolation:** a real SMS failure (provider down or rejecting) creates a *failed delivery record* — it never throws into the caller and never rolls back a payment or shipment.
+- **Boundaries:** the recipient's phone comes from `IdentityManagerInterface::getUserSummary()`; SMS leaves only through `SmsManagerInterface`. No SMS provider is ever referenced here.
+- **Endpoints:** `GET /api/v1/notifications`, `POST /api/v1/notifications/{id}/read` (`auth:sanctum`, `notification.view-own` / `notification.mark-read-own`; another user's notification returns 403).
+- **Wired to the business flows via events.** Business modules dispatch primitives-only integration events; listeners in this module react. Nothing else calls `NotificationManagerInterface`.
+
+| Event | Raised when | Customer | Admin |
+|---|---|---|---|
+| `OrderPaidEvent` | `markAsPaid` completes a real pending → paid transition | in-app + SMS | in-app |
+| `PaymentFailedEvent` | server-side gateway verification rejects the payment | in-app | — |
+| `OrderCancelledEvent` | customer or operator cancels an order | in-app + SMS | — |
+| `ShipmentPreparingStartedEvent` | shipment enters `preparing` | SMS | — |
+| `ShipmentSentEvent` | shipment reaches `handed_to_post` or `out_for_delivery` | in-app + SMS | — |
+| `ShipmentDeliveredEvent` | shipment reaches `delivered` | in-app + SMS | — |
+
+- **Transaction-safe:** every listener implements `ShouldHandleEventsAfterCommit`, so a rolled-back business transaction sends nothing. Repeat payment callbacks cannot duplicate notifications — the already-paid early return in `markAsPaid` means the event is never re-dispatched.
+- **Silent by design:** the internal pending-order replacement during checkout, TTL order expiry, and in-store `picked_up`.
+
+### Sms (Infrastructure ready)
+Provider abstraction for notification SMS: provider selection, provider-specific formatting, nothing else.
+
+- **Internal message format:** `SmsMessageDTO { receiver: "09121234567", template: "payment_success", parameters: { "OrderId": 123 } }`. Template names and parameter names are ours and never change per provider.
+- **Providers:** `smsir` (translates to SMS.ir's `{mobile, templateId, parameters:[{name,value}]}` and `98…` numbering), `log` (dev default), `fake` (tests). Selected with `SMS_PROVIDER`; add a provider by implementing `SmsProviderInterface` and registering it in `SmsProviderFactory`.
+- **Config:** `config/sms.php` — API key, endpoint, and per-template ids come from `SMS_SMSIR_*` env keys. No business parameter names in env. A template id left empty simply means that message is not sent.
+- **Three outcomes:** `SmsResultDTO` is success, `skipped` (nothing attempted — not configured for that template), or failure (a real attempt that did not succeed).
+- **Separate from OTP:** Identity's `OtpSenderInterface` is untouched. Same vendor, different responsibility.
 
 ---
 
@@ -224,6 +258,15 @@ Auto-generated interactive API docs are available at `/docs/api` when running lo
 
 ---
 
+### Notifications (`auth:sanctum` + `notification.*` required)
+
+| Method | Endpoint | Permission | Description |
+|---|---|---|---|
+| `GET` | `/notifications` | `notification.view-own` | Caller's notifications, newest first, paginated |
+| `POST` | `/notifications/{id}/read` | `notification.mark-read-own` | Mark own notification read (403 for another user's) |
+
+---
+
 ## Getting Started
 
 ### Requirements
@@ -311,6 +354,9 @@ That one line is all that's needed — do **not** add a separate cron entry per 
 ```bash
 php artisan shipment:generate-delivery-slots            # uses config('shipment.delivery.generation_days'), default 30
 php artisan shipment:generate-delivery-slots --days=60  # generate 60 days ahead
+
+# Same generation over HTTP, for environments with no cron (admin token + shipment.slot.manage):
+#   POST /api/v1/admin/shipment/delivery-slots/generate   {"days": 30}   // days optional, 1-90
 ```
 
 Before slots can be generated you must seed the recurring templates in `delivery_working_periods` (weekday `0`=Sun … `6`=Sat, plus `starts_at`/`ends_at`), and optionally `delivery_schedule_exceptions` (`closed` / `custom_hours`) for holidays or special hours. Slot duration, capacity, booking horizon, and lead time are all tunable in `config/shipment.php` (env-backed).

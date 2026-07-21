@@ -8,11 +8,13 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Modules\Shipment\Application\Actions\CloseDeliverySlotAction;
+use Modules\Shipment\Application\Actions\GenerateDeliverySlotsAction;
 use Modules\Shipment\Application\Actions\OpenDeliverySlotAction;
 use Modules\Shipment\Application\Actions\UpdateDeliverySlotCapacityAction;
 use Modules\Shipment\Application\Services\DeliverySlotAvailabilityService;
 use Modules\Shipment\Domain\DTOs\DeliverySlotDTO;
 use Modules\Shipment\Domain\Models\DeliverySlot;
+use Modules\Shipment\Infrastructure\Http\Requests\GenerateDeliverySlotsRequest;
 use Modules\Shipment\Infrastructure\Http\Requests\UpdateDeliverySlotRequest;
 use Modules\Shipment\Infrastructure\Http\Resources\DeliverySlotResource;
 
@@ -40,6 +42,28 @@ class AdminDeliverySlotController extends Controller
         });
 
         return response()->json(DeliverySlotResource::collection($paginator)->response()->getData(true));
+    }
+
+    /**
+     * Materialize dated delivery sessions from the recurring working periods on demand.
+     *
+     * The same idempotent generation the scheduled `shipment:generate-delivery-slots`
+     * command runs nightly, exposed so an operator (or a developer with no cron running)
+     * can trigger it directly. Re-running it never duplicates a session, overwrites an
+     * edited capacity, or reopens a closed slot.
+     */
+    public function generate(GenerateDeliverySlotsRequest $request, GenerateDeliverySlotsAction $action): JsonResponse
+    {
+        $days = $request->filled('days')
+            ? (int) $request->input('days')
+            : (int) config('shipment.delivery.generation_days', 30);
+
+        return response()->json([
+            'data' => [
+                'created' => $action->handle($days),
+                'days' => $days,
+            ],
+        ]);
     }
 
     public function update(UpdateDeliverySlotRequest $request, int $slot, UpdateDeliverySlotCapacityAction $action): JsonResponse

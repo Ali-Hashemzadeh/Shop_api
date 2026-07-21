@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace Modules\Order\Application\Actions;
 
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Modules\Inventory\Domain\Contracts\InventoryManagerInterface;
 use Modules\Order\Domain\DTOs\OrderDTO;
 use Modules\Order\Domain\DTOs\OrderItemDTO;
 use Modules\Order\Domain\Enums\OrderStatus;
+use Modules\Order\Domain\Events\OrderCancelledEvent;
 use Modules\Order\Domain\Models\Order;
 use Modules\Order\Domain\Models\OrderItem;
 use Modules\Shipment\Domain\Contracts\ShipmentManagerInterface;
@@ -38,6 +40,15 @@ class CancelOrderAction
 
         return DB::transaction(function () use ($order) {
             $this->releaseAndCancel($order);
+
+            // Explicit, customer-initiated cancellation — announce it. Dispatched
+            // here rather than inside releaseAndCancel because that primitive is
+            // also used to retire a superseded pending order during checkout,
+            // which the customer never asked for and must not be notified about.
+            Event::dispatch(new OrderCancelledEvent(
+                orderId: $order->id,
+                userId: $order->user_id,
+            ));
 
             $items = $order->items->map(fn (OrderItem $item) => OrderItemDTO::fromModel($item))->all();
 
