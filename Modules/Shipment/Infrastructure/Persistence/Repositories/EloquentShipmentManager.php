@@ -43,8 +43,9 @@ class EloquentShipmentManager implements ShipmentManagerInterface
         foreach (array_keys($this->registry->all()) as $code) {
             $available = true;
             $reason = null;
+            $type = $this->registry->find($code)['type'];
 
-            if ($this->registry->find($code)['type'] === ShipmentMethodType::LocalDelivery->value) {
+            if ($type === ShipmentMethodType::LocalDelivery->value) {
                 $eligible = $addressSnapshot !== null
                     && $this->eligibility->isEligible($addressSnapshot['province_id'] ?? null, $addressSnapshot['city_id'] ?? null);
 
@@ -54,6 +55,12 @@ class EloquentShipmentManager implements ShipmentManagerInterface
                         ? 'Select an address to check local delivery availability.'
                         : 'Local delivery is not available for this address.';
                 }
+            }
+
+            // Inside the service area the store delivers itself — post is withdrawn.
+            if ($type === ShipmentMethodType::Postal->value && $this->isInsideServiceArea($addressSnapshot)) {
+                $available = false;
+                $reason = 'Your address is inside the local delivery area — please choose local delivery or in-store pickup.';
             }
 
             $methods[] = $this->registry->toDTO($code, $available, $reason);
@@ -135,6 +142,15 @@ class EloquentShipmentManager implements ShipmentManagerInterface
                 'starts_at' => substr((string) $slot->starts_at, 0, 8),
                 'ends_at' => substr((string) $slot->ends_at, 0, 8),
             ];
+        }
+
+        // Post is not sold inside the service area — the store delivers there itself.
+        // Enforced here and not only in getAvailableMethods(), so a client that skips
+        // the method list cannot buy a postal shipment it was never offered.
+        if ($type === ShipmentMethodType::Postal->value && $this->isInsideServiceArea($address)) {
+            throw ValidationException::withMessages([
+                'shipment_method_code' => ['Postal delivery is not available for this address — please choose local delivery or in-store pickup.'],
+            ]);
         }
 
         if ($type === ShipmentMethodType::Pickup->value) {
@@ -259,6 +275,23 @@ class EloquentShipmentManager implements ShipmentManagerInterface
         $shipment = Shipment::where('order_id', $orderId)->first();
 
         return $shipment ? $this->transitions->toDTO($shipment) : null;
+    }
+
+    /**
+     * Whether an address falls inside the configured local-delivery service area.
+     *
+     * Returns false when no service area is configured: isEligible() is permissive
+     * by design in that case, and treating "everyone is eligible" as "everyone is
+     * inside the zone" would withdraw post from every customer in the country.
+     * A null address cannot be located, so it is never inside.
+     *
+     * @param  array<string, mixed>|null  $address
+     */
+    private function isInsideServiceArea(?array $address): bool
+    {
+        return $address !== null
+            && $this->eligibility->hasServiceArea()
+            && $this->eligibility->isEligible($address['province_id'] ?? null, $address['city_id'] ?? null);
     }
 
     /**

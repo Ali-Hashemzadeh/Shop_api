@@ -16,6 +16,12 @@ use Modules\Shipment\Domain\Contracts\LocalDeliveryEligibilityInterface;
  */
 class ConfigLocalDeliveryEligibility implements LocalDeliveryEligibilityInterface
 {
+    public function hasServiceArea(): bool
+    {
+        return ! empty(config('shipment.local_delivery.province_ids'))
+            || ! empty(config('shipment.local_delivery.city_ids'));
+    }
+
     public function isEligible(?int $provinceId, ?int $cityId): bool
     {
         $provinces = config('shipment.local_delivery.province_ids');
