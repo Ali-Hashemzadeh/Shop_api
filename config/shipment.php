@@ -2,6 +2,17 @@
 
 declare(strict_types=1);
 
+/**
+ * Parse a comma-separated env value into a unique list of positive integer ids.
+ * Blank, non-numeric, and zero entries are dropped, so a stray comma or a quoted
+ * empty string yields [] (= "no restriction") rather than an id of 0 that could
+ * never match. Ints are required: the eligibility check compares strictly.
+ */
+$idList = static fn (string $key): array => array_values(array_unique(array_filter(
+    array_map('intval', array_map('trim', explode(',', (string) env($key, '')))),
+    static fn (int $id): bool => $id > 0,
+)));
+
 return [
     /*
     |--------------------------------------------------------------------------
@@ -11,13 +22,18 @@ return [
     | intentionally config-backed (never a database table) so operators cannot
     | create, delete, rename, reorder, enable, disable, or reprice them through
     | the admin panel. Methods are identified by their stable string code — never
-    | a database id. All prices are integer rials (the Cents Rule).
+    | a database id.
+    |
+    | Prices are env-backed so a deployment can be repriced without a code change.
+    | All are integer rials (the Cents Rule) — the (int) cast is required because
+    | env() hands back strings, and a float price would violate financial integrity.
+    | The value beside each env() call is the fallback when the key is absent.
     */
     'methods' => [
         'post_standard' => [
             'title' => 'Standard Post',
             'type' => 'postal',
-            'price' => 850_000,
+            'price' => (int) env('SHIPMENT_POST_STANDARD_PRICE', 850_000),
             'requires_address' => true,
             'requires_delivery_slot' => false,
             'supports_tracking' => true,
@@ -29,7 +45,7 @@ return [
         'post_express' => [
             'title' => 'Express Post',
             'type' => 'postal',
-            'price' => 1_400_000,
+            'price' => (int) env('SHIPMENT_POST_EXPRESS_PRICE', 1_400_000),
             'requires_address' => true,
             'requires_delivery_slot' => false,
             'supports_tracking' => true,
@@ -41,7 +57,7 @@ return [
         'local_delivery' => [
             'title' => 'Local Delivery',
             'type' => 'local_delivery',
-            'price' => 1_200_000,
+            'price' => (int) env('SHIPMENT_LOCAL_DELIVERY_PRICE', 1_200_000),
             'requires_address' => true,
             'requires_delivery_slot' => true,
             'supports_tracking' => false,
@@ -53,7 +69,9 @@ return [
         'in_person_pickup' => [
             'title' => 'Pickup from Store',
             'type' => 'pickup',
-            'price' => 0,
+            // Free by default — the customer collects it themselves. Kept env-backed
+            // for consistency, but raising it makes "pickup" a paid service.
+            'price' => (int) env('SHIPMENT_PICKUP_PRICE', 0),
             'requires_address' => false,
             'requires_delivery_slot' => false,
             'supports_tracking' => false,
@@ -67,6 +85,30 @@ return [
                 'phone' => env('SHIPMENT_PICKUP_PHONE'),
             ],
         ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Local-delivery service area
+    |--------------------------------------------------------------------------
+    | The region the store delivers to itself. Set city ids alone (the common
+    | case), province ids alone, or both — an address matches if EITHER list
+    | contains it, so provinces act as a broad zone and cities add exceptions
+    | outside it.
+    |
+    | Leaving BOTH empty means "no service area configured": local delivery is
+    | then offered everywhere and the postal exclusion below is inert. That is
+    | the safe default — it is also why the exclusion cannot simply be "postal
+    | is off wherever local delivery is on".
+    |
+    | Inside the service area the store delivers itself, so the two postal
+    | methods are withdrawn: they are reported unavailable by
+    | GET /shipment/methods and rejected with 422 at checkout. Pickup is never
+    | affected — the customer may always collect in person.
+    */
+    'local_delivery' => [
+        'province_ids' => $idList('SHIPMENT_LOCAL_DELIVERY_PROVINCE_IDS'),
+        'city_ids' => $idList('SHIPMENT_LOCAL_DELIVERY_CITY_IDS'),
     ],
 
     /*
