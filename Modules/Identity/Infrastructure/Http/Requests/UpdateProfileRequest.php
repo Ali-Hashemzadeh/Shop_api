@@ -33,13 +33,6 @@ class UpdateProfileRequest extends FormRequest
             ],
         ];
 
-        if ($mode === 'email') {
-            $rules['email'][] = 'required';
-        }
-
-        if ($mode === 'phone') {
-            $rules['phone'][] = 'required';
-        }
 
         return $rules;
     }
