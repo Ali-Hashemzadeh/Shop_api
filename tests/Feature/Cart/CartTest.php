@@ -7,6 +7,7 @@ use Modules\Cart\Domain\Models\Cart;
 use Modules\Catalog\Domain\Models\Product;
 use Modules\Catalog\Domain\Models\ProductVariant;
 use Modules\Inventory\Domain\Models\InventoryStock;
+use Modules\Media\Domain\Models\Media;
 use Tests\TestCase;
 
 class CartTest extends TestCase
@@ -22,19 +23,39 @@ class CartTest extends TestCase
         $this->seedInventoryPermissions();
     }
 
-    // ── Product name enrichment ───────────────────────────────────────────────
+    // ── Catalog enrichment ────────────────────────────────────────────────────
 
     /** @test */
-    public function cart_item_includes_product_name_when_catalog_variant_exists(): void
+    public function cart_item_includes_flattened_product_and_variant_data_when_catalog_variant_exists(): void
     {
-        $product = Product::create(['title' => 'Samsung Galaxy S25', 'slug' => 's25', 'status' => 'published']);
-        ProductVariant::create(['product_id' => $product->id, 'sku' => 'S25-BLK', 'type' => 'color', 'base_price' => 89000000, 'is_default' => true, 'attributes' => []]);
+        $primaryImage = Media::create(['file_path' => 'products/s25-primary.webp']);
+        $variantImage = Media::create(['file_path' => 'variants/s25-black.webp']);
+        $product = Product::create([
+            'title' => 'Samsung Galaxy S25',
+            'slug' => 's25',
+            'status' => 'published',
+            'primary_media_id' => $primaryImage->id,
+        ]);
+        ProductVariant::create([
+            'product_id' => $product->id,
+            'sku' => 'S25-BLK',
+            'type' => 'color',
+            'base_price' => 89000000,
+            'is_default' => true,
+            'attributes' => ['color' => 'black', 'storage' => '256GB'],
+            'media_id' => $variantImage->id,
+        ]);
         InventoryStock::create(['sku' => 'S25-BLK', 'quantity' => 10, 'reserved_quantity' => 0]);
 
         $this->withHeaders(['X-Session-Id' => self::SESSION])
             ->postJson('/api/v1/cart/items', ['sku' => 'S25-BLK', 'quantity' => 1])
             ->assertCreated()
-            ->assertJsonPath('items.0.product_name', 'Samsung Galaxy S25');
+            ->assertJsonPath('items.0.product_name', 'Samsung Galaxy S25')
+            ->assertJsonPath('items.0.type', 'color')
+            ->assertJsonPath('items.0.attributes.color', 'black')
+            ->assertJsonPath('items.0.attributes.storage', '256GB')
+            ->assertJsonPath('items.0.image_url', $variantImage->url)
+            ->assertJsonPath('items.0.primary_image_url', $primaryImage->url);
     }
 
     // ── Guest: GET /api/v1/cart ───────────────────────────────────────────────

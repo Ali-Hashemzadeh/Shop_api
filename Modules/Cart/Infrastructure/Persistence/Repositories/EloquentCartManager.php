@@ -180,6 +180,8 @@ class EloquentCartManager implements CartManagerInterface
                 attributes: $variant?->attributes ?? [],
                 availableStock: $stocks[$item->sku]->availableQuantity ?? 0,
                 maxQuantityPerOrder: $variant?->maxQuantityPerOrder,
+                type: $variant?->type,
+                primaryImageUrl: $variant?->productPrimaryImageUrl,
             );
         })->all();
 

@@ -21,9 +21,12 @@ class CartItemResource extends JsonResource
             'remaining_addable_quantity' => $this->remainingAddableQuantity,
             'quantity_valid' => $this->quantityValid,
             'product_name' => $this->productName,
+            'type' => $this->type,
+            'attributes' => $this->attributes,
             'base_price' => $this->basePrice,
             'compare_at_price' => $this->compareAtPrice,
             'image_url' => $this->imageUrl,
+            'primary_image_url' => $this->primaryImageUrl,
             'line_total' => $this->lineTotal,
         ];
     }
