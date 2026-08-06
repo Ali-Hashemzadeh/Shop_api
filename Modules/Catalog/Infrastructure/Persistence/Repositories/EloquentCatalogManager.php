@@ -317,7 +317,16 @@ class EloquentCatalogManager implements CatalogManagerInterface
             ->whereIn('sku', $skus)
             ->get();
         $stockMap = $this->availableStockMap($variants->pluck('sku')->all());
-        $mediaMap = $this->buildMediaMap($variants->pluck('media_id')->filter()->unique()->values()->all());
+        $mediaIds = $variants
+            ->flatMap(fn (ProductVariant $variant): array => [
+                $variant->media_id,
+                $variant->product?->primary_media_id,
+            ])
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+        $mediaMap = $this->buildMediaMap($mediaIds);
 
         return $variants->mapWithKeys(fn (ProductVariant $variant): array => [
             $variant->sku => ProductVariantDTO::fromModel(
@@ -325,6 +334,9 @@ class EloquentCatalogManager implements CatalogManagerInterface
                 $mediaMap->get($variant->media_id)?->url,
                 $variant->product?->title,
                 $stockMap[$variant->sku] ?? 0,
+                $variant->product?->primary_media_id
+                    ? $mediaMap->get($variant->product->primary_media_id)?->url
+                    : null,
             ),
         ])->all();
     }
@@ -546,6 +558,7 @@ class EloquentCatalogManager implements CatalogManagerInterface
                 $mediaMap->get($v->media_id)?->url,
                 $product->title,
                 $stockMap[$v->sku] ?? 0,
+                $primaryImageUrl,
             ))
             ->all();
 

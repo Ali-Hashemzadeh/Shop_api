@@ -20,6 +20,7 @@ class ProductVariantDTO
         // Available units for this variant's SKU (physical − reserved), resolved from
         // the Inventory module. Null when a caller builds the DTO without enrichment.
         public readonly ?int $availableStock = null,
+        public readonly ?string $productPrimaryImageUrl = null,
     ) {}
 
     public static function fromModel(
@@ -27,6 +28,7 @@ class ProductVariantDTO
         ?string $imageUrl = null,
         ?string $productName = null,
         ?int $availableStock = null,
+        ?string $productPrimaryImageUrl = null,
     ): self {
         return new self(
             id: $variant->id,
@@ -40,6 +42,7 @@ class ProductVariantDTO
             imageUrl: $imageUrl,
             productName: $productName,
             availableStock: $availableStock,
+            productPrimaryImageUrl: $productPrimaryImageUrl,
         );
     }
 }

@@ -24,6 +24,8 @@ class CartItemDTO
         public readonly ?int $effectiveMaxQuantity = null,
         public readonly ?int $remainingAddableQuantity = null,
         public readonly bool $quantityValid = true,
+        public readonly ?string $type = null,
+        public readonly ?string $primaryImageUrl = null,
     ) {}
 
     public static function fromModel(
@@ -35,6 +37,8 @@ class CartItemDTO
         array $attributes = [],
         ?int $availableStock = null,
         ?int $maxQuantityPerOrder = null,
+        ?string $type = null,
+        ?string $primaryImageUrl = null,
     ): self {
         $effectiveMax = $availableStock !== null
             ? min(max(0, $availableStock), $maxQuantityPerOrder ?? PHP_INT_MAX)
@@ -56,6 +60,8 @@ class CartItemDTO
             effectiveMaxQuantity: $effectiveMax,
             remainingAddableQuantity: $effectiveMax !== null ? max(0, $effectiveMax - $item->quantity) : null,
             quantityValid: $effectiveMax === null || $item->quantity <= $effectiveMax,
+            type: $type,
+            primaryImageUrl: $primaryImageUrl,
         );
     }
 
@@ -68,6 +74,8 @@ class CartItemDTO
         array $attributes = [],
         ?int $availableStock = null,
         ?int $maxQuantityPerOrder = null,
+        ?string $type = null,
+        ?string $primaryImageUrl = null,
     ): self {
         $effectiveMax = $availableStock !== null
             ? min(max(0, $availableStock), $maxQuantityPerOrder ?? PHP_INT_MAX)
@@ -89,6 +97,8 @@ class CartItemDTO
             effectiveMaxQuantity: $effectiveMax,
             remainingAddableQuantity: $effectiveMax !== null ? max(0, $effectiveMax - $this->quantity) : null,
             quantityValid: $effectiveMax === null || $this->quantity <= $effectiveMax,
+            type: $type,
+            primaryImageUrl: $primaryImageUrl,
         );
     }
 }

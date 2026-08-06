@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Change — Cart: richer flattened Catalog display data
+
+- Cart item responses now expose the selected variant's `type`, `attributes`, and existing variant `image_url`, plus the owning product's `primary_image_url`.
+- The enrichment stays flattened and continues through Catalog DTOs and batch media hydration; Cart does not reuse `ProductVariantResource` or query Catalog/Media models directly.
+
 ### Feature — Shipment: env-backed method prices and a local-delivery service area that withdraws post
 
 - **Method prices are env-backed.** `SHIPMENT_POST_STANDARD_PRICE`, `SHIPMENT_POST_EXPRESS_PRICE`, `SHIPMENT_LOCAL_DELIVERY_PRICE`, `SHIPMENT_PICKUP_PRICE` in `config/shipment.php`, each keeping the previous value as its fallback. Cast with `(int)` — `env()` returns strings, and an uncast price would reach `ShipmentSelectionDTO::$shippingCost` and `orders.shipping_cost` as a string, breaking the Cents Rule. Values are integer rials: no decimals, no separators. Repricing affects new checkouts only; existing orders keep their frozen `shipment_snapshot` and shipments their `shipping_cost`.
