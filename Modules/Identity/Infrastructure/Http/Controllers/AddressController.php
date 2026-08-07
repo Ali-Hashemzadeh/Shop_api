@@ -10,7 +10,7 @@ use Modules\Identity\Application\Actions\CreateAddress;
 use Modules\Identity\Application\Actions\DeleteAddress;
 use Modules\Identity\Application\Actions\ListAddresses;
 use Modules\Identity\Application\Actions\SetDefaultShippingAddress;
-use Modules\Identity\Application\Actions\ShowAddress;
+use Modules\Identity\Application\Actions\ShowCustomerAddress;
 use Modules\Identity\Application\Actions\UpdateAddress;
 use Modules\Identity\Domain\Models\Address;
 use Modules\Identity\Infrastructure\Http\Requests\ListAddressRequest;
@@ -58,12 +58,13 @@ class AddressController extends Controller
     /**
      * @throws AuthorizationException
      */
-    public function show(Address $address, ShowAddress $action): JsonResponse
+    public function show(string $publicCode, ShowCustomerAddress $action): JsonResponse
     {
+        $address = $action->handle($publicCode);
         $this->authorize('view', $address);
 
         return response()->json([
-            'data' => new AddressResource($action->handle($address)),
+            'data' => new AddressResource($address),
         ]);
     }
 

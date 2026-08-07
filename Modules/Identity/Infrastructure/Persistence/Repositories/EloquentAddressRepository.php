@@ -67,6 +67,17 @@ class EloquentAddressRepository implements AddressRepositoryInterface
         return Address::query()->find($id);
     }
 
+    public function findByPublicCode(string $publicCode): ?Address
+    {
+        if (! PublicCodeGenerator::matches($publicCode, PublicCodeEntity::Address)) {
+            return null;
+        }
+
+        return Address::query()
+            ->where('public_code', PublicCodeGenerator::normalize($publicCode))
+            ->first();
+    }
+
     public function refreshWithRelations(Address $address): Address
     {
         return $address->load(['province', 'city']);

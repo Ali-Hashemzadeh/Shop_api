@@ -315,7 +315,8 @@ curl -s -X POST http://localhost:8000/api/v1/media \
   <div class="note"><strong>Numeric IDs are unchanged.</strong> This is purely additive. Orders, Payments, Addresses and
     Categories keep their integer <code>id</code>, and every foreign key, relationship, checkout <code>address_id</code>,
     admin filter, internal contract, scheduled job, and gateway reference continues to use it. Public codes are for
-    display, customer search, and support — never for internal lookup.</div>
+    customer-facing display, search, support, and explicitly documented customer detail routes; they never replace
+    structural numeric identifiers.</div>
 
   <div class="note"><strong>Older identifiers still work.</strong> Products created before this scheme keep their
     7-character hexadecimal code (e.g. <code>a3f9c1b</code>) and their URLs still resolve; variants keep their earlier
@@ -358,8 +359,9 @@ curl -s -X POST http://localhost:8000/api/v1/media \
         no-information-leak behaviour as order search. <strong>Not added to the admin address endpoints.</strong></td>
     </tr>
   </table>
-  <div class="note">Shipments already support direct lookup by code at <code>GET /shipments/{publicCode}</code>, so no
-    separate shipment search parameter was added.</div>
+  <div class="note">Shipments and customer Address detail support direct lookup by code at
+    <code>GET /shipments/{publicCode}</code> and <code>GET /addresses/{publicCode}</code>, so no separate detail-search
+    parameter is needed.</div>
 
   <h3 id="media-strategy">Media Upload Strategy</h3>
   <p>The API supports two ways to attach images to any entity that accepts one:</p>
@@ -876,15 +878,16 @@ curl -s -X POST http://localhost:8000/api/v1/media \
   <div class="endpoint">
     <div class="endpoint-header">
       <span class="method get">GET</span>
-      <span class="endpoint-path">/addresses/{address_id}</span>
+      <span class="endpoint-path">/addresses/{publicCode}</span>
       <span class="badge auth">Auth Required</span>
     </div>
     <div class="endpoint-body">
-      <p>Returns a single address. Only accessible by the owning user.</p>
+      <p>Returns a single address by its exact public code (<code>bda-XXXXXX</code>), case-insensitive through the shared public-code normalizer. Numeric ids and partial/malformed codes do not resolve and return <code>404</code>. Existing authorization is unchanged: the owning customer may view it, a user with <code>address.view-any</code> may view it, and another customer receives <code>403</code>. Customer Address mutation routes and all admin Address routes continue to use numeric ids.</p>
       <div class="block-label">Response — 200 OK</div>
       <pre>{
   <span class="key">"data"</span>: {
     <span class="key">"id"</span>:                   <span class="num">7</span>,
+    <span class="key">"public_code"</span>:          <span class="str">"bda-H7Q9CM"</span>,
     <span class="key">"title"</span>:               <span class="str">"خانه"</span>,
     <span class="key">"province_id"</span>:         <span class="num">8</span>,
     <span class="key">"city_id"</span>:             <span class="num">153</span>,

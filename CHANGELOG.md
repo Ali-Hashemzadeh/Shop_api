@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fix — customer Address detail resolves public code
+
+- Changed only customer `GET /api/v1/addresses/{publicCode}` to normalize and exactly resolve the existing `bda-XXXXXX` identifier. Numeric/malformed/missing codes return 404; existing owner/view-any authorization remains unchanged. Address mutations, checkout `address_id`, Shipment eligibility, internal contracts, and admin Address routes continue to use numeric ids.
+
 ### Feature — customer Shipment method eligibility and delivery-slot sorting
 
 - `GET /api/v1/shipment/delivery-slots` now validates `sort` (`date`, `starts_at`, `remaining_capacity`, `capacity`, `created_at`) and `direction` (`asc`, `desc`). Its customer default is chronological (`date ASC`, then `starts_at ASC`), all sorts have deterministic secondary/id ordering, and remaining-capacity sorting reuses the existing capacity/reservation calculation.

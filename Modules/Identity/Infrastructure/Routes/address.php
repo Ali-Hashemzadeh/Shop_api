@@ -7,7 +7,7 @@ use Modules\Identity\Infrastructure\Http\Controllers\AdminAddressController;
 Route::prefix('addresses')->group(function () {
     Route::get('/', [AddressController::class, 'index']);
     Route::post('/', [AddressController::class, 'store']);
-    Route::get('/{address}', [AddressController::class, 'show']);
+    Route::get('/{publicCode}', [AddressController::class, 'show']);
     Route::patch('/{address}', [AddressController::class, 'update']);
     Route::delete('/{address}', [AddressController::class, 'destroy']);
     Route::post('/{address}/default-shipping', [AddressController::class, 'setDefaultShipping']);

@@ -82,11 +82,13 @@ replaces no primary key, foreign key, relation, cron input, internal query, or a
   `(legacy-hex | bdp-XXXXXX)`, which still excludes `admin`/`slug`; shipment routes' `[A-Za-z0-9\-]+` already
   spans both. **Do not narrow either pattern.** Route caching bakes the namespace in — `route:clear` after a
   namespace change.
-* **Search:** exact, whole-string, case-normalized lookups on the unique index — never `LIKE`, never partial
+* **Search/detail:** exact, whole-string, case-normalized lookups on the unique index — never `LIKE`, never partial
   (or records could be enumerated by prefix). Public product list matches `bdp-`/`bdv-` (variant returns its
   owning product); public category list matches `bdc-` at any depth; `GET /orders` and `GET /addresses` match
   their code **always intersected with the caller's own rows**, so another user's real code returns a page
-  indistinguishable from a nonexistent one. Deliberately **not** added to any admin list.
+  indistinguishable from a nonexistent one. Customer `GET /addresses/{publicCode}` also resolves an exact normalized
+  `bda-XXXXXX` (numeric GET → 404) before applying the existing Address policy; mutations, checkout, and admin routes
+  remain numeric. Public-code search is deliberately **not** added to any admin list.
 * **Notifications:** integration events carry `orderPublicCode` **alongside** the numeric `orderId` (listeners
   still need the id for deep links); events stay primitives-only. Customer-facing SMS/in-app copy quotes the
   code, but the SMS **parameter name** stays `OrderId` — it is the provider-side template variable.
@@ -113,7 +115,7 @@ replaces no primary key, foreign key, relation, cron input, internal query, or a
       * `Modules\Identity\Domain\Contracts\IdentityManagerInterface`: exposes `isAdmin(int $userId): bool`. Available for cross-module role checks, but **prefer direct permission checks via `$user->can('...')` in policies instead** — see Authorization Pattern below.
       * `getUserSummary(int $userId): UserSummaryDTO` — returns `{id, name, lastName, phone, email}` (`Domain/DTOs/UserSummaryDTO.php`). Consumed by Order's `CreateOrderAction` to build the immutable `customer_snapshot` at checkout; never leaks the `User` model across the boundary.
       * Concrete: `EloquentIdentityManager` (bound in `IdentityServiceProvider::register()`). Internally calls `User::find()->hasRole('admin')` / `User::findOrFail()->…` — all Spatie internals stay inside Identity.
-  * **Route structure:** user-facing address routes registered under `prefix('addresses')` (plural). Admin user management under `prefix('admin/users')`. Profile self-service under `prefix('profile')`.
+  * **Route structure:** user-facing address routes registered under `prefix('addresses')` (plural). Customer `GET /addresses/{publicCode}` uses the exact normalized `bda-XXXXXX` code; PATCH/DELETE/default-shipping, checkout `address_id`, and admin address routes remain numeric. Admin user management uses `prefix('admin/users')`. Profile self-service uses `prefix('profile')`.
   * **Known fix applied:** `UpdateAddressRequest` had `city_id` as `required` instead of `sometimes` — corrected so PATCH requests can update partial fields without supplying city.
   * **Address map pin:** `addresses` carries `latitude`/`longitude` (`decimal(10,7)`) and a nullable `map_address` text line (the map's reverse-geocoded string, distinct from the user-typed `address`). Columns are nullable at the DB level, but `StoreAddressRequest` requires `latitude`/`longitude` (`numeric`, `between:-90,90` / `between:-180,180`) on create; `UpdateAddressRequest` treats all three as `sometimes`. `map_address` is always optional. Exposed on `AddressResource`.
   * **Profile:** `User` carries a nullable `last_name` (migration `2026_07_07_000001_add_last_name_to_users_table`) alongside `name`, both mass-assignable. `last_name` is settable at OTP registration and via profile update (`PATCH /api/v1/profile` / admin `PATCH /api/v1/admin/users/{user}`), and is exposed on `UserResource` and `AuthUserResource`.

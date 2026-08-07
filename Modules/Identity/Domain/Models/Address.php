@@ -36,7 +36,8 @@ class Address extends Model
     /**
      * Customer-facing handle (`bda-XXXXXX`) for display and address search.
      * The integer id keeps every structural role: foreign keys, ownership,
-     * checkout's `address_id`, Shipment eligibility, and the route bindings.
+     * checkout's `address_id`, Shipment eligibility, mutation routes, and
+     * admin route bindings. Customer show resolves this public code instead.
      */
     public static function publicCodeEntity(): PublicCodeEntity
     {

@@ -192,9 +192,10 @@ class AddressTest extends TestCase
 
         $this->actingAsCustomer($user);
 
-        $this->getJson("/api/v1/addresses/{$address->id}")
+        $this->getJson('/api/v1/addresses/'.strtolower($address->public_code))
             ->assertOk()
-            ->assertJsonPath('data.id', $address->id);
+            ->assertJsonPath('data.id', $address->id)
+            ->assertJsonPath('data.public_code', $address->public_code);
     }
 
     public function test_user_cannot_show_another_users_address(): void
@@ -212,7 +213,7 @@ class AddressTest extends TestCase
 
         $this->actingAsCustomer($user);
 
-        $this->getJson("/api/v1/addresses/{$address->id}")
+        $this->getJson("/api/v1/addresses/{$address->public_code}")
             ->assertForbidden();
     }
 
@@ -231,9 +232,26 @@ class AddressTest extends TestCase
 
         $this->actingAsAdmin($admin);
 
-        $this->getJson("/api/v1/addresses/{$address->id}")
+        $this->getJson("/api/v1/addresses/{$address->public_code}")
             ->assertOk()
             ->assertJsonPath('data.id', $address->id);
+    }
+
+    public function test_customer_address_show_rejects_numeric_and_missing_public_codes(): void
+    {
+        $user = User::factory()->create();
+        $province = Province::factory()->create();
+        $city = City::factory()->create(['province_id' => $province->id]);
+        $address = Address::factory()->create([
+            'user_id' => $user->id,
+            'province_id' => $province->id,
+            'city_id' => $city->id,
+        ]);
+
+        $this->actingAsCustomer($user);
+
+        $this->getJson("/api/v1/addresses/{$address->id}")->assertNotFound();
+        $this->getJson('/api/v1/addresses/bda-ZZZZZZ')->assertNotFound();
     }
 
     public function test_authenticated_user_can_update_own_address(): void

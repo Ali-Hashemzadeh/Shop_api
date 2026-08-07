@@ -114,8 +114,10 @@ These are non-negotiable. Violating one is a bug even if tests pass.
   Codes are server-owned: never client-writable, never regenerated on update, never reused. They are additive
   — numeric ids remain the key for every FK, join, contract, admin filter, and scheduled job. Legacy product
   UUIDs, variant SKUs, and `SH-*` shipment codes were never rewritten and must keep resolving. Code search is
-  exact and whole-string (never `LIKE`, never partial), and on `/orders` and `/addresses` it is always
-  intersected with the caller's own rows. Full rules: `AGENT_CONTEXT.md` §2b.
+  exact and whole-string (never `LIKE`, never partial), and on `/orders` and the Address list it is always
+  intersected with the caller's own rows. Customer `GET /addresses/{publicCode}` resolves the normalized exact
+  `bda-XXXXXX` code and then applies the existing policy; numeric ids remain mandatory for Address mutations,
+  checkout, Shipment eligibility, and admin routes. Full rules: `AGENT_CONTEXT.md` §2b.
 - **Respect the module boundary in typehints.** Policies and cross-module code typehint
   against framework contracts (e.g. `Illuminate\Contracts\Auth\Access\Authorizable`),
   **never** another module's concrete model (e.g. `Modules\Identity\Domain\Models\User`).
