@@ -21,8 +21,9 @@ class CustomerOrderDetailTest extends ShipmentTestCase
 {
     /**
      * @param  array<string, mixed>  $overrides
+     * @param  array<string, mixed>  $itemOverrides
      */
-    private function createOrder(User $user, array $overrides = []): Order
+    private function createOrder(User $user, array $overrides = [], array $itemOverrides = []): Order
     {
         $order = Order::create(array_merge([
             'user_id' => $user->id,
@@ -57,7 +58,7 @@ class CustomerOrderDetailTest extends ShipmentTestCase
             'notes' => 'Leave at reception.',
         ], $overrides));
 
-        OrderItem::create([
+        OrderItem::create(array_merge([
             'order_id' => $order->id,
             'sku' => 'DETAIL-SKU-1',
             'product_title' => 'Historical Product',
@@ -66,13 +67,15 @@ class CustomerOrderDetailTest extends ShipmentTestCase
                 'title' => 'Historical Product',
                 'sku' => 'DETAIL-SKU-1',
                 'image_url' => '/storage/products/historical.webp',
+                'primary_image_url' => '/storage/products/historical-primary.webp',
                 'attributes' => ['color' => 'Black', 'storage' => '256GB'],
             ],
             'quantity' => 2,
             'max_quantity_per_order_snapshot' => 4,
             'price_per_unit' => 133015000,
+            'compare_at_price' => 145000000,
             'line_total' => 266030000,
-        ]);
+        ], $itemOverrides));
 
         return $order;
     }
@@ -106,8 +109,12 @@ class CustomerOrderDetailTest extends ShipmentTestCase
             ->assertJsonPath('shipment_snapshot.method_code', 'post_standard')
             ->assertJsonPath('customer_snapshot.last_name', 'Ahmadi')
             ->assertJsonPath('items.0.product_snapshot.title', 'Historical Product')
+            ->assertJsonPath('items.0.product_snapshot.image_url', '/storage/products/historical.webp')
+            ->assertJsonPath('items.0.product_snapshot.primary_image_url', '/storage/products/historical-primary.webp')
             ->assertJsonPath('items.0.product_snapshot.attributes.storage', '256GB')
             ->assertJsonPath('items.0.max_quantity_per_order_snapshot', 4)
+            ->assertJsonPath('items.0.price_per_unit', 133015000)
+            ->assertJsonPath('items.0.compare_at_price', 145000000)
             ->assertJsonPath('payments', [])
             ->assertJsonPath('shipment', null);
 
@@ -145,8 +152,31 @@ class CustomerOrderDetailTest extends ShipmentTestCase
             'quantity',
             'max_quantity_per_order_snapshot',
             'price_per_unit',
+            'compare_at_price',
             'line_total',
         ], array_keys($response->json('items.0')));
+    }
+
+    #[Test]
+    public function customer_detail_serializes_null_compare_at_for_a_legacy_product_snapshot(): void
+    {
+        $user = $this->actingAsCustomer();
+        $order = $this->createOrder($user, [], [
+            'product_snapshot' => [
+                'title' => 'Legacy Snapshot',
+                'sku' => 'DETAIL-SKU-1',
+                'image_url' => '/storage/products/legacy-variant.webp',
+                'attributes' => [],
+            ],
+            'compare_at_price' => null,
+        ]);
+
+        $response = $this->getJson('/api/v1/orders/'.$order->public_code)
+            ->assertOk()
+            ->assertJsonPath('items.0.compare_at_price', null)
+            ->assertJsonPath('items.0.product_snapshot.image_url', '/storage/products/legacy-variant.webp');
+
+        $this->assertArrayNotHasKey('primary_image_url', $response->json('items.0.product_snapshot'));
     }
 
     #[Test]

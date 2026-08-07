@@ -18,6 +18,7 @@ class OrderItemDTO
         public readonly int $quantity,
         public readonly ?int $maxQuantityPerOrderSnapshot,
         public readonly int $pricePerUnit,
+        public readonly ?int $compareAtPrice,
         public readonly int $lineTotal,
     ) {}
 
@@ -33,6 +34,7 @@ class OrderItemDTO
             quantity: $item->quantity,
             maxQuantityPerOrderSnapshot: $item->max_quantity_per_order_snapshot,
             pricePerUnit: $item->price_per_unit,
+            compareAtPrice: $item->compare_at_price,
             lineTotal: $item->line_total,
         );
     }

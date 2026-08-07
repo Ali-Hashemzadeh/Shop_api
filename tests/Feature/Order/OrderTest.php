@@ -25,6 +25,7 @@ class OrderTest extends TestCase
         $this->seedIdentityRolesAndPermissions();
         $this->seedInventoryPermissions();
         $this->seedOrderPermissions();
+        $this->seedPaymentPermissions();
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -92,6 +93,7 @@ class OrderTest extends TestCase
             ->assertJsonPath('items.0.sku', 'TEST-001')
             ->assertJsonPath('items.0.quantity', 2)
             ->assertJsonPath('items.0.price_per_unit', 50000)
+            ->assertJsonPath('items.0.compare_at_price', null)
             ->assertJsonPath('items.0.line_total', 100000);
 
         $this->assertDatabaseHas('cart_items', [
@@ -139,47 +141,76 @@ class OrderTest extends TestCase
         $user = $this->actingAsCustomer();
         $addressId = $this->createAddress($user->id);
 
-        $media = Media::create([
-            'file_path' => 'products/ip16.jpg',
+        $primaryImage = Media::create([
+            'file_path' => 'products/product-main.jpg',
             'mime_type' => 'image/jpeg',
             'file_size' => 2048,
-            'original_name' => 'ip16.jpg',
+            'original_name' => 'product-main.jpg',
+        ]);
+        $variantImage = Media::create([
+            'file_path' => 'variants/variant-black.jpg',
+            'mime_type' => 'image/jpeg',
+            'file_size' => 1024,
+            'original_name' => 'variant-black.jpg',
         ]);
 
         $product = Product::create([
             'title' => 'iPhone 16 Pro',
             'slug' => 'iphone-16-pro',
             'status' => 'published',
+            'primary_media_id' => $primaryImage->id,
         ]);
 
         ProductVariant::create([
             'product_id' => $product->id,
             'sku' => 'IPH16-BLK-256',
             'type' => 'color',
-            'base_price' => 500000,
+            'base_price' => 800000,
+            'compare_at_price' => 1000000,
             'is_default' => true,
-            'media_id' => $media->id,
+            'media_id' => $variantImage->id,
             'attributes' => ['color' => 'Black', 'storage' => '256GB'],
         ]);
 
         InventoryStock::create(['sku' => 'IPH16-BLK-256', 'quantity' => 5, 'reserved_quantity' => 0]);
-        $this->createCartWithItem($user->id, 'IPH16-BLK-256', 1);
+        $this->createCartWithItem($user->id, 'IPH16-BLK-256', 2);
 
-        $this->postJson('/api/v1/orders', [
+        $response = $this->postJson('/api/v1/orders', [
             'address_id' => $addressId,
             'shipment_method_code' => 'in_person_pickup',
         ])
             ->assertStatus(201)
+            ->assertJsonPath('total_amount', 1600000)
             ->assertJsonPath('items.0.product_snapshot.title', 'iPhone 16 Pro')
             ->assertJsonPath('items.0.product_snapshot.sku', 'IPH16-BLK-256')
+            ->assertJsonPath('items.0.product_snapshot.image_url', $variantImage->url)
+            ->assertJsonPath('items.0.product_snapshot.primary_image_url', $primaryImage->url)
             ->assertJsonPath('items.0.product_snapshot.attributes.color', 'Black')
-            ->assertJsonPath('items.0.product_snapshot.attributes.storage', '256GB');
+            ->assertJsonPath('items.0.product_snapshot.attributes.storage', '256GB')
+            ->assertJsonPath('items.0.price_per_unit', 800000)
+            ->assertJsonPath('items.0.compare_at_price', 1000000)
+            ->assertJsonPath('items.0.line_total', 1600000);
 
         $orderItem = OrderItem::where('sku', 'IPH16-BLK-256')->latest('id')->first();
         $this->assertSame('iPhone 16 Pro', $orderItem->product_snapshot['title']);
         $this->assertSame('IPH16-BLK-256', $orderItem->product_snapshot['sku']);
-        $this->assertNotNull($orderItem->product_snapshot['image_url']);
+        $this->assertSame($variantImage->url, $orderItem->product_snapshot['image_url']);
+        $this->assertSame($primaryImage->url, $orderItem->product_snapshot['primary_image_url']);
+        $this->assertNotSame($orderItem->product_snapshot['image_url'], $orderItem->product_snapshot['primary_image_url']);
         $this->assertSame(['color' => 'Black', 'storage' => '256GB'], $orderItem->product_snapshot['attributes']);
+        $this->assertSame(800000, $orderItem->price_per_unit);
+        $this->assertSame(1000000, $orderItem->compare_at_price);
+        $this->assertSame(1600000, $orderItem->line_total);
+
+        $this->postJson('/api/v1/payments/initialize', [
+            'order_id' => $response->json('id'),
+            'method_type' => 'in_person',
+        ])->assertOk();
+
+        $this->assertDatabaseHas('payments', [
+            'order_id' => $response->json('id'),
+            'amount' => 1600000,
+        ]);
     }
 
     /** @test */
@@ -188,17 +219,25 @@ class OrderTest extends TestCase
         $user = $this->actingAsCustomer();
         $addressId = $this->createAddress($user->id);
 
+        $oldPrimaryImage = Media::create(['file_path' => 'products/old-primary.jpg']);
+        $oldVariantImage = Media::create(['file_path' => 'variants/old-variant.jpg']);
+        $newPrimaryImage = Media::create(['file_path' => 'products/new-primary.jpg']);
+        $newVariantImage = Media::create(['file_path' => 'variants/new-variant.jpg']);
+
         $product = Product::create([
             'title' => 'Original Title',
             'slug' => 'original-title',
             'status' => 'published',
+            'primary_media_id' => $oldPrimaryImage->id,
         ]);
-        ProductVariant::create([
+        $variant = ProductVariant::create([
             'product_id' => $product->id,
             'sku' => 'IMMUT-001',
             'type' => 'color',
-            'base_price' => 20000,
+            'base_price' => 800000,
+            'compare_at_price' => 1000000,
             'is_default' => true,
+            'media_id' => $oldVariantImage->id,
             'attributes' => ['color' => 'Red'],
         ]);
         InventoryStock::create(['sku' => 'IMMUT-001', 'quantity' => 5, 'reserved_quantity' => 0]);
@@ -214,6 +253,8 @@ class OrderTest extends TestCase
 
         $originalCustomerSnapshot = $order->customer_snapshot;
         $originalProductSnapshot = $orderItem->product_snapshot;
+        $originalPricePerUnit = $orderItem->price_per_unit;
+        $originalCompareAtPrice = $orderItem->compare_at_price;
 
         // Simulate later profile + catalog edits — the snapshot must not move.
         $user->update([
@@ -222,13 +263,27 @@ class OrderTest extends TestCase
             'phone' => '09999999999',
             'email' => 'changed@example.com',
         ]);
-        $product->update(['title' => 'Renamed Product']);
+        $product->update([
+            'title' => 'Renamed Product',
+            'primary_media_id' => $newPrimaryImage->id,
+        ]);
+        $variant->update([
+            'base_price' => 700000,
+            'compare_at_price' => 900000,
+            'media_id' => $newVariantImage->id,
+        ]);
 
         $order->refresh();
         $orderItem->refresh();
 
         $this->assertSame($originalCustomerSnapshot, $order->customer_snapshot);
         $this->assertSame($originalProductSnapshot, $orderItem->product_snapshot);
+        $this->assertSame($oldVariantImage->url, $orderItem->product_snapshot['image_url']);
+        $this->assertSame($oldPrimaryImage->url, $orderItem->product_snapshot['primary_image_url']);
+        $this->assertSame(800000, $originalPricePerUnit);
+        $this->assertSame(800000, $orderItem->price_per_unit);
+        $this->assertSame(1000000, $originalCompareAtPrice);
+        $this->assertSame(1000000, $orderItem->compare_at_price);
         $this->assertNotSame('Changed Name', $order->customer_snapshot['name']);
         $this->assertNotSame('Renamed Product', $orderItem->product_snapshot['title']);
     }

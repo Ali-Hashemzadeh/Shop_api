@@ -54,10 +54,12 @@ class AdminOrderTest extends TestCase
                 'title' => 'Admin Product',
                 'sku' => $sku,
                 'image_url' => '/storage/products/admin.jpg',
+                'primary_image_url' => '/storage/products/admin-primary.jpg',
                 'attributes' => ['color' => 'Black'],
             ],
             'quantity' => $qty,
             'price_per_unit' => $price,
+            'compare_at_price' => $price + 10000,
             'line_total' => $price * $qty,
         ]);
 
@@ -121,7 +123,10 @@ class AdminOrderTest extends TestCase
             ->assertJsonPath('data.items.0.sku', 'DET-001')
             ->assertJsonPath('data.items.0.product_snapshot.title', 'Admin Product')
             ->assertJsonPath('data.items.0.product_snapshot.image_url', '/storage/products/admin.jpg')
+            ->assertJsonPath('data.items.0.product_snapshot.primary_image_url', '/storage/products/admin-primary.jpg')
             ->assertJsonPath('data.items.0.product_snapshot.attributes.color', 'Black')
+            ->assertJsonPath('data.items.0.price_per_unit', 25000)
+            ->assertJsonPath('data.items.0.compare_at_price', 35000)
             ->assertJsonPath('data.shipment', null); // no shipment until paid
     }
 

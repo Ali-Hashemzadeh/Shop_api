@@ -117,11 +117,13 @@ class CreateOrderAction
                         'title' => $cartItem->productName,
                         'sku' => $cartItem->sku,
                         'image_url' => $cartItem->imageUrl,
+                        'primary_image_url' => $cartItem->primaryImageUrl,
                         'attributes' => $cartItem->attributes,
                     ],
                     'quantity' => $cartItem->quantity,
                     'max_quantity_per_order_snapshot' => $variantsBySku[$cartItem->sku]->maxQuantityPerOrder,
                     'price_per_unit' => $cartItem->basePrice ?? 0,
+                    'compare_at_price' => $cartItem->compareAtPrice,
                     'line_total' => $cartItem->lineTotal,
                 ]);
                 $itemDTOs[] = OrderItemDTO::fromModel($orderItem);

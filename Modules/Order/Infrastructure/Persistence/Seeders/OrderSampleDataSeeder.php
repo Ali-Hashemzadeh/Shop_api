@@ -318,10 +318,12 @@ class OrderSampleDataSeeder extends Seeder
                     'title' => $title,
                     'sku' => $variant->sku,
                     'image_url' => $catalogVariant?->imageUrl,
+                    'primary_image_url' => $catalogVariant?->productPrimaryImageUrl,
                     'attributes' => $variant->attributes,
                 ],
                 'quantity' => $qty,
                 'price_per_unit' => $variant->base_price,
+                'compare_at_price' => $variant->compare_at_price,
                 'line_total' => $lineTotal,
             ];
         }

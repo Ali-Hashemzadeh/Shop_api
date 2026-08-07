@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Feature — immutable OrderItem compare-at and primary-image snapshots
+
+- Added nullable integer `order_items.compare_at_price` through an additive migration with no backfill: existing rows remain null. Checkout now snapshots `CartItemDTO::compareAtPrice` alongside the selling `price_per_unit`, while all line/order/payment totals continue to use only the selling base price.
+- `product_snapshot` now also stores `primary_image_url` from the enriched Cart item. `image_url` remains the purchased variant image; `primary_image_url` is the parent product primary image. Both values are immutable, no Catalog refresh/backfill occurs, and legacy snapshots without the new JSON key remain valid.
+- The shared `OrderItemResource` exposes `compare_at_price` to customer and admin Order responses. Sample Order data and focused checkout/detail/admin tests cover distinct image URLs, nullable compare-at values, total invariance, and later Catalog changes.
+
 ### Feature — customer Order detail by owned public code
 
 - Added authenticated, rate-limited `GET /api/v1/orders/{publicCode}`. The normalized Order code and authenticated user ID are matched in one exact query; missing and foreign-owned codes both return 404. The unwrapped response preserves the existing customer Order/item shape and adds all customer-safe Payment attempts (newest first) plus the complete live Shipment and history, or `null` before activation. Cross-module reads use Contracts + DTOs only; raw gateway responses remain hidden and existing endpoints are unchanged.

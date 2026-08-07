@@ -2622,11 +2622,11 @@ await guestCartRequest('GET',  '/');
   </div>
 
   <div class="note">
-    <strong>Price snapshot.</strong> <code>price_per_unit</code> and <code>line_total</code> on order items are fixed at the moment the order is created. They never change, even if the catalog price is updated later. All monetary values are raw integers (rials).
+    <strong>Price snapshot.</strong> <code>price_per_unit</code> is the variant selling/base price at checkout; nullable <code>compare_at_price</code> is the optional compare-at/reference price shown for display. <code>line_total</code> is always <code>price_per_unit × quantity</code>. Compare-at price never affects line totals, order totals, tax, shipping, payment amounts, or inventory. These integer-rial values are immutable even if Catalog prices change later.
   </div>
 
   <div class="note">
-    <strong>Customer &amp; product snapshots.</strong> Orders are historical records, so every order carries a frozen copy of the buyer's identity and each purchased product. <code>customer_snapshot</code> (<code>name</code>, <code>last_name</code>, <code>phone</code>, <code>email</code>) is captured on the order at checkout; each item's <code>product_snapshot</code> (<code>title</code>, <code>sku</code>, <code>image_url</code>, <code>attributes</code>) is captured on that order item. <strong>Neither is ever rewritten</strong> — if the customer later edits their profile, or an admin renames/re-images the product, this order still shows exactly what was true at checkout. Both fields are nullable JSON and appear on every order response (create, list, cancel).
+    <strong>Customer &amp; product snapshots.</strong> Orders are historical records, so every order carries a frozen copy of the buyer's identity and each purchased product. <code>product_snapshot.image_url</code> is the purchased variant image; <code>product_snapshot.primary_image_url</code> is the parent product's primary image. Both come from the enriched Cart item and are never refreshed from Catalog. Historical snapshots created before <code>primary_image_url</code> existed remain valid without that key. The shared <code>OrderItemResource</code> exposes these snapshots and <code>compare_at_price</code> consistently in customer and admin Order detail responses.
   </div>
 
   <div class="note">
@@ -2700,11 +2700,13 @@ await guestCartRequest('GET',  '/');
       <span class="key">"product_snapshot"</span>: {
         <span class="key">"title"</span>:      <span class="str">"Samsung Galaxy S25 Ultra"</span>,
         <span class="key">"sku"</span>:        <span class="str">"S25U-TBK-256"</span>,
-        <span class="key">"image_url"</span>:  <span class="str">"/storage/products/s25u-titanium-black.webp"</span>,
+        <span class="key">"image_url"</span>:  <span class="str">"/storage/variants/s25u-titanium-black.webp"</span>,
+        <span class="key">"primary_image_url"</span>: <span class="str">"/storage/products/s25u-primary.webp"</span>,
         <span class="key">"attributes"</span>: { <span class="key">"color"</span>: <span class="str">"Titanium Black"</span>, <span class="key">"storage"</span>: <span class="str">"256GB"</span> }
       },
       <span class="key">"quantity"</span>:           <span class="num">2</span>,
       <span class="key">"price_per_unit"</span>:     <span class="num">89000000</span>,   <span class="comment">// snapshotted at checkout</span>
+      <span class="key">"compare_at_price"</span>:   <span class="num">95000000</span>,   <span class="comment">// display/reference only; excluded from totals</span>
       <span class="key">"line_total"</span>:         <span class="num">178000000</span>
     },
     {
@@ -2716,10 +2718,12 @@ await guestCartRequest('GET',  '/');
         <span class="key">"title"</span>:      <span class="str">"AirPods Pro 2"</span>,
         <span class="key">"sku"</span>:        <span class="str">"AIRPODS-PRO2"</span>,
         <span class="key">"image_url"</span>:  <span class="null-val">null</span>,
+        <span class="key">"primary_image_url"</span>: <span class="str">"/storage/products/airpods-primary.webp"</span>,
         <span class="key">"attributes"</span>: {}
       },
       <span class="key">"quantity"</span>:           <span class="num">1</span>,
       <span class="key">"price_per_unit"</span>:     <span class="num">89000000</span>,
+      <span class="key">"compare_at_price"</span>:   <span class="null-val">null</span>,
       <span class="key">"line_total"</span>:         <span class="num">89000000</span>
     }
   ]
@@ -2839,10 +2843,11 @@ await guestCartRequest('GET',  '/');
       <span class="key">"sku"</span>:                                 <span class="str">"S25U-TBK-256"</span>,
       <span class="key">"product_title"</span>:                       <span class="str">"Samsung Galaxy S25 Ultra"</span>,
       <span class="key">"variant_attributes"</span>:                  { <span class="key">"color"</span>: <span class="str">"Titanium Black"</span> },
-      <span class="key">"product_snapshot"</span>:                    { <span class="key">"title"</span>: <span class="str">"Samsung Galaxy S25 Ultra"</span>, <span class="key">"sku"</span>: <span class="str">"S25U-TBK-256"</span>, <span class="key">"image_url"</span>: <span class="str">"/storage/products/s25.webp"</span>, <span class="key">"attributes"</span>: { <span class="key">"color"</span>: <span class="str">"Titanium Black"</span> } },
+      <span class="key">"product_snapshot"</span>:                    { <span class="key">"title"</span>: <span class="str">"Samsung Galaxy S25 Ultra"</span>, <span class="key">"sku"</span>: <span class="str">"S25U-TBK-256"</span>, <span class="key">"image_url"</span>: <span class="str">"/storage/variants/s25-black.webp"</span>, <span class="key">"primary_image_url"</span>: <span class="str">"/storage/products/s25-primary.webp"</span>, <span class="key">"attributes"</span>: { <span class="key">"color"</span>: <span class="str">"Titanium Black"</span> } },
       <span class="key">"quantity"</span>:                               <span class="num">2</span>,
       <span class="key">"max_quantity_per_order_snapshot"</span>:      <span class="num">3</span>,
       <span class="key">"price_per_unit"</span>:                    <span class="num">129575000</span>,
+      <span class="key">"compare_at_price"</span>:                  <span class="num">139000000</span>,
       <span class="key">"line_total"</span>:                        <span class="num">259150000</span>
     }
   ],
@@ -3062,11 +3067,13 @@ await guestCartRequest('GET',  '/');
         <span class="key">"product_snapshot"</span>: {      <span class="comment">// from order_items.product_snapshot</span>
           <span class="key">"title"</span>:      <span class="str">"Samsung Galaxy S25 Ultra"</span>,
           <span class="key">"sku"</span>:        <span class="str">"S25U-TBK-256"</span>,
-          <span class="key">"image_url"</span>:  <span class="str">"/storage/products/s25u-titanium-black.webp"</span>,
+          <span class="key">"image_url"</span>:  <span class="str">"/storage/variants/s25u-titanium-black.webp"</span>,
+          <span class="key">"primary_image_url"</span>: <span class="str">"/storage/products/s25u-primary.webp"</span>,
           <span class="key">"attributes"</span>: { <span class="key">"color"</span>: <span class="str">"Titanium Black"</span>, <span class="key">"storage"</span>: <span class="str">"256GB"</span> }
         },
         <span class="key">"quantity"</span>:           <span class="num">2</span>,
         <span class="key">"price_per_unit"</span>:     <span class="num">89000000</span>,
+        <span class="key">"compare_at_price"</span>:   <span class="num">95000000</span>,
         <span class="key">"line_total"</span>:         <span class="num">178000000</span>
       }
     ]
@@ -3177,7 +3184,7 @@ if (canCancelOrders && order.status === 'pending') renderCancelButton();</pre>
   <ul>
     <li><strong>Order</strong> — <code>id</code>, <code>status</code>, the amounts (<code>total_amount</code>, <code>shipping_cost</code>, <code>tax_amount</code>), <code>transaction_ref</code>, <code>notes</code>, <code>created_at</code>.</li>
     <li><strong>Customer</strong> — from <code>data.customer</code> (the order's <code>customer_snapshot</code>): <code>name</code>, <code>last_name</code>, <code>phone</code>, <code>email</code>.</li>
-    <li><strong>Items</strong> — <code>data.items[]</code>. Render each from its <code>product_snapshot</code> (<code>title</code>, <code>sku</code>, <code>image_url</code>, <code>attributes</code>) plus <code>quantity</code> and <code>price_per_unit</code>.</li>
+    <li><strong>Items</strong> — <code>data.items[]</code>. Render each from its immutable <code>product_snapshot</code>; <code>image_url</code> is the purchased variant image and <code>primary_image_url</code> is the parent product primary image. <code>price_per_unit</code> is the selling price; nullable <code>compare_at_price</code> is display-only reference pricing.</li>
     <li><strong>Shipping &amp; fulfillment</strong> — <code>shipping_address</code> + <code>shipment_snapshot</code> (what was chosen at checkout), and <code>data.shipment</code> (the live status).</li>
   </ul>
   <pre>async function loadAdminOrder(token, orderId) {

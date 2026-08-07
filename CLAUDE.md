@@ -182,6 +182,8 @@ Match the surrounding code. Concrete patterns used throughout:
 
 Order customer detail is available at `GET /api/v1/orders/{publicCode}`: authenticated ownership is enforced in the exact Order query, and the endpoint-specific aggregate returns the existing Order/items plus all customer-safe Payment attempts and the full live Shipment/history without changing existing endpoints.
 
+Order items snapshot both Catalog display prices and images at checkout: `price_per_unit` is the selling/base price, nullable `compare_at_price` is display-only and excluded from every total, `product_snapshot.image_url` is the variant image, and `product_snapshot.primary_image_url` is the parent product primary image. These come from `CartItemDTO` and are never refreshed or backfilled from Catalog.
+
 | Module | Status | Notes |
 |---|---|---|
 | **Identity** | ✅ Complete | OTP + password auth (split-auth onboarding), profiles, RBAC, provinces/cities, addresses |

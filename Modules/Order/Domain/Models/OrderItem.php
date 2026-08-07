@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Modules\Order\Domain\Models;
 
 use Illuminate\Database\Eloquent\Model;
@@ -16,6 +18,7 @@ class OrderItem extends Model
         'quantity',
         'max_quantity_per_order_snapshot',
         'price_per_unit',
+        'compare_at_price',
         'line_total',
     ];
 
@@ -25,6 +28,7 @@ class OrderItem extends Model
         'quantity' => 'integer',
         'max_quantity_per_order_snapshot' => 'integer',
         'price_per_unit' => 'integer',
+        'compare_at_price' => 'integer',
         'line_total' => 'integer',
     ];
 
