@@ -3396,7 +3396,7 @@ if (canCancelOrders && order.status === 'pending') renderCancelButton();</pre>
   <div class="endpoint">
     <div class="endpoint-header"><span class="method get">GET</span><span class="endpoint-path">/shipment/methods?address_id=3</span><span class="badge auth">Requires auth:sanctum</span><span class="badge rate">throttle:api</span></div>
     <div class="endpoint-body">
-      <p>Returns the fixed methods with capabilities calculated for the (optional) address. Local delivery is marked <code>available: false</code> with a reason when the address is missing or ineligible. Pickup includes the configured <code>pickup_location</code>.</p>
+      <p>Returns the fixed methods eligible for the optional address. When <code>address_id</code> is omitted, only methods whose canonical configuration has <code>requires_address: false</code> are returned (currently <code>in_person_pickup</code>). When a valid owned address is supplied, normal address-based eligibility is evaluated and pickup remains available. Omitting the address is valid; explicitly supplying a nonexistent or another customer's address returns <code>422</code> with <code>errors.address_id</code>. Checkout remains strict: selecting any method with <code>requires_address: true</code> without a valid address is rejected. Pickup includes the configured <code>pickup_location</code>.</p>
       <pre>{
   <span class="key">"data"</span>: [
     {
@@ -3412,9 +3412,15 @@ if (canCancelOrders && order.status === 'pending') renderCancelButton();</pre>
 
   <h3 id="shipment-slots">List Local-Delivery Sessions</h3>
   <div class="endpoint">
-    <div class="endpoint-header"><span class="method get">GET</span><span class="endpoint-path">/shipment/delivery-slots?address_id=3&amp;from=2026-07-15&amp;days=7</span><span class="badge auth">Requires auth:sanctum</span><span class="badge rate">throttle:api</span></div>
+    <div class="endpoint-header"><span class="method get">GET</span><span class="endpoint-path">/shipment/delivery-slots?address_id=3&amp;from=2026-07-15&amp;days=7&amp;sort=date&amp;direction=asc</span><span class="badge auth">Requires auth:sanctum</span><span class="badge rate">throttle:api</span></div>
     <div class="endpoint-body">
       <p>Dated sessions grouped by date. Full/closed/past slots are returned with <code>available: false</code> so the frontend can render a disabled "Full" state. The frontend submits only <code>delivery_slot_id</code> at checkout — never a date/time.</p>
+      <table>
+        <tr><th>Query</th><th>Allowed values</th><th>Default / behavior</th></tr>
+        <tr><td><code>sort</code></td><td><code>date</code>, <code>starts_at</code>, <code>remaining_capacity</code>, <code>capacity</code>, <code>created_at</code></td><td><code>date</code>. Date sorting uses start time as its secondary key.</td></tr>
+        <tr><td><code>direction</code></td><td><code>asc</code>, <code>desc</code></td><td><code>asc</code>. The direction is applied consistently to deterministic secondary keys and the final id tiebreaker; without <code>sort</code>, the chronological ascending default is retained.</td></tr>
+      </table>
+      <div class="note"><strong>Customer default:</strong> <code>date ASC, starts_at ASC</code> — nearest usable day first and earliest session first within that day. <code>sort=date&amp;direction=desc</code> reverses both date and time, so the furthest day and latest session come first. Unsupported sort or direction values return <code>422</code>.</div>
       <pre>{
   <span class="key">"data"</span>: [
     { <span class="key">"date"</span>: <span class="str">"2026-07-15"</span>, <span class="key">"slots"</span>: [
@@ -3815,7 +3821,7 @@ if (canCancelOrders && order.status === 'pending') renderCancelButton();</pre>
   <p>This walks the storefront checkout UI through choosing a fulfillment method and (for local delivery) a delivery session, placing the order, and rendering the shipment status afterwards. All examples use <code>fetch</code> with a Bearer token; adapt to your HTTP client. <strong>Never send prices, dates, or slot times</strong> — the server resolves them from config and the snapshot; the UI submits only ids and the method <em>code</em>.</p>
 
   <h3>Step 1 — Let the user pick an address, then load methods</h3>
-  <p>Call <code>GET /shipment/methods</code> with the selected <code>address_id</code> (omit it if none is chosen yet). Each method returns capability flags so you can drive the UI without hard-coding anything. Local delivery comes back <code>available: false</code> + <code>unavailable_reason</code> when the address is missing or ineligible — render it disabled with the reason.</p>
+  <p>Call <code>GET /shipment/methods</code> with the selected <code>address_id</code> (omit it if none is chosen yet). Without an address the server returns only non-address-required methods (currently in-person pickup). With a valid owned address it evaluates the normal address-dependent methods and still includes pickup. An explicitly supplied invalid or foreign address is a <code>422</code>, unlike an omitted address.</p>
   <pre>async function loadMethods(token, addressId) {
   const q = addressId ? `?address_id=${addressId}` : '';
   const { data } = await (await fetch(`/api/v1/shipment/methods${q}`, {
@@ -3832,7 +3838,7 @@ if (canCancelOrders && order.status === 'pending') renderCancelButton();</pre>
   <h3>Step 2 — If the chosen method needs a delivery slot, load sessions</h3>
   <p>Only <code>local_delivery</code> has <code>requires_delivery_slot: true</code>. Fetch bookable sessions for the address and render them grouped by date. Slots with <code>available: false</code> (full, closed, past, or outside the booking window) must be shown <strong>disabled</strong>, not hidden — use <code>remaining_capacity</code> to label a "Full" state.</p>
   <pre>async function loadSlots(token, addressId, fromISODate, days = 7) {
-  const q = `?address_id=${addressId}&from=${fromISODate}&days=${days}`;
+  const q = `?address_id=${addressId}&from=${fromISODate}&days=${days}&sort=date&direction=asc`;
   const { data } = await (await fetch(`/api/v1/shipment/delivery-slots${q}`, {
     headers: { Authorization: `Bearer ${token}` },
   })).json();

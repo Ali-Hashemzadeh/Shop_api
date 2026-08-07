@@ -118,13 +118,13 @@ class LocalDeliveryServiceAreaTest extends ShipmentTestCase
     }
 
     /** @test */
-    public function postal_is_available_when_no_address_is_selected_yet(): void
+    public function only_pickup_is_returned_when_no_address_is_selected_yet(): void
     {
         $this->setUpArea();
 
         $methods = $this->methods();
 
-        $this->assertTrue($methods['post_standard']['available']);
+        $this->assertSame(['in_person_pickup'], $methods->keys()->all());
     }
 
     // ── Checkout enforcement ───────────────────────────────────────────────────

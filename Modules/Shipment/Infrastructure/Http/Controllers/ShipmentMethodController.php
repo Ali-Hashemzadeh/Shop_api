@@ -8,6 +8,7 @@ use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Illuminate\Validation\Rule;
 use Modules\Shipment\Domain\Contracts\ShipmentManagerInterface;
 use Modules\Shipment\Infrastructure\Http\Resources\DeliverySlotResource;
 use Modules\Shipment\Infrastructure\Http\Resources\ShipmentMethodResource;
@@ -42,6 +43,8 @@ class ShipmentMethodController extends Controller
             'address_id' => ['required', 'integer'],
             'from' => ['sometimes', 'date'],
             'days' => ['sometimes', 'integer', 'min:1', 'max:60'],
+            'sort' => ['sometimes', 'string', Rule::in(['date', 'starts_at', 'remaining_capacity', 'capacity', 'created_at'])],
+            'direction' => ['sometimes', 'string', Rule::in(['asc', 'desc'])],
         ]);
 
         $from = $request->filled('from') ? Carbon::parse($request->query('from'))->startOfDay() : Carbon::today();
@@ -53,6 +56,8 @@ class ShipmentMethodController extends Controller
             addressId: (int) $request->query('address_id'),
             from: $from,
             until: $until,
+            sort: (string) $request->query('sort', 'date'),
+            direction: $request->filled('sort') ? (string) $request->query('direction', 'asc') : 'asc',
         );
 
         $data = array_map(static fn (array $group): array => [

@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Feature — customer Shipment method eligibility and delivery-slot sorting
+
+- `GET /api/v1/shipment/delivery-slots` now validates `sort` (`date`, `starts_at`, `remaining_capacity`, `capacity`, `created_at`) and `direction` (`asc`, `desc`). Its customer default is chronological (`date ASC`, then `starts_at ASC`), all sorts have deterministic secondary/id ordering, and remaining-capacity sorting reuses the existing capacity/reservation calculation.
+- `GET /api/v1/shipment/methods` now treats an omitted address as a valid pickup-only state by returning canonical configured methods with `requires_address: false` (currently `in_person_pickup`). A valid owned address preserves normal eligibility and pickup availability; explicitly invalid/foreign addresses remain 422, and checkout validation for address-required methods is unchanged.
+
 ### Feature — immutable OrderItem compare-at and primary-image snapshots
 
 - Added nullable integer `order_items.compare_at_price` through an additive migration with no backfill: existing rows remain null. Checkout now snapshots `CartItemDTO::compareAtPrice` alongside the selling `price_per_unit`, while all line/order/payment totals continue to use only the selling base price.

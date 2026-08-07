@@ -6,16 +6,18 @@ namespace Tests\Feature\Shipment;
 
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Schema;
+use Modules\Identity\Domain\Models\User;
 use Modules\Order\Domain\Models\Order;
 
 class ShipmentMethodsTest extends ShipmentTestCase
 {
     /** @test */
-    public function it_lists_all_enabled_config_backed_methods_without_a_methods_table(): void
+    public function it_lists_all_enabled_config_backed_methods_for_a_valid_address_without_a_methods_table(): void
     {
-        $this->actingAsCustomer();
+        $user = $this->actingAsCustomer();
+        $addressId = $this->createAddress($user->id);
 
-        $response = $this->getJson('/api/v1/shipment/methods')->assertOk();
+        $response = $this->getJson("/api/v1/shipment/methods?address_id={$addressId}")->assertOk();
 
         $codes = collect($response->json('data'))->pluck('code')->all();
         $this->assertEqualsCanonicalizing(
@@ -26,20 +28,34 @@ class ShipmentMethodsTest extends ShipmentTestCase
     }
 
     /** @test */
-    public function methods_use_integer_prices_and_pickup_is_free_without_address(): void
+    public function no_address_returns_only_non_address_required_methods(): void
     {
         $this->actingAsCustomer();
 
-        $methods = collect($this->getJson('/api/v1/shipment/methods')->json('data'))->keyBy('code');
+        $methods = collect($this->getJson('/api/v1/shipment/methods')->assertOk()->json('data'));
 
-        $this->assertSame(850000, $methods['post_standard']['price']);
-        $this->assertIsInt($methods['post_standard']['price']);
-        $this->assertSame(0, $methods['in_person_pickup']['price']);
-        $this->assertFalse($methods['in_person_pickup']['requires_address']);
-        $this->assertTrue($methods['post_standard']['requires_address']);
-        $this->assertTrue($methods['local_delivery']['requires_delivery_slot']);
-        $this->assertFalse($methods['post_standard']['requires_delivery_slot']);
-        $this->assertArrayHasKey('pickup_location', $methods['in_person_pickup']);
+        $this->assertCount(1, $methods);
+        $this->assertSame(['in_person_pickup'], $methods->pluck('code')->all());
+        $this->assertSame(0, $methods[0]['price']);
+        $this->assertIsInt($methods[0]['price']);
+        $this->assertFalse($methods[0]['requires_address']);
+        $this->assertArrayHasKey('pickup_location', $methods[0]);
+    }
+
+    /** @test */
+    public function an_explicit_invalid_or_foreign_address_is_rejected(): void
+    {
+        $this->actingAsCustomer();
+        $other = User::factory()->create();
+        $foreignAddressId = $this->createAddress($other->id);
+
+        $this->getJson('/api/v1/shipment/methods?address_id=999999')
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('address_id');
+
+        $this->getJson("/api/v1/shipment/methods?address_id={$foreignAddressId}")
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('address_id');
     }
 
     // ── Checkout validation matrix ─────────────────────────────────────────────

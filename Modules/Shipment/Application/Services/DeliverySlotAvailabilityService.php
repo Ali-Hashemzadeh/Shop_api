@@ -73,26 +73,66 @@ class DeliverySlotAvailabilityService
      *
      * @return array<int, array{date: string, slots: DeliverySlotDTO[]}>
      */
-    public function listGrouped(CarbonInterface $from, CarbonInterface $until, ?CarbonInterface $now = null): array
-    {
+    public function listGrouped(
+        CarbonInterface $from,
+        CarbonInterface $until,
+        ?CarbonInterface $now = null,
+        string $sort = 'date',
+        string $direction = 'asc',
+    ): array {
         $now ??= Carbon::now();
 
         $slots = DeliverySlot::query()
             ->whereBetween('delivery_date', [$from->toDateString(), $until->toDateString()])
-            ->orderBy('delivery_date')
-            ->orderBy('starts_at')
             ->get();
 
-        $grouped = [];
+        $sortable = [];
 
         foreach ($slots as $slot) {
             $remaining = $this->remainingCapacity($slot);
             $available = $this->isSelectable($slot, $now);
             $dto = DeliverySlotDTO::fromModel($slot, max($remaining, 0), $available);
 
-            $date = $slot->dateString();
-            $grouped[$date] ??= [];
-            $grouped[$date][] = $dto;
+            $sortable[] = [
+                'dto' => $dto,
+                'created_at' => $slot->created_at?->format('Y-m-d H:i:s.u') ?? '',
+            ];
+        }
+
+        $multiplier = $direction === 'desc' ? -1 : 1;
+
+        usort($sortable, static function (array $left, array $right) use ($sort, $multiplier): int {
+            /** @var DeliverySlotDTO $leftSlot */
+            $leftSlot = $left['dto'];
+            /** @var DeliverySlotDTO $rightSlot */
+            $rightSlot = $right['dto'];
+
+            $values = match ($sort) {
+                'starts_at' => [[$leftSlot->startsAt, $rightSlot->startsAt], [$leftSlot->date, $rightSlot->date]],
+                'remaining_capacity' => [[$leftSlot->remainingCapacity, $rightSlot->remainingCapacity], [$leftSlot->date, $rightSlot->date], [$leftSlot->startsAt, $rightSlot->startsAt]],
+                'capacity' => [[$leftSlot->capacity, $rightSlot->capacity], [$leftSlot->date, $rightSlot->date], [$leftSlot->startsAt, $rightSlot->startsAt]],
+                'created_at' => [[$left['created_at'], $right['created_at']], [$leftSlot->date, $rightSlot->date], [$leftSlot->startsAt, $rightSlot->startsAt]],
+                default => [[$leftSlot->date, $rightSlot->date], [$leftSlot->startsAt, $rightSlot->startsAt]],
+            };
+
+            foreach ($values as [$leftValue, $rightValue]) {
+                $comparison = $leftValue <=> $rightValue;
+
+                if ($comparison !== 0) {
+                    return $comparison * $multiplier;
+                }
+            }
+
+            return ($leftSlot->id <=> $rightSlot->id) * $multiplier;
+        });
+
+        $grouped = [];
+
+        foreach ($sortable as $item) {
+            /** @var DeliverySlotDTO $dto */
+            $dto = $item['dto'];
+            $grouped[$dto->date] ??= [];
+            $grouped[$dto->date][] = $dto;
         }
 
         return array_map(

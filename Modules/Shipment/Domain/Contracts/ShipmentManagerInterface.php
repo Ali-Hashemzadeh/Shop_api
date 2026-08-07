@@ -30,7 +30,14 @@ interface ShipmentManagerInterface
      *
      * @return array<int, array{date: string, slots: DeliverySlotDTO[]}>
      */
-    public function getAvailableDeliverySlots(int $userId, int $addressId, DateTimeInterface $from, DateTimeInterface $until): array;
+    public function getAvailableDeliverySlots(
+        int $userId,
+        int $addressId,
+        DateTimeInterface $from,
+        DateTimeInterface $until,
+        string $sort = 'date',
+        string $direction = 'asc',
+    ): array;
 
     /**
      * Validate a checkout selection against method capabilities, address ownership

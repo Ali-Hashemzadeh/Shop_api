@@ -40,7 +40,11 @@ class EloquentShipmentManager implements ShipmentManagerInterface
 
         $methods = [];
 
-        foreach (array_keys($this->registry->all()) as $code) {
+        foreach ($this->registry->all() as $code => $method) {
+            if ($addressSnapshot === null && (bool) ($method['requires_address'] ?? false)) {
+                continue;
+            }
+
             $available = true;
             $reason = null;
             $type = $this->registry->find($code)['type'];
@@ -69,14 +73,22 @@ class EloquentShipmentManager implements ShipmentManagerInterface
         return $methods;
     }
 
-    public function getAvailableDeliverySlots(int $userId, int $addressId, DateTimeInterface $from, DateTimeInterface $until): array
-    {
+    public function getAvailableDeliverySlots(
+        int $userId,
+        int $addressId,
+        DateTimeInterface $from,
+        DateTimeInterface $until,
+        string $sort = 'date',
+        string $direction = 'asc',
+    ): array {
         // Address ownership is verified so slots are only listed for a real address.
         $this->findOwnedAddress($userId, $addressId);
 
         return $this->availability->listGrouped(
             Carbon::instance($from),
             Carbon::instance($until),
+            sort: $sort,
+            direction: $direction,
         );
     }
 
