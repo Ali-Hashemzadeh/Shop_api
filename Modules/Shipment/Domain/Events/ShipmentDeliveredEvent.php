@@ -16,5 +16,7 @@ class ShipmentDeliveredEvent
     public function __construct(
         public readonly int $orderId,
         public readonly int $userId,
+        /** Customer-facing order code (`bdo-XXXXXX`), alongside — not replacing — the id. */
+        public readonly ?string $orderPublicCode = null,
     ) {}
 }

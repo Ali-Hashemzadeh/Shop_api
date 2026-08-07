@@ -18,6 +18,7 @@ class OrderResource extends JsonResource
 
         return [
             'id' => $dto->id,
+            'public_code' => $dto->publicCode,
             'status' => $dto->status->value,
             'total_amount' => $dto->totalAmount,
             'shipping_cost' => $dto->shippingCost,

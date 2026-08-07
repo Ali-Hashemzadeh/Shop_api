@@ -29,7 +29,12 @@ class AddressController extends Controller
     public function index(ListAddressRequest $request, ListAddresses $action): JsonResponse
     {
         $this->authorize('viewOwn', Address::class);
-        $addresses = $action->handle($request->user());
+        // `search` is an exact address public code; the action scopes to the caller
+        // regardless, so it can never surface another user's address.
+        $addresses = $action->handle(
+            $request->user(),
+            $request->string('search')->trim()->toString() ?: null,
+        );
 
         return response()->json([
             'data' => AddressResource::collection($addresses),

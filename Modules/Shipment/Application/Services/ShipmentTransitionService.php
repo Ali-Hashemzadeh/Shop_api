@@ -107,19 +107,33 @@ class ShipmentTransitionService
      */
     private function announce(Shipment $shipment, ShipmentStatus $to): void
     {
+        // Resolved only for the statuses that actually notify, and only through the
+        // Order contract — Shipment never touches the Order model. The customer's
+        // message quotes this code rather than the internal order id.
+        $orderPublicCode = match ($to) {
+            ShipmentStatus::Preparing,
+            ShipmentStatus::HandedToPost,
+            ShipmentStatus::OutForDelivery,
+            ShipmentStatus::Delivered => $this->orders->findOrder($shipment->order_id)?->publicCode,
+            default => null,
+        };
+
         $event = match ($to) {
             ShipmentStatus::Preparing => new ShipmentPreparingStartedEvent(
                 orderId: $shipment->order_id,
                 userId: $shipment->user_id,
+                orderPublicCode: $orderPublicCode,
             ),
             ShipmentStatus::HandedToPost, ShipmentStatus::OutForDelivery => new ShipmentSentEvent(
                 orderId: $shipment->order_id,
                 userId: $shipment->user_id,
                 trackingCode: $shipment->tracking_number,
+                orderPublicCode: $orderPublicCode,
             ),
             ShipmentStatus::Delivered => new ShipmentDeliveredEvent(
                 orderId: $shipment->order_id,
                 userId: $shipment->user_id,
+                orderPublicCode: $orderPublicCode,
             ),
             default => null,
         };

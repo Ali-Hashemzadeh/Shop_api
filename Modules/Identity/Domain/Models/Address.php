@@ -2,6 +2,8 @@
 
 namespace Modules\Identity\Domain\Models;
 
+use App\Support\HasPublicCode;
+use App\Support\PublicCodeEntity;
 use Database\Factories\AddressFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -10,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class Address extends Model
 {
     use HasFactory;
+    use HasPublicCode;
 
     protected $fillable = [
         'user_id',
@@ -29,6 +32,16 @@ class Address extends Model
         'latitude' => 'decimal:7',
         'longitude' => 'decimal:7',
     ];
+
+    /**
+     * Customer-facing handle (`bda-XXXXXX`) for display and address search.
+     * The integer id keeps every structural role: foreign keys, ownership,
+     * checkout's `address_id`, Shipment eligibility, and the route bindings.
+     */
+    public static function publicCodeEntity(): PublicCodeEntity
+    {
+        return PublicCodeEntity::Address;
+    }
 
     public function user(): BelongsTo
     {

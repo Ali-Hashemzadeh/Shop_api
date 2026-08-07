@@ -44,7 +44,7 @@ class ProductsTest extends TestCase
 
         // The response `id` is the opaque public code, never the internal integer primary key.
         $response->assertJsonPath('id', $product->uuid);
-        $this->assertMatchesRegularExpression('/^[0-9a-f]{7}$/', $response->json('id'));
+        $this->assertMatchesRegularExpression('/^bdp-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{6}$/', $response->json('id'));
         $this->assertNotSame((string) $product->id, $response->json('id'));
     }
 
@@ -163,11 +163,21 @@ class ProductsTest extends TestCase
             ->assertJsonStructure(['id', 'title', 'variants'])
             ->assertJsonCount(2, 'variants');
 
-        // Response `id` is the public UUID; SKUs embed the internal integer id.
+        // Response `id` is the product's public code; each variant carries its own
+        // independently generated `bdv-` SKU (no positional / id-derived formula).
         $productId = Product::where('uuid', $response->json('id'))->value('id');
         $this->assertDatabaseHas('products', ['title' => 'Laptop Pro']);
-        $this->assertDatabaseHas('product_variants', ['sku' => 'bdp'.$productId.'-v1', 'type' => 'color', 'is_default' => 1]);
-        $this->assertDatabaseHas('product_variants', ['sku' => 'bdp'.$productId.'-v2', 'type' => 'color', 'is_default' => 0]);
+
+        $skus = ProductVariant::where('product_id', $productId)->orderBy('id')->pluck('sku')->all();
+        $this->assertCount(2, $skus);
+        $this->assertCount(2, array_unique($skus));
+
+        foreach ($skus as $sku) {
+            $this->assertMatchesRegularExpression('/^bdv-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{6}$/', $sku);
+        }
+
+        $this->assertDatabaseHas('product_variants', ['sku' => $skus[0], 'type' => 'color', 'is_default' => 1]);
+        $this->assertDatabaseHas('product_variants', ['sku' => $skus[1], 'type' => 'color', 'is_default' => 0]);
     }
 
     /** @test */
@@ -281,13 +291,23 @@ class ProductsTest extends TestCase
             ],
         ])->assertOk()->assertJsonCount(2, 'variants');
 
-        $this->assertDatabaseHas('product_variants', ['id' => $variant->id, 'base_price' => 12000000, 'is_default' => 1]);
+        // The pre-existing variant was seeded with a legacy-format SKU: updating it
+        // must never regenerate that value, because Inventory / Cart / order items
+        // all key off it.
         $this->assertDatabaseHas('product_variants', [
-            'product_id' => $product->id,
-            'sku' => 'bdp'.$product->id.'-v2',
-            'base_price' => 11000000,
-            'is_default' => 0,
+            'id' => $variant->id,
+            'sku' => 'bdp'.$product->id.'-v1',
+            'base_price' => 12000000,
+            'is_default' => 1,
         ]);
+
+        $created = ProductVariant::where('product_id', $product->id)
+            ->where('id', '!=', $variant->id)
+            ->sole();
+
+        $this->assertMatchesRegularExpression('/^bdv-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{6}$/', $created->sku);
+        $this->assertSame(11000000, $created->base_price);
+        $this->assertFalse($created->is_default);
     }
 
     /** @test */

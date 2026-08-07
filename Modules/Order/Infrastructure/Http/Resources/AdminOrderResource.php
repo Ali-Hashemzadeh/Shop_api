@@ -27,6 +27,7 @@ class AdminOrderResource extends JsonResource
 
         return [
             'id' => $order->id,
+            'public_code' => $order->publicCode,
             'status' => $order->status->value,
             'total_amount' => $order->totalAmount,
             'shipping_cost' => $order->shippingCost,

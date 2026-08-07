@@ -22,5 +22,11 @@ class OrderPaidEvent
         public readonly int $orderId,
         public readonly int $userId,
         public readonly int $totalAmount,
+        /**
+         * The order's customer-facing code (`bdo-XXXXXX`), carried alongside the
+         * numeric id rather than replacing it: listeners show the code to the
+         * customer but still need the id for in-app deep links.
+         */
+        public readonly ?string $orderPublicCode = null,
     ) {}
 }

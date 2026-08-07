@@ -12,25 +12,10 @@ class CatalogSampleDataSeeder extends Seeder
     public function run(): void
     {
         // --- Categories ---
-        $electronics = Category::firstOrCreate(
-            ['slug' => 'electronics'],
-            ['name' => 'Electronics', 'is_active' => true],
-        );
-
-        $phones = Category::firstOrCreate(
-            ['slug' => 'phones'],
-            ['name' => 'Phones', 'is_active' => true, 'parent_id' => $electronics->id],
-        );
-
-        $laptops = Category::firstOrCreate(
-            ['slug' => 'laptops'],
-            ['name' => 'Laptops', 'is_active' => true, 'parent_id' => $electronics->id],
-        );
-
-        $accessories = Category::firstOrCreate(
-            ['slug' => 'accessories'],
-            ['name' => 'Accessories', 'is_active' => true, 'parent_id' => $electronics->id],
-        );
+        $electronics = $this->seedCategory('Electronics', 'electronics');
+        $phones = $this->seedCategory('Phones', 'phones', $electronics->id);
+        $laptops = $this->seedCategory('Laptops', 'laptops', $electronics->id);
+        $accessories = $this->seedCategory('Accessories', 'accessories', $electronics->id);
 
         // --- Products & Variants ---
         $this->seedProduct(
@@ -91,37 +76,73 @@ class CatalogSampleDataSeeder extends Seeder
         $this->command->info('Catalog sample data seeded: 5 products across 3 categories.');
     }
 
+    /**
+     * Idempotent category upsert that still assigns a public code.
+     *
+     * firstOrCreate cannot carry `public_code` (it is deliberately not
+     * mass-assignable) and the `creating` hook is muted under WithoutModelEvents,
+     * so a new row sets the code explicitly via the module's own generator.
+     */
+    private function seedCategory(string $name, string $slug, ?int $parentId = null): Category
+    {
+        $category = Category::query()->where('slug', $slug)->first();
+
+        if ($category !== null) {
+            return $category;
+        }
+
+        $category = new Category([
+            'name' => $name,
+            'slug' => $slug,
+            'is_active' => true,
+            'parent_id' => $parentId,
+        ]);
+
+        $category->public_code = Category::generateUniquePublicCode();
+        $category->save();
+
+        return $category;
+    }
+
     /** @param array<int,array{price:int,compare:int,attrs:array<string,string>}> $variants */
     private function seedProduct(Category $category, string $title, string $slug, string $description, array $variants): void
     {
-        // Generate the public code through the same model helper the `creating` hook
-        // uses on a real `POST /products` create. Seeders run under WithoutModelEvents,
-        // which mutes that hook, so we invoke the generator explicitly here.
-        $product = Product::firstOrCreate(
-            ['slug' => $slug],
-            [
-                'uuid' => Product::generateUniqueUuid(),
+        // Seeders run under WithoutModelEvents, which mutes the `creating` hook that
+        // normally assigns the code — and `uuid` is deliberately not mass-assignable,
+        // so it cannot be passed through firstOrCreate either. Build the model and set
+        // the code explicitly via the module's own generator, so seeded products get
+        // their identifier exactly the way a real POST /products does.
+        $product = Product::query()->where('slug', $slug)->first();
+
+        if ($product === null) {
+            $product = new Product([
                 'category_id' => $category->id,
                 'title' => $title,
+                'slug' => $slug,
                 'description' => $description,
                 'status' => 'published',
-            ],
-        );
+            ]);
+            $product->uuid = Product::generateUniquePublicCode();
+            $product->save();
+        }
 
         if ($product->variants()->count() > 0) {
             return;
         }
 
         foreach ($variants as $i => $v) {
-            ProductVariant::create([
+            $variant = new ProductVariant([
                 'product_id' => $product->id,
-                'sku' => 'bdp'.$product->id.'-v'.($i + 1),
                 'type' => 'color',
                 'is_default' => $i === 0,
                 'base_price' => $v['price'],
                 'compare_at_price' => $v['compare'],
                 'attributes' => $v['attrs'],
             ]);
+            // Same story as the product code: `sku` is server-owned, not fillable,
+            // and the creating hook is muted here.
+            $variant->sku = ProductVariant::generateUniqueSku();
+            $variant->save();
         }
     }
 }

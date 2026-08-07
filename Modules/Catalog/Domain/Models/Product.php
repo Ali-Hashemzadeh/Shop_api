@@ -2,12 +2,16 @@
 
 namespace Modules\Catalog\Domain\Models;
 
+use App\Support\HasPublicCode;
+use App\Support\PublicCodeEntity;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Product extends Model
 {
+    use HasPublicCode;
+
     protected $fillable = [
         'category_id',
         'brand_id',
@@ -28,33 +32,31 @@ class Product extends Model
     }
 
     /**
-     * The public identifier is a short, opaque code, generated server-side and
-     * never accepted from client input (mirrors the auto-generated SKU rule). The
-     * integer primary key remains the internal key and foreign-key target.
+     * The public identifier is a short, opaque code generated server-side and
+     * never accepted from client input (mirrors the auto-generated SKU rule).
+     * The integer primary key remains the internal key and foreign-key target.
+     *
+     * The column is named `uuid` for historical reasons and keeps that name so
+     * existing URLs, bookmarks, and callers stay valid — the value it holds has
+     * never actually been a v4 UUID.
      */
-    protected static function booted(): void
+    public static function publicCodeEntity(): PublicCodeEntity
     {
-        static::creating(function (Product $product): void {
-            if (empty($product->uuid)) {
-                $product->uuid = static::generateUniqueUuid();
-            }
-        });
+        return PublicCodeEntity::Product;
+    }
+
+    public static function publicCodeColumn(): string
+    {
+        return 'uuid';
     }
 
     /**
-     * Generate a 7-character public identifier. Hex-only so it satisfies the
-     * product route constraint (`[0-9a-fA-F-]`) and never collides with reserved
-     * path segments like `admin` / `slug`. The loop rejects any value already in
-     * the table, and the `uuid` unique index is the hard backstop — so the
-     * returned code is genuinely unique.
+     * Compatibility wrapper for the pre-public-code name, still used by seeders
+     * and older callers. New code should prefer generateUniquePublicCode().
      */
     public static function generateUniqueUuid(): string
     {
-        do {
-            $code = substr(bin2hex(random_bytes(4)), 0, 7);
-        } while (static::query()->where('uuid', $code)->exists());
-
-        return $code;
+        return static::generateUniquePublicCode();
     }
 
     public function category(): BelongsTo

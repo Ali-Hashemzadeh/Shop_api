@@ -26,7 +26,9 @@ class SendShipmentSentNotifications implements ShouldHandleEventsAfterCommit
 
     public function handle(ShipmentSentEvent $event): void
     {
-        $parameters = ['OrderId' => $event->orderId];
+        // `OrderId` is the provider-side template variable name; its value is the
+        // customer-facing code, not the internal id.
+        $parameters = ['OrderId' => $event->orderPublicCode ?? (string) $event->orderId];
 
         if ($event->trackingCode !== null && $event->trackingCode !== '') {
             $parameters['TrackingCode'] = $event->trackingCode;
@@ -39,6 +41,7 @@ class SendShipmentSentNotifications implements ShouldHandleEventsAfterCommit
             message: 'سفارش شما ارسال شد.',
             data: array_filter([
                 'order_id' => $event->orderId,
+                'order_public_code' => $event->orderPublicCode,
                 'tracking_code' => $event->trackingCode,
             ], static fn ($value) => $value !== null),
             channels: [NotificationChannel::DATABASE, NotificationChannel::SMS],

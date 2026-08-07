@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Modules\Catalog\Infrastructure\Persistence\Repositories;
 
+use App\Support\PublicCodeEntity;
+use App\Support\PublicCodeGenerator;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -49,13 +51,30 @@ class EloquentCatalogManager implements CatalogManagerInterface
         return $this->buildCategoryDto($category, $mediaMap);
     }
 
-    public function getActiveRootCategories(int $perPage = 15): LengthAwarePaginator
+    public function getActiveRootCategories(array $filters = [], int $perPage = 15): LengthAwarePaginator
     {
-        $paginator = Category::query()
+        $query = Category::query()
             ->where('is_active', true)
-            ->whereNull('parent_id')
-            ->with('children.children.children.children.children')
-            ->paginate($perPage);
+            ->with('children.children.children.children.children');
+
+        $search = isset($filters['search']) ? trim((string) $filters['search']) : '';
+
+        if ($search === '') {
+            // Unsearched listing is the storefront root menu, exactly as before.
+            $query->whereNull('parent_id');
+        } elseif (PublicCodeGenerator::matches($search, PublicCodeEntity::Category)) {
+            // A recognizable category code is an exact indexed lookup, never a
+            // LIKE scan — and it resolves at any depth, since a customer holding
+            // `bdc-T4K8NP` has no idea whether that category is a root.
+            $query->where('public_code', PublicCodeGenerator::normalize($search));
+        } else {
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', '%'.$search.'%')
+                    ->orWhere('slug', 'like', '%'.$search.'%');
+            });
+        }
+
+        $paginator = $query->paginate($perPage);
 
         $allMediaIds = $paginator->getCollection()
             ->flatMap(fn (Category $cat) => $this->collectCategoryMediaIds($cat))
@@ -73,13 +92,16 @@ class EloquentCatalogManager implements CatalogManagerInterface
 
     public function createCategory(array $data): CategoryDTO
     {
-        $category = Category::query()->create($data);
+        $category = Category::createWithPublicCode($data);
 
         return CategoryDTO::fromModel($category, $this->resolveUrl((int) $category->media_id));
     }
 
     public function updateCategory(int $id, array $data): CategoryDTO
     {
+        // Public codes are immutable — an update never reassigns one.
+        unset($data['public_code']);
+
         $category = Category::query()->findOrFail($id);
         $category->update($data);
         $category->refresh();
@@ -217,7 +239,9 @@ class EloquentCatalogManager implements CatalogManagerInterface
 
     public function createProduct(array $data): ProductDTO
     {
-        $product = Product::query()->create($data);
+        // createWithPublicCode: the `uuid` public code is minted by the model hook
+        // and retried here if the unique index rejects a concurrent duplicate.
+        $product = Product::createWithPublicCode($data);
         $primaryImageUrl = $product->primary_media_id
             ? $this->resolveUrl((int) $product->primary_media_id)
             : null;
@@ -341,9 +365,18 @@ class EloquentCatalogManager implements CatalogManagerInterface
         ])->all();
     }
 
+    /**
+     * The single place a variant SKU is minted.
+     *
+     * Any inbound `sku` is discarded rather than honoured: the SKU is a
+     * server-owned public code, so no caller — action, controller, or another
+     * module — may choose one. The model's creating hook assigns it.
+     */
     public function createProductVariant(int $productId, array $data): ProductVariantDTO
     {
-        $variant = ProductVariant::query()->create(
+        unset($data['sku']);
+
+        $variant = ProductVariant::createWithPublicCode(
             array_merge($data, ['product_id' => $productId])
         );
 
@@ -354,6 +387,10 @@ class EloquentCatalogManager implements CatalogManagerInterface
 
     public function updateProductVariant(int $variantId, array $data): ProductVariantDTO
     {
+        // A SKU is never regenerated and never reassigned on update — Inventory,
+        // Cart, order items, and reservations all key off the existing value.
+        unset($data['sku']);
+
         return DB::transaction(function () use ($variantId, $data) {
             $variant = ProductVariant::query()->findOrFail($variantId);
 
@@ -426,6 +463,10 @@ class EloquentCatalogManager implements CatalogManagerInterface
         }
 
         if (isset($filters['search']) && $filters['search'] !== '') {
+            if (! $admin && $this->applyPublicCodeSearch($query, (string) $filters['search'])) {
+                return;
+            }
+
             $term = '%'.$filters['search'].'%';
             $query->where(function ($q) use ($term, $admin) {
                 $q->where('title', 'like', $term)
@@ -438,6 +479,36 @@ class EloquentCatalogManager implements CatalogManagerInterface
                 }
             });
         }
+    }
+
+    /**
+     * Storefront-only shortcut: a search term that *is* a product or variant code
+     * resolves to exactly one product through its unique index.
+     *
+     * A customer pasting `bdp-K92XMQ` or a variant's `bdv-R7P4NZ` off an invoice
+     * wants that one item, not every row whose description happens to contain the
+     * string — so this is exact equality, never a LIKE scan, and never a partial
+     * match. Deliberately not applied to the admin list, which keeps its existing
+     * substring behaviour over slug and SKU.
+     *
+     * @return bool true when the term was consumed as a code
+     */
+    private function applyPublicCodeSearch($query, string $search): bool
+    {
+        if (PublicCodeGenerator::matches($search, PublicCodeEntity::Product)) {
+            $query->where('uuid', PublicCodeGenerator::normalize($search));
+
+            return true;
+        }
+
+        if (PublicCodeGenerator::matches($search, PublicCodeEntity::ProductVariant)) {
+            $sku = PublicCodeGenerator::normalize($search);
+            $query->whereHas('variants', fn ($vq) => $vq->where('sku', $sku));
+
+            return true;
+        }
+
+        return false;
     }
 
     /**

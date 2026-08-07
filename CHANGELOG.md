@@ -2,6 +2,68 @@
 
 ## [Unreleased]
 
+### Fix — demo seeders: give the demo customers addresses the fulfillment rules can actually accept
+
+- **`php artisan migrate:fresh --seed` aborted** with `Local delivery is not available for this address.` from `EloquentShipmentManager::validateSelection()` whenever a service area was configured (`SHIPMENT_LOCAL_DELIVERY_PROVINCE_IDS` / `SHIPMENT_LOCAL_DELIVERY_CITY_IDS`). `OrderSampleDataSeeder` created each demo address with a null `province_id`/`city_id`, so `ConfigLocalDeliveryEligibility::isEligible(null, null)` rejected every `local_delivery` blueprint. It went unnoticed because an unconfigured service area (the `.env.example` default) makes eligibility permissive.
+- **One address per customer could never have worked.** The two rules are mutually exclusive by location: local delivery is offered only *inside* the service area, and postal is withdrawn *there*. Demo customers now get **two** addresses — `Home` inside the area (default shipping) and `Work` outside it — and `seedOrder()` picks by method type, so postal orders ship from `Work` and local-delivery/pickup orders from `Home`.
+- Both locations are **derived from `config('shipment.local_delivery')`, never hard-coded**, so re-pointing the service area reseeds correctly. With no area configured any city is used (everything is eligible anyway). If the configured ids match no seeded city the seeder now fails with an explicit message naming the env keys, instead of the opaque validation error above. When every seeded city is inside the area, the out-of-area address falls back to a location-less one — which is never treated as inside, so postal still seeds.
+- Seeding is otherwise unchanged: orders, inventory reservations, slot holds, payments, and shipments all still run through the real contracts. Verified end to end — 19 orders, 18 payments, 16 shipments, 28 status transitions.
+- **The test suite had the same leak.** `SHIPMENT_LOCAL_DELIVERY_*` was unset in `phpunit.xml`, so a developer with a service area in their `.env` saw 12 Shipment/Order tests fail on the identical message — the factories build addresses outside the configured area. Both keys are now pinned empty in `phpunit.xml` (matching `.env.example`), so the suite is hermetic; `LocalDeliveryServiceAreaTest` and `ShipmentMethodsTest` keep setting their own area via `Config::set()`.
+
+### Feature — consistent customer-facing public codes across seven entities
+
+**Everything a customer might read aloud, quote to support, or paste into a search box now carries a short code in one shape: `<namespace><segment>-<SUFFIX>`, e.g. `bdo-Q8M2XC`.** Purely additive — no primary key, foreign key, relation, cron input, internal query, or authorization rule changed.
+
+#### Added
+- **`App\Support\PublicCodeGenerator`** — the single place a code is assembled. Reads the namespace from config, takes an entity segment, and emits six CSPRNG characters from a human-safe alphabet: `23456789ABCDEFGHJKMNPQRSTUVWXYZ`. `0`/`O` and `1`/`I`/`L` are excluded so a code read over the phone cannot land on a different record. The suffix is **not** derived from the primary key, a hash, a timestamp, or a sequence. The class performs no queries and imports no business-module model; uniqueness is the owning module's job, supplied as a callback to `generateUnique()`.
+- **`App\Support\PublicCodeEntity`** — the one mapping of entity → segment (`p`/`v`/`o`/`t`/`s`/`a`/`c`). Full prefixes like `bdp` and `bdo` are never written as string literals anywhere else. Payment is `t`, because `p` already belongs to Product.
+- **`App\Support\HasPublicCode`** — model-side wiring: a `creating` hook, `generateUniquePublicCode()` (checks **only** the model's own table), and `createWithPublicCode()`. The latter assigns the code itself rather than relying on the hook, because the hook is muted wherever model events are disabled — seeders run that way.
+- **`config/public_codes.php`** + required env key **`PUBLIC_CODE_NAMESPACE=bd`** (added to `.env.example` and `phpunit.xml`). Deliberately no fallback: a missing or malformed value raises `PublicCodeGenerationException` rather than silently minting codes under the wrong prefix, and a public identifier cannot be un-issued. Normalized to lowercase. The suffix length and alphabet stay as class constants, not config — widening either would make already-issued codes ambiguous against new ones.
+- New columns, each nullable → backfilled in 500-row chunks → unique-indexed, in their owning module's migration: `orders.public_code`, `payments.public_code`, `addresses.public_code`, `categories.public_code`. Backfills use the shared generator directly against their own table (model events are unavailable in migrations).
+
+| Entity | Format | Column | Status |
+|---|---|---|---|
+| Product | `bdp-XXXXXX` | `products.uuid` | existing column reused |
+| Product variant | `bdv-XXXXXX` | `product_variants.sku` | existing column reused |
+| Order | `bdo-XXXXXX` | `orders.public_code` | **new** |
+| Payment | `bdt-XXXXXX` | `payments.public_code` | **new** |
+| Shipment | `bds-XXXXXX` | `shipments.public_code` | existing column reused |
+| Address | `bda-XXXXXX` | `addresses.public_code` | **new** |
+| Category | `bdc-XXXXXX` | `categories.public_code` | **new** |
+
+#### Changed
+- **Product codes** now come from the shared generator (`Product::generateUniquePublicCode()`; `generateUniqueUuid()` is kept as a compatibility wrapper for existing callers and seeders). The `uuid` column is reused — no second product identifier was added.
+- **Variant SKUs have one source of truth.** The positional `'bdp'.$productId.'-v'.$n` formulas in `CreateProductAction`, `CreateProductVariantAction`, and `UpdateProductAction` are gone; `EloquentCatalogManager::createProductVariant()` mints the SKU and **discards any inbound `sku`**, so no caller — action, controller, or module — can choose one. `updateProductVariant()` likewise strips `sku`: Inventory, Cart, order items, and reservations all key off the existing value, so a SKU is never regenerated.
+- **Shipment codes** switch from `SH-<10 random>` to `bds-XXXXXX` via the same generator. `activateForPaidOrder()` now uses `createWithPublicCode()`, so a public-code collision is retried internally and the existing `catch` only ever sees the duplicate-`order_id` case it was written for.
+- **Product routes** accept both formats: the constraint is built by `PublicCodeGenerator::routePattern()` as `(legacy-hex | bdp-XXXXXX)`. Neither branch can match `admin` or `slug`, so reserved literal routes are still never shadowed. (Route caching bakes the namespace in — run `route:clear` after changing it.) Shipment routes already used `[A-Za-z0-9\-]+`, which spans both generations; that is now documented so nobody narrows it.
+- **`orderPublicCode` added to the integration events** `OrderPaidEvent`, `OrderCancelledEvent`, `PaymentFailedEvent`, `Shipment{PreparingStarted,Sent,Delivered}Event` — **alongside**, never replacing, the numeric `orderId`, which listeners still need for in-app deep links. Events remain primitives-only. Shipment resolves the order code through `OrderManagerInterface::findOrder()`, never the Order model.
+- **Customer-facing copy now quotes codes, not internal ids.** SMS and the admin "سفارش شماره … پرداخت شد" message carry `bdo-…`; notification `data` gains `order_public_code` beside the retained numeric `order_id`. The SMS **parameter name** stays `OrderId` — that name is the provider-side template variable, so renaming it would break every configured SMS.ir template.
+- **Payment result page** now shows کد سفارش and کد پرداخت beside the existing شماره پیگیری. The gateway reference is kept for provider-side reconciliation; callback security, verification, authority handling, and idempotency are untouched.
+- `POST /payments/initialize` keeps `payment_id` and adds `payment_public_code` + `order_public_code`. Prefixed names because that response is a plain object carrying two entities — a bare `public_code` would not say which one it named. Payment *resources* expose the unambiguous `public_code`.
+- `CatalogSampleDataSeeder`, `CategoryTreeSeeder`, `OrderSampleDataSeeder`, `PaymentSampleDataSeeder` and `AddressFactory` assign codes explicitly. **This also fixes a latent bug:** `CatalogSampleDataSeeder` passed `'uuid'` through `firstOrCreate`, but `uuid` is not mass-assignable and the `creating` hook is muted under `WithoutModelEvents` — so seeded products were silently getting a **null** public code.
+
+#### Search
+- `GET /catalog/products` (and `/categories/{id}/products`): `bdp-XXXXXX` → exact match on `products.uuid`; `bdv-XXXXXX` → exact match on `product_variants.sku`, returning the owning product. Any other term keeps the existing contains-match on title, description and brand. Recognizable codes never use `LIKE`. **Not** applied to the admin product list, which keeps its substring search over slug and SKU.
+- `GET /catalog/categories/roots` gains `search`: an exact `bdc-XXXXXX` resolves one category **at any depth** (a customer holding a code has no idea whether it is a root); any other term is a contains-match on name or slug. With no term the endpoint returns the root menu exactly as before.
+- `GET /orders` and `GET /addresses` gain `search`: exact match on the respective `public_code`, **always intersected with the caller's own rows**. Another customer's real code returns an empty page byte-for-byte identical to a nonexistent code, so neither endpoint can be used to probe for other people's records. Ordering and pagination are unchanged when no term is supplied. Deliberately **not** added to the admin order or admin address endpoints.
+- All search input is trimmed and case-normalized (`BDO-q8m2xc` → `bdo-Q8M2XC`). Partial codes never match — matching is whole-string equality on the unique index, so records cannot be enumerated by prefix.
+
+#### Compatibility
+- **Nothing was rewritten.** Existing 7-character hex product UUIDs, existing variant SKUs, and existing `SH-*` shipment codes are untouched and keep resolving on every route. Only newly created records use the new format, so existing product URLs and bookmarks survive.
+- Changing `PUBLIC_CODE_NAMESPACE` later affects **new** records only; stored codes keep the namespace they were issued under.
+- Codes are never accepted from client input, never appear as writable fields, are never regenerated on update, and are never reused after deletion.
+- Numeric ids remain the identifier for foreign keys, order items, payment initialization, shipment relationships, module contracts, admin filters, cancellation logic, scheduled jobs, and integration-event lookups.
+
+#### Notes / trade-offs
+- The four new columns are **nullable at the database level**, matching the precedent set by `products.uuid`. Tightening to `NOT NULL` on SQLite (used for tests and local development) rebuilds the table and can silently drop existing indexes such as `orders[user_id, status]`. The application layer guarantees a value on every insert, and the unique index is the real integrity backstop.
+- `createWithPublicCode()` recognizes a duplicate-key violation **specifically on the code column** (SQLSTATE 23000/23505 *and* the column name *and* a unique/duplicate signal) and retries with a fresh candidate. Every other `QueryException` propagates untouched — a duplicate slug or a foreign-key failure is never mistaken for a code collision or swallowed.
+
+#### Tests
+- New `tests/Unit/Support/PublicCodeGeneratorTest.php` (12): per-entity prefixes and six-character suffixes, no ambiguous characters across 400 samples, randomness (not sequential/derived), lowercase namespace normalization, missing/invalid namespace failing loudly, unknown segment rejected, input normalization, whole-string entity-specific matching, retry-past-taken-candidates, exhaustion throwing, and the dual-format route pattern excluding `admin`/`slug`.
+- New `tests/Feature/PublicCode/PublicCodeTest.php` (26): a code per entity, uniqueness, client-supplied identifiers ignored on create and update, namespace change affecting only new records, legacy hex product URLs and legacy `SH-*` shipment routes still resolving, product-by-code and product-by-variant-SKU search, ordinary title search preserved, order and address search ownership isolation (including the indistinguishable-empty-result proof), exact category-code search plus partial-code rejection, unique indexes present on all seven columns, the database rejecting a duplicate when the application check is bypassed, seeders assigning codes with model events disabled, and numeric ids / foreign keys / SKUs still intact.
+- Updated existing assertions for the new formats in `ProductsTest`, `ProductVariantsTest`, `ShipmentNotificationTest`, `NotificationIntegrationTest`.
+- Full suite: **506 passing**, with one pre-existing unrelated `ProfileTest` failure (present on the unmodified baseline).
+
 ### Change — Cart: richer flattened Catalog display data
 
 - Cart item responses now expose the selected variant's `type`, `attributes`, and existing variant `image_url`, plus the owning product's `primary_image_url`.

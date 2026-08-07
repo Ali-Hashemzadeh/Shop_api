@@ -11,6 +11,7 @@ use Modules\Cart\Domain\Models\CartItem;
 use Modules\Catalog\Domain\Contracts\CatalogManagerInterface;
 use Modules\Catalog\Domain\Models\ProductVariant;
 use Modules\Identity\Domain\Models\Address;
+use Modules\Identity\Domain\Models\City;
 use Modules\Identity\Domain\Models\User;
 use Modules\Inventory\Domain\Contracts\InventoryManagerInterface;
 use Modules\Order\Application\Actions\SyncSalesCountsAction;
@@ -46,6 +47,12 @@ class OrderSampleDataSeeder extends Seeder
     private ?array $slotIds = null;
 
     private int $slotCursor = 0;
+
+    /** Resolved once from config('shipment.local_delivery'). @var array{province_id:?int, city_id:?int}|null */
+    private ?array $insideServiceArea = null;
+
+    /** @var array{province_id:?int, city_id:?int}|null */
+    private ?array $outsideServiceArea = null;
 
     public function run(): void
     {
@@ -154,16 +161,115 @@ class OrderSampleDataSeeder extends Seeder
 
         $user->syncRoles(['customer']);
 
-        Address::firstOrCreate(
-            ['user_id' => $user->id, 'title' => 'Home'],
-            [
-                'address' => "No. {$user->id}, Demo Street, {$name}'s place",
-                'postal_code' => '1'.str_pad((string) $user->id, 9, '0', STR_PAD_LEFT),
-                'is_default_shipping' => true,
-            ],
-        );
+        // Two addresses, because the fulfillment rules are mutually exclusive per
+        // location: local delivery is only offered inside the configured service
+        // area, and postal delivery is withdrawn there (the store delivers itself).
+        // A single address could therefore never carry both demo workflows.
+        $this->demoAddress($user, 'Home', "No. {$user->id}, Demo Street, {$name}'s place", $this->insideServiceArea(), true);
+        $this->demoAddress($user, 'Work', "Unit {$user->id}, Demo Tower, out-of-town office", $this->outsideServiceArea(), false);
 
         return $user;
+    }
+
+    /** @param array{province_id:?int, city_id:?int} $location */
+    private function demoAddress(User $user, string $title, string $line, array $location, bool $isDefault): void
+    {
+        if (Address::where('user_id', $user->id)->where('title', $title)->exists()) {
+            return;
+        }
+
+        // Model events are muted in seeders, so the address code is assigned
+        // explicitly through Identity's own generator.
+        $address = new Address([
+            'user_id' => $user->id,
+            'title' => $title,
+            'province_id' => $location['province_id'],
+            'city_id' => $location['city_id'],
+            'address' => $line,
+            'postal_code' => ($isDefault ? '1' : '2').str_pad((string) $user->id, 9, '0', STR_PAD_LEFT),
+            'is_default_shipping' => $isDefault,
+        ]);
+        $address->public_code = Address::generateUniquePublicCode();
+        $address->save();
+    }
+
+    /**
+     * A location the store delivers to itself, derived from the configured service
+     * area (never hard-coded) so re-pointing SHIPMENT_LOCAL_DELIVERY_* reseeds
+     * correctly. With no service area configured every address is eligible, so any
+     * city will do.
+     *
+     * @return array{province_id:?int, city_id:?int}
+     */
+    private function insideServiceArea(): array
+    {
+        if ($this->insideServiceArea !== null) {
+            return $this->insideServiceArea;
+        }
+
+        $cityIds = (array) config('shipment.local_delivery.city_ids', []);
+        $provinceIds = (array) config('shipment.local_delivery.province_ids', []);
+        $configured = $cityIds !== [] || $provinceIds !== [];
+
+        $city = null;
+
+        if ($cityIds !== []) {
+            $city = City::whereIn('id', $cityIds)->orderBy('id')->first();
+        }
+
+        if ($city === null && $provinceIds !== []) {
+            $city = City::whereIn('province_id', $provinceIds)->orderBy('id')->first();
+        }
+
+        if ($configured && $city === null) {
+            throw new \RuntimeException(
+                'SHIPMENT_LOCAL_DELIVERY_PROVINCE_IDS / SHIPMENT_LOCAL_DELIVERY_CITY_IDS point at ids that do not '
+                .'exist in the seeded provinces/cities, so no demo address can be eligible for local delivery. '
+                .'Fix the ids in .env (or clear them to disable the service area) and re-run the seeders.',
+            );
+        }
+
+        $city ??= City::orderBy('id')->first();
+
+        return $this->insideServiceArea = [
+            'province_id' => $city?->province_id,
+            'city_id' => $city?->id,
+        ];
+    }
+
+    /**
+     * A location outside the service area, so the postal demo orders are not
+     * rejected by the "post is withdrawn where we deliver ourselves" rule. Falls
+     * back to a location-less address (never inside any service area) when every
+     * seeded city is covered.
+     *
+     * @return array{province_id:?int, city_id:?int}
+     */
+    private function outsideServiceArea(): array
+    {
+        if ($this->outsideServiceArea !== null) {
+            return $this->outsideServiceArea;
+        }
+
+        $cityIds = (array) config('shipment.local_delivery.city_ids', []);
+        $provinceIds = (array) config('shipment.local_delivery.province_ids', []);
+
+        $query = City::query()->orderBy('id');
+
+        if ($cityIds !== []) {
+            $query->whereNotIn('id', $cityIds);
+        }
+
+        if ($provinceIds !== []) {
+            $query->whereNotIn('province_id', $provinceIds);
+        }
+
+        $city = $query->first();
+
+        return $this->outsideServiceArea = [
+            'province_id' => $city?->province_id,
+            'city_id' => $city?->id,
+        ];
     }
 
     private function seedActiveCarts(User $user): void
@@ -220,7 +326,12 @@ class OrderSampleDataSeeder extends Seeder
             ];
         }
 
-        $address = $user->addresses()->first();
+        // Postal orders ship from the out-of-area address, everything else from the
+        // in-area one — the same choice a real customer faces, since the two rules
+        // (local delivery only inside, post only outside) never overlap.
+        $address = $user->addresses()
+            ->where('title', config("shipment.methods.{$shipmentMethod}.type") === 'postal' ? 'Work' : 'Home')
+            ->first();
 
         // Resolve the fulfillment selection through the Shipment contract exactly like
         // checkout does: it validates address ownership + local-delivery eligibility +
@@ -256,7 +367,10 @@ class OrderSampleDataSeeder extends Seeder
             $note .= " (shipment: {$shipmentState})";
         }
 
-        $order = Order::create([
+        // Seeders run under WithoutModelEvents, so the `creating` hook that assigns
+        // `public_code` never fires and the column is not mass-assignable. Set it
+        // explicitly via the Order module's own generator.
+        $order = new Order([
             'user_id' => $user->id,
             'status' => 'pending',
             'total_amount' => $total + $selection->shippingCost,
@@ -268,6 +382,8 @@ class OrderSampleDataSeeder extends Seeder
             'customer_snapshot' => $customerSnapshot,
             'notes' => $note,
         ]);
+        $order->public_code = Order::generateUniquePublicCode();
+        $order->save();
 
         foreach ($items as $item) {
             OrderItem::create(['order_id' => $order->id] + $item);

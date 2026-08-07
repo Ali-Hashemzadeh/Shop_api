@@ -36,7 +36,7 @@ class InitializePaymentAction
             return DB::transaction(function () use ($orderId, $order) {
                 $transactionRef = 'CASH-'.uniqid();
 
-                $payment = Payment::create([
+                $payment = Payment::createWithPublicCode([
                     'order_id' => $orderId,
                     'method_type' => PaymentMethodType::IN_PERSON->value,
                     'gateway' => null,
@@ -50,6 +50,11 @@ class InitializePaymentAction
                 return [
                     'type' => 'in_person',
                     'payment_id' => $payment->id,
+                    // This response is a plain array carrying both a payment and an
+                    // order, so the codes are prefixed rather than a bare
+                    // `public_code` that would not say which entity it names.
+                    'payment_public_code' => $payment->public_code,
+                    'order_public_code' => $order->publicCode,
                     'status' => PaymentStatus::PENDING_CASH->value,
                     'redirect_url' => null,
                 ];
@@ -68,7 +73,7 @@ class InitializePaymentAction
             customerMetadata: [],
         );
 
-        $payment = Payment::create([
+        $payment = Payment::createWithPublicCode([
             'order_id' => $orderId,
             'method_type' => PaymentMethodType::ONLINE->value,
             'gateway' => $resolvedGateway,
@@ -80,6 +85,8 @@ class InitializePaymentAction
         return [
             'type' => 'online',
             'payment_id' => $payment->id,
+            'payment_public_code' => $payment->public_code,
+            'order_public_code' => $order->publicCode,
             'status' => PaymentStatus::INITIATED->value,
             'redirect_url' => $redirectDto->redirectUrl,
         ];

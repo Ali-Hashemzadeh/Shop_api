@@ -8,6 +8,7 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Modules\Order\Domain\Contracts\OrderManagerInterface;
 use Modules\Payment\Application\Actions\HandleZarinpalCallbackAction;
 use Modules\Payment\Domain\Contracts\PaymentManagerInterface;
 use Modules\Payment\Domain\Enums\PaymentStatus;
@@ -19,6 +20,7 @@ class PaymentController extends Controller
     public function __construct(
         private readonly PaymentManagerInterface $manager,
         private readonly HandleZarinpalCallbackAction $handleCallback,
+        private readonly OrderManagerInterface $orders,
     ) {}
 
     public function initialize(InitializePaymentRequest $request): JsonResponse
@@ -82,10 +84,21 @@ class PaymentController extends Controller
                 : $home.'/'.$orderPath.'/'.$payment->order_id;
         }
 
+        // The order's own public code comes across the module wall through the
+        // Order contract — Payment never touches the Order model.
+        $orderPublicCode = $payment !== null
+            ? $this->orders->findOrder($payment->order_id)?->publicCode
+            : null;
+
         return [
             'success' => $success,
             'gateway' => $payment?->gateway,
+            // The gateway's own reference, unchanged and still shown: support needs
+            // it to reconcile with the provider.
             'trackId' => $payment?->transaction_reference,
+            // Customer-facing codes, safe to read aloud or quote in a ticket.
+            'paymentPublicCode' => $payment?->public_code,
+            'orderPublicCode' => $orderPublicCode,
             'date' => $payment?->updated_at?->format('Y-m-d H:i'),
             'frontendHomeUrl' => $home !== '' ? $home : null,
             'frontendOrderUrl' => $orderUrl,

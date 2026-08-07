@@ -18,5 +18,7 @@ class ShipmentSentEvent
         public readonly int $orderId,
         public readonly int $userId,
         public readonly ?string $trackingCode = null,
+        /** Customer-facing order code (`bdo-XXXXXX`), alongside — not replacing — the id. */
+        public readonly ?string $orderPublicCode = null,
     ) {}
 }

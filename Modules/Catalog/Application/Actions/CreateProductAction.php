@@ -33,9 +33,10 @@ class CreateProductAction
                 $this->catalog->addProductImage($product->id, (int) $mediaId, $sortOrder);
             }
 
-            foreach ($data['variants'] ?? [] as $i => $variantData) {
-                $sku = 'bdp'.$product->id.'-'.($i + 1);
-                $this->catalog->createProductVariant($product->id, array_merge($variantData, ['sku' => $sku]));
+            // SKUs are minted by Catalog's own variant-creation path — this action
+            // never composes one, so nested and standalone creates cannot drift.
+            foreach ($data['variants'] ?? [] as $variantData) {
+                $this->catalog->createProductVariant($product->id, $variantData);
             }
 
             return $this->catalog->findProductAdmin($product->uuid)

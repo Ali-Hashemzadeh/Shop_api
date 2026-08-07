@@ -23,7 +23,15 @@ interface OrderManagerInterface
      */
     public function syncStatusFromShipment(int $orderId, string $orderStatus): void;
 
-    public function getUserOrders(int $userId, int $perPage = 15): LengthAwarePaginator;
+    /**
+     * The caller's own orders, newest first.
+     *
+     * $search is an optional exact `bdo-XXXXXX` public code (case-insensitive).
+     * Ownership is applied unconditionally and is never widened by the search, so
+     * another customer's code returns an empty page rather than their order — and
+     * is indistinguishable from a code that does not exist.
+     */
+    public function getUserOrders(int $userId, int $perPage = 15, ?string $search = null): LengthAwarePaginator;
 
     public function findOrder(int $orderId): ?OrderDTO;
 

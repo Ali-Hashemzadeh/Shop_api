@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Shipment;
 
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Modules\Shipment\Application\Actions\HandShipmentToPostAction;
 use Modules\Shipment\Application\Actions\MarkLocalShipmentReadyAction;
@@ -63,6 +64,20 @@ class ShipmentNotificationTest extends ShipmentTestCase
         return Shipment::where('order_id', $orderId)->firstOrFail();
     }
 
+    /**
+     * The order's customer-facing code — what the SMS quotes instead of the
+     * internal order id. Read straight from the table so the test does not reach
+     * across a module wall for an Order model.
+     */
+    private function orderCode(Shipment $shipment): string
+    {
+        $code = (string) DB::table('orders')->where('id', $shipment->order_id)->value('public_code');
+
+        $this->assertMatchesRegularExpression('/^bdo-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{6}$/', $code);
+
+        return $code;
+    }
+
     // ── preparing → SMS only ──────────────────────────────────────────────────
 
     /** @test */
@@ -75,7 +90,8 @@ class ShipmentNotificationTest extends ShipmentTestCase
         $message = $this->sms->lastMessage();
         $this->assertNotNull($message);
         $this->assertSame('shipment_preparing', $message->template);
-        $this->assertSame(['OrderId' => $shipment->order_id], $message->parameters);
+        // The SMS quotes the order's public code, not its internal id.
+        $this->assertSame(['OrderId' => $this->orderCode($shipment)], $message->parameters);
 
         $this->assertDatabaseMissing('notifications', [
             'user_id' => $shipment->user_id,
@@ -106,7 +122,7 @@ class ShipmentNotificationTest extends ShipmentTestCase
         $message = $this->sms->lastMessage();
         $this->assertSame('shipment_sent', $message->template);
         $this->assertSame(
-            ['OrderId' => $shipment->order_id, 'TrackingCode' => 'TRACK-123'],
+            ['OrderId' => $this->orderCode($shipment), 'TrackingCode' => 'TRACK-123'],
             $message->parameters
         );
     }
@@ -128,7 +144,7 @@ class ShipmentNotificationTest extends ShipmentTestCase
         ]);
 
         // No tracking number exists for local delivery, so the parameter is omitted.
-        $this->assertSame(['OrderId' => $shipment->order_id], $this->sms->lastMessage()->parameters);
+        $this->assertSame(['OrderId' => $this->orderCode($shipment)], $this->sms->lastMessage()->parameters);
     }
 
     // ── delivered → in-app + SMS ──────────────────────────────────────────────
@@ -154,7 +170,7 @@ class ShipmentNotificationTest extends ShipmentTestCase
 
         $message = $this->sms->lastMessage();
         $this->assertSame('shipment_delivered', $message->template);
-        $this->assertSame(['OrderId' => $shipment->order_id], $message->parameters);
+        $this->assertSame(['OrderId' => $this->orderCode($shipment)], $message->parameters);
     }
 
     // ── unconfigured template must not break fulfillment ──────────────────────

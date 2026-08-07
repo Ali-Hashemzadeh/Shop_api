@@ -30,9 +30,11 @@ class SendShipmentPreparingNotification implements ShouldHandleEventsAfterCommit
             type: NotificationType::SHIPMENT_PREPARING->value,
             title: 'آماده‌سازی سفارش',
             message: 'سفارش شما در حال آماده‌سازی است.',
-            data: ['order_id' => $event->orderId],
+            data: ['order_id' => $event->orderId, 'order_public_code' => $event->orderPublicCode],
             channels: [NotificationChannel::SMS],
-            sms: new SmsPayloadDTO(NotificationTemplate::SHIPMENT_PREPARING, ['OrderId' => $event->orderId]),
+            sms: new SmsPayloadDTO(NotificationTemplate::SHIPMENT_PREPARING, [
+                'OrderId' => $event->orderPublicCode ?? (string) $event->orderId,
+            ]),
         ));
     }
 }

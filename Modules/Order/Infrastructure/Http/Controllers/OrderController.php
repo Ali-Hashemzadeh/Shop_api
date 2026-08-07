@@ -51,7 +51,13 @@ class OrderController extends Controller
     public function index(Request $request): JsonResponse
     {
         $perPage = min(max((int) $request->query('per_page', 15), 1), 100);
-        $paginator = $this->manager->getUserOrders($request->user()->id, $perPage);
+        // `search` is an exact order public code. Ownership is enforced inside the
+        // manager and is never widened by the term.
+        $paginator = $this->manager->getUserOrders(
+            $request->user()->id,
+            $perPage,
+            $request->string('search')->trim()->toString() ?: null,
+        );
 
         return response()->json(OrderResource::collection($paginator)->response()->getData(true));
     }

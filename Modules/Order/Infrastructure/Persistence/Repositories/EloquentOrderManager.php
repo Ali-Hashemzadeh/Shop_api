@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Modules\Order\Infrastructure\Persistence\Repositories;
 
+use App\Support\PublicCodeEntity;
+use App\Support\PublicCodeGenerator;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
@@ -70,6 +72,7 @@ class EloquentOrderManager implements OrderManagerInterface
                 orderId: $order->id,
                 userId: $order->user_id,
                 totalAmount: (int) $order->total_amount,
+                orderPublicCode: $order->public_code,
             ));
 
             return $this->toDTO($order->fresh('items'));
@@ -89,12 +92,32 @@ class EloquentOrderManager implements OrderManagerInterface
         Order::where('id', $orderId)->update(['status' => $orderStatus]);
     }
 
-    public function getUserOrders(int $userId, int $perPage = 15): LengthAwarePaginator
+    public function getUserOrders(int $userId, int $perPage = 15, ?string $search = null): LengthAwarePaginator
     {
-        return Order::with('items')
+        $query = Order::with('items')
             ->where('user_id', $userId)
-            ->orderByDesc('created_at')
-            ->paginate(min(max($perPage, 1), 100))
+            ->orderByDesc('created_at');
+
+        $search = $search === null ? '' : trim($search);
+
+        if ($search !== '') {
+            // The ownership constraint above is applied unconditionally and is
+            // never relaxed by a search term, so another customer's code simply
+            // yields an empty page — indistinguishable from a code that does not
+            // exist. The search therefore cannot be used to probe for the
+            // existence of other people's orders.
+            //
+            // Exact equality on the unique index only: a partial code must never
+            // match, or orders could be enumerated by prefix.
+            $query->where(
+                'public_code',
+                PublicCodeGenerator::matches($search, PublicCodeEntity::Order)
+                    ? PublicCodeGenerator::normalize($search)
+                    : $search,
+            );
+        }
+
+        return $query->paginate(min(max($perPage, 1), 100))
             ->through(fn (Order $order) => $this->toDTO($order));
     }
 

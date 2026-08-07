@@ -30,6 +30,11 @@
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>
+        <env name="PUBLIC_CODE_NAMESPACE" value="bd"/>
+        <!-- No local-delivery service area, so the suite never depends on the
+             developer's .env. Tests that need one set it with Config::set(). -->
+        <env name="SHIPMENT_LOCAL_DELIVERY_PROVINCE_IDS" value=""/>
+        <env name="SHIPMENT_LOCAL_DELIVERY_CITY_IDS" value=""/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>

@@ -13,6 +13,8 @@ class PaymentDTO
 {
     public function __construct(
         public readonly int $id,
+        /** Customer-facing code (`bdt-XXXXXX`); not a gateway reference. */
+        public readonly ?string $publicCode,
         public readonly int $orderId,
         public readonly PaymentMethodType $methodType,
         public readonly ?string $gateway,
@@ -27,6 +29,7 @@ class PaymentDTO
     {
         return new self(
             id: $payment->id,
+            publicCode: $payment->public_code,
             orderId: $payment->order_id,
             methodType: PaymentMethodType::from($payment->method_type),
             gateway: $payment->gateway,
