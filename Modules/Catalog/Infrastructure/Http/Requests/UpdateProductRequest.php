@@ -46,6 +46,7 @@ class UpdateProductRequest extends FormRequest
             'features' => ['nullable', 'array'],
             'features.*.title' => ['required', 'string', 'max:255'],
             'features.*.value' => ['required', 'string', 'max:255'],
+            'features.*.is_important' => ['required', 'boolean'],
             'status' => ['sometimes', 'in:draft,published'],
             'category_id' => ['nullable', 'integer', 'exists:categories,id'],
             'brand_id' => ['nullable', 'integer', 'exists:brands,id'],
