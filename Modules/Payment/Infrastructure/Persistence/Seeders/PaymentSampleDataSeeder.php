@@ -44,7 +44,12 @@ class PaymentSampleDataSeeder extends Seeder
                 continue;
             }
 
-            Payment::create($payment + ['order_id' => $order->id, 'amount' => $order->total_amount]);
+            // Seeders run under WithoutModelEvents, so the `creating` hook that
+            // assigns `public_code` never fires and the column is not
+            // mass-assignable — set it explicitly via the module's own generator.
+            $record = new Payment($payment + ['order_id' => $order->id, 'amount' => $order->total_amount]);
+            $record->public_code = Payment::generateUniquePublicCode();
+            $record->save();
             $created++;
         }
 

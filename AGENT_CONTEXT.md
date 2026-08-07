@@ -41,6 +41,59 @@ Modules/
 
 ---
 
+## 2b. Customer-Facing Public Codes (cross-cutting)
+
+Every entity a customer might read aloud, quote to support, or search for carries a short code shaped
+`<namespace><segment>-<SUFFIX>` — e.g. `bdo-Q8M2XC`. This is **display, search, and support only**; it
+replaces no primary key, foreign key, relation, cron input, internal query, or authorization rule.
+
+* **One generator, no scattered prefixes.** `App\Support\PublicCodeGenerator` is the only place a code is
+  assembled. `App\Support\PublicCodeEntity` is the only place entity → segment is mapped
+  (`p`/`v`/`o`/`t`/`s`/`a`/`c`; Payment is `t` because `p` belongs to Product). Never write `'bdp'` or
+  `'bdo'` as a literal anywhere else.
+* **Namespace is required configuration.** `config/public_codes.php` ← `PUBLIC_CODE_NAMESPACE` (no
+  fallback — a missing/invalid value throws `PublicCodeGenerationException`, because a public identifier
+  cannot be un-issued). Normalized to lowercase. Changing it affects **new** records only.
+* **Suffix:** exactly six CSPRNG characters from `23456789ABCDEFGHJKMNPQRSTUVWXYZ` (no `0`/`O`/`1`/`I`/`L`).
+  Never derived from the primary key, a hash, a timestamp, or a sequence. Length and alphabet are class
+  constants, not config.
+* **Uniqueness is two-layered and module-owned.** `App\Support\HasPublicCode` gives each model a `creating`
+  hook, `generateUniquePublicCode()` (bounded retry, checks **only that model's own table** — never another
+  module's), and `createWithPublicCode()`, which assigns the code itself (the hook is muted under
+  `WithoutModelEvents`, so seeders need this) and retries a duplicate-key violation **naming the code column
+  specifically**; every other `QueryException` propagates untouched. The unique index is the final authority.
+
+| Entity | Format | Column | Note |
+|---|---|---|---|
+| Product | `bdp-XXXXXX` | `products.uuid` | reused; response `id` |
+| Product variant | `bdv-XXXXXX` | `product_variants.sku` | reused; the cross-module key Cart/Inventory/Order already exchange |
+| Order | `bdo-XXXXXX` | `orders.public_code` | new |
+| Payment | `bdt-XXXXXX` | `payments.public_code` | new; **not** a gateway reference — `transaction_reference` is untouched |
+| Shipment | `bds-XXXXXX` | `shipments.public_code` | reused; replaces `SH-*` generation |
+| Address | `bda-XXXXXX` | `addresses.public_code` | new |
+| Category | `bdc-XXXXXX` | `categories.public_code` | new |
+
+* **Immutable and server-owned.** Never accepted from client input, never a writable field, never regenerated
+  on update, never reused after deletion. The four new columns are **nullable at the DB level** (matching the
+  `products.uuid` precedent — tightening to NOT NULL on SQLite rebuilds the table and can drop indexes); the
+  application layer guarantees a value and the unique index enforces it.
+* **Legacy identifiers were never rewritten.** 7-char hex product UUIDs, older variant SKUs, and `SH-*`
+  shipment codes all still resolve. Product routes use `PublicCodeGenerator::routePattern()` →
+  `(legacy-hex | bdp-XXXXXX)`, which still excludes `admin`/`slug`; shipment routes' `[A-Za-z0-9\-]+` already
+  spans both. **Do not narrow either pattern.** Route caching bakes the namespace in — `route:clear` after a
+  namespace change.
+* **Search:** exact, whole-string, case-normalized lookups on the unique index — never `LIKE`, never partial
+  (or records could be enumerated by prefix). Public product list matches `bdp-`/`bdv-` (variant returns its
+  owning product); public category list matches `bdc-` at any depth; `GET /orders` and `GET /addresses` match
+  their code **always intersected with the caller's own rows**, so another user's real code returns a page
+  indistinguishable from a nonexistent one. Deliberately **not** added to any admin list.
+* **Notifications:** integration events carry `orderPublicCode` **alongside** the numeric `orderId` (listeners
+  still need the id for deep links); events stay primitives-only. Customer-facing SMS/in-app copy quotes the
+  code, but the SMS **parameter name** stays `OrderId` — it is the provider-side template variable.
+* Tests: `tests/Unit/Support/PublicCodeGeneratorTest.php` (12) + `tests/Feature/PublicCode/PublicCodeTest.php` (26).
+
+---
+
 ## 3. Current Module Ecosystem Ledger
 
 ### 🔒 1. Identity Module (Status: Active & Complete)

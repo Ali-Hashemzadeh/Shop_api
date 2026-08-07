@@ -8,7 +8,14 @@ use Modules\Identity\Domain\Models\User;
 
 interface AddressRepositoryInterface
 {
-    public function listForUser(User $user): Collection;
+    /**
+     * The user's own addresses.
+     *
+     * $search is an optional exact `bda-XXXXXX` public code (case-insensitive).
+     * The user scope is applied unconditionally and is never widened by it, so
+     * another user's code yields an empty list rather than their address.
+     */
+    public function listForUser(User $user, ?string $search = null): Collection;
 
     public function createForUser(User $user, array $attributes): Address;
 

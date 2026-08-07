@@ -14,6 +14,9 @@ class ListAddressRequest extends FormRequest
     public function rules(): array
     {
         return [
+            // Exact `bda-XXXXXX` address code (case-insensitive). Always applied on
+            // top of the caller's own-address scope.
+            'search' => ['nullable', 'string', 'max:255'],
         ];
     }
 }

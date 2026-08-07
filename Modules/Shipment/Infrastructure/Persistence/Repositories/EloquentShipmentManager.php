@@ -230,8 +230,10 @@ class EloquentShipmentManager implements ShipmentManagerInterface
 
         return DB::transaction(function () use ($orderId, $userId, $shipmentSnapshot): ShipmentDTO {
             try {
-                $shipment = Shipment::create([
-                    'public_code' => Shipment::generateUniquePublicCode(),
+                // createWithPublicCode assigns the `bds-` code via the model hook and
+                // retries internally on a public_code collision, so the catch below
+                // only ever sees the duplicate-order_id case it was written for.
+                $shipment = Shipment::createWithPublicCode([
                     'order_id' => $orderId,
                     'user_id' => $userId,
                     'method_code' => $shipmentSnapshot['method_code'],

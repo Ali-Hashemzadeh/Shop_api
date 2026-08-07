@@ -61,6 +61,17 @@ Tables outside the Media module never use cascading foreign keys to the `media` 
 ### Test-Driven Mutations
 Every Action and Repository method that mutates state has matching feature tests covering: happy path, validation failure, not-found (404), invariant enforcement, and authorization (401/403).
 
+### Customer-Facing Public Codes
+Products, variants, orders, payments, shipments, addresses and categories each carry a short, human-safe code —
+`bdp-K92XMQ`, `bdv-R7P4NZ`, `bdo-Q8M2XC`, `bdt-W4N7KP`, `bds-Z9C3TR`, `bda-H7Q9CM`, `bdc-T4K8NP`. The `bd`
+namespace comes from the required `PUBLIC_CODE_NAMESPACE` env key; the six-character suffix is CSPRNG output
+over `23456789ABCDEFGHJKMNPQRSTUVWXYZ` (no `0`/`O`/`1`/`I`/`L`, so a code cannot be misread). They are built
+only by `App\Support\PublicCodeGenerator`, are server-owned (never client-writable, never regenerated, never
+reused), and are **additive** — numeric ids remain the key for every foreign key, join, contract and scheduled
+job. Existing product UUIDs, variant SKUs and `SH-*` shipment codes were never rewritten and still resolve.
+Codes are searchable by exact match on the public product, category, order and address list endpoints; order
+and address search is always scoped to the authenticated user. See `AGENT_CONTEXT.md` §2b.
+
 ---
 
 ## Modules

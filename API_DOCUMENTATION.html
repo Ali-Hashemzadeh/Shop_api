@@ -102,6 +102,7 @@
   <a href="#errors">Errors &amp; Validation</a>
   <a href="#pagination">Pagination</a>
   <a href="#money">Money &amp; Prices</a>
+  <a href="#public-codes">Public Codes</a>
   <a href="#media-strategy">Media Upload Strategy</a>
 
   <a href="#rate-limits">Rate Limiting</a>
@@ -282,6 +283,82 @@ curl -s -X POST http://localhost:8000/api/v1/media \
 
   <h3 id="money">Money &amp; Prices</h3>
   <div class="warn"><strong>Important:</strong> All monetary values are stored and returned as <strong>plain integers in rials</strong> — the smallest currency unit. No floats, no currency symbols, no decimals. A product priced at 1,500,000 rials is returned as <code>1500000</code>. Divide by 10 in your UI to display tomans.</div>
+
+  <h3 id="public-codes">Public Codes</h3>
+  <p>Every entity a customer might read aloud, paste into a support ticket, or search for carries a short
+    <strong>public code</strong>: a lowercase namespace + entity segment, a hyphen, and a six-character uppercase suffix.</p>
+  <pre>bdp-K92XMQ    bdv-R7P4NZ    bdo-Q8M2XC    bdt-W4N7KP    bds-Z9C3TR    bda-H7Q9CM    bdc-T4K8NP</pre>
+
+  <p>The <code>bd</code> namespace comes from the <code>PUBLIC_CODE_NAMESPACE</code> environment variable
+    (required; normalized to lowercase). The suffix is drawn from a deliberately reduced, human-safe alphabet —
+    <code>23456789ABCDEFGHJKMNPQRSTUVWXYZ</code> — with <code>0</code>, <code>O</code>, <code>1</code>,
+    <code>I</code> and <code>L</code> removed so a code cannot be misread into a different record.</p>
+
+  <table>
+    <tr><th>Entity</th><th>Format</th><th>Field</th><th>Column</th></tr>
+    <tr><td>Product</td><td><code>bdp-XXXXXX</code></td><td>response <code>id</code></td><td><code>products.uuid</code> <em>(existing, reused)</em></td></tr>
+    <tr><td>Product variant</td><td><code>bdv-XXXXXX</code></td><td><code>sku</code></td><td><code>product_variants.sku</code> <em>(existing, reused)</em></td></tr>
+    <tr><td>Order</td><td><code>bdo-XXXXXX</code></td><td><code>public_code</code></td><td><code>orders.public_code</code> <em>(new)</em></td></tr>
+    <tr><td>Payment</td><td><code>bdt-XXXXXX</code></td><td><code>public_code</code> / <code>payment_public_code</code></td><td><code>payments.public_code</code> <em>(new)</em></td></tr>
+    <tr><td>Shipment</td><td><code>bds-XXXXXX</code></td><td>response <code>id</code></td><td><code>shipments.public_code</code> <em>(existing, reused)</em></td></tr>
+    <tr><td>Address</td><td><code>bda-XXXXXX</code></td><td><code>public_code</code></td><td><code>addresses.public_code</code> <em>(new)</em></td></tr>
+    <tr><td>Category</td><td><code>bdc-XXXXXX</code></td><td><code>public_code</code></td><td><code>categories.public_code</code> <em>(new)</em></td></tr>
+  </table>
+
+  <div class="warn"><strong>Server-generated and immutable.</strong> Public codes are never accepted from client input,
+    never appear as writable fields in create/update bodies, are never regenerated on update, and are never reused after
+    a record is deleted. Sending <code>uuid</code>, <code>sku</code>, or <code>public_code</code> in a request body is
+    silently ignored. Changing <code>PUBLIC_CODE_NAMESPACE</code> affects newly created records only — every stored code
+    keeps the namespace it was issued under and stays valid forever.</div>
+
+  <div class="note"><strong>Numeric IDs are unchanged.</strong> This is purely additive. Orders, Payments, Addresses and
+    Categories keep their integer <code>id</code>, and every foreign key, relationship, checkout <code>address_id</code>,
+    admin filter, internal contract, scheduled job, and gateway reference continues to use it. Public codes are for
+    display, customer search, and support — never for internal lookup.</div>
+
+  <div class="note"><strong>Older identifiers still work.</strong> Products created before this scheme keep their
+    7-character hexadecimal code (e.g. <code>a3f9c1b</code>) and their URLs still resolve; variants keep their earlier
+    SKUs; shipments keep their <code>SH-XXXXXXXXXX</code> codes and remain addressable on every shipment route. Nothing
+    was rewritten — only newly created records use the new format.</div>
+
+  <h4>Searching by code</h4>
+  <p>A search term that <em>is</em> a recognizable public code becomes an exact, indexed lookup rather than a substring
+    scan. Input is trimmed and case-normalized, so <code>BDO-q8m2xc</code> finds <code>bdo-Q8M2XC</code>. Partial codes
+    never match.</p>
+  <table>
+    <tr><th>Endpoint</th><th>Parameter</th><th>Behaviour</th></tr>
+    <tr>
+      <td><code>GET /catalog/products</code><br><code>GET /catalog/categories/{id}/products</code></td>
+      <td><code>search</code></td>
+      <td><code>bdp-XXXXXX</code> → exact match on the product code. <code>bdv-XXXXXX</code> → exact match on a variant SKU,
+        returning the owning product. Any other term keeps the existing contains-match on title, description and brand name.
+        <strong>Not available on the admin product list</strong>, which retains its substring search over slug and SKU.</td>
+    </tr>
+    <tr>
+      <td><code>GET /catalog/categories/roots</code></td>
+      <td><code>search</code></td>
+      <td><code>bdc-XXXXXX</code> → exact match on the category code, <em>at any depth</em> (a customer holding a code has
+        no idea whether that category is a root). Any other term is a contains-match on name or slug. Without a search
+        term the endpoint returns the root menu exactly as before.</td>
+    </tr>
+    <tr>
+      <td><code>GET /orders</code></td>
+      <td><code>search</code></td>
+      <td>Exact match on <code>orders.public_code</code>, <strong>always intersected with the authenticated user's own
+        orders</strong>. Another customer's code returns an empty page — byte-for-byte identical to a code that does not
+        exist, so the endpoint cannot be used to probe for other people's orders. Pagination and default ordering are
+        unchanged when no term is supplied. <strong>Not added to the admin order list</strong>, whose
+        <code>order_id</code>/<code>user_id</code>/status/date filters are untouched.</td>
+    </tr>
+    <tr>
+      <td><code>GET /addresses</code></td>
+      <td><code>search</code></td>
+      <td>Exact match on <code>addresses.public_code</code>, always scoped to the authenticated user, with the same
+        no-information-leak behaviour as order search. <strong>Not added to the admin address endpoints.</strong></td>
+    </tr>
+  </table>
+  <div class="note">Shipments already support direct lookup by code at <code>GET /shipments/{publicCode}</code>, so no
+    separate shipment search parameter was added.</div>
 
   <h3 id="media-strategy">Media Upload Strategy</h3>
   <p>The API supports two ways to attach images to any entity that accepts one:</p>
@@ -720,11 +797,20 @@ curl -s -X POST http://localhost:8000/api/v1/media \
     </div>
     <div class="endpoint-body">
       <p>Returns all saved addresses for the authenticated user. Not paginated.</p>
+      <div class="block-label">Query Parameters</div>
+      <table>
+        <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
+        <tr><td>search</td><td class="opt">string</td><td>An exact address public code (<code>bda-XXXXXX</code>), case-insensitive and whitespace-trimmed. Partial codes never match.</td></tr>
+      </table>
+      <div class="note"><strong>Search is always scoped to you.</strong> The own-addresses filter is applied
+        unconditionally and is never widened by <code>search</code>; another user's real code returns an empty list
+        indistinguishable from a code that does not exist. See <a href="#public-codes">Public Codes</a>.</div>
       <div class="block-label">Response — 200 OK</div>
       <pre>{
   <span class="key">"data"</span>: [
     {
       <span class="key">"id"</span>:                   <span class="num">7</span>,
+      <span class="key">"public_code"</span>:          <span class="str">"bda-H7Q9CM"</span>,
       <span class="key">"title"</span>:               <span class="str">"خانه"</span>,
       <span class="key">"province_id"</span>:         <span class="num">8</span>,
       <span class="key">"city_id"</span>:             <span class="num">153</span>,
@@ -1147,12 +1233,14 @@ const res = await fetch(<span class="str">'/api/v1/media'</span>, {
       <table><tr><th>Param</th><th>Type</th><th>Description</th></tr>
         <tr><td>per_page</td><td class="opt">optional</td><td>1–100. Default: 15.</td></tr>
         <tr><td>page</td><td class="opt">optional</td><td>Page number. Default: 1.</td></tr>
+        <tr><td>search</td><td class="opt">optional</td><td>An exact category public code (<code>bdc-XXXXXX</code>, case-insensitive) matches that one category <strong>at any depth</strong>, root or not. Any other term is a contains-match on name or slug. Omit it and the endpoint returns the root menu exactly as before.</td></tr>
       </table>
       <div class="block-label">Response — 200 OK</div>
       <pre>{
   <span class="key">"data"</span>: [
     {
       <span class="key">"id"</span>:        <span class="num">1</span>,
+      <span class="key">"public_code"</span>: <span class="str">"bdc-T4K8NP"</span>,
       <span class="key">"name"</span>:      <span class="str">"الکترونیک"</span>,
       <span class="key">"slug"</span>:      <span class="str">"electronics"</span>,
       <span class="key">"is_active"</span>: <span class="bool">true</span>,
@@ -1513,7 +1601,13 @@ const res = await fetch(<span class="str">'/api/v1/media'</span>, {
   <!-- ═══ PRODUCTS ═══ -->
   <h2 id="products">Catalog — Products</h2>
   <p>Products can be <code>draft</code> (admin-only) or <code>published</code> (public). Public routes only return published products. Each product response includes a nested <code>images</code> gallery array and a <code>variants</code> array (each variant carries a read-only <code>stock</code> count).</p>
-  <div class="note"><strong>Read-only fields.</strong> A product's <code>id</code> is the short public code (a 7-char hex string, e.g. <code>"a3f9c1b"</code>) used in every <code>/products/{uuid}</code> route — <strong>not</strong> the internal integer key. <code>sales_count</code> is a denormalized best-seller tally (units from realized orders), kept current by an hourly background sync. Both are server-computed and never accepted from client input.</div>
+  <div class="note"><strong>Read-only fields.</strong> A product's <code>id</code> is its public code
+    (<code>bdp-XXXXXX</code>, e.g. <code>"bdp-K92XMQ"</code>) used in every <code>/products/{uuid}</code> route —
+    <strong>not</strong> the internal integer key. Products created before this scheme kept their earlier 7-character
+    hexadecimal code (e.g. <code>"a3f9c1b"</code>); those values were never rewritten and their URLs still resolve, so
+    treat the field as an opaque string rather than assuming a fixed shape. <code>sales_count</code> is a denormalized
+    best-seller tally (units from realized orders), kept current by an hourly background sync. All are server-computed
+    and never accepted from client input. See <a href="#public-codes">Public Codes</a>.</div>
   <p>The <code>features</code> field is an ordered array of <code>{"title": "...", "value": "..."}</code> objects — useful for displaying product specification tables.</p>
   <p>Price filters (<code>min_price</code> / <code>max_price</code>) target the product's <strong>default variant</strong> (<code>is_default: true</code>) only, so the comparison reflects the storefront display price rather than any secondary variant.</p>
 
@@ -1534,7 +1628,7 @@ const res = await fetch(<span class="str">'/api/v1/media'</span>, {
         <tr><td>brand_id</td><td class="opt">optional integer</td><td>Filter by brand ID. Must be a valid existing brand — returns 422 otherwise.</td></tr>
         <tr><td>min_price</td><td class="opt">optional integer</td><td>Minimum price in rials. Compares against the default variant's <code>base_price</code>. Must be ≥ 0.</td></tr>
         <tr><td>max_price</td><td class="opt">optional integer</td><td>Maximum price in rials. Compares against the default variant's <code>base_price</code>. Must be ≥ 0.</td></tr>
-        <tr><td>search</td><td class="opt">optional string</td><td>Free-text search. Matches against <code>title</code> OR <code>description</code> (case-insensitive contains). Max 255 chars.</td></tr>
+        <tr><td>search</td><td class="opt">optional string</td><td>A product code (<code>bdp-XXXXXX</code>) or variant SKU (<code>bdv-XXXXXX</code>) is an <strong>exact</strong> lookup — the variant form returns the owning product. Any other term is a free-text contains-match on <code>title</code>, <code>description</code> or brand name. Case-insensitive, max 255 chars. See <a href="#public-codes">Public Codes</a>.</td></tr>
         <tr><td>sort</td><td class="opt">optional string</td><td>Sort order. One of <code>cheapest</code> / <code>most_expensive</code> (by the default variant's <code>base_price</code>) or <code>most_sold</code> (by <code>sales_count</code>, best-sellers first). Omitted → newest first. Any other value → 422.</td></tr>
         <tr><td>available</td><td class="opt">optional string</td><td>Availability filter. Literal <code>true</code> returns products with at least one variant whose Inventory <code>availableQuantity</code> is greater than zero. Literal <code>false</code> returns products whose variants are fully reserved, have zero/negative availability, or have no stock record. Any other value → 422.</td></tr>
       </table>
@@ -1659,7 +1753,7 @@ GET /api/v1/catalog/products?available=true</pre>
         <tr><td>page</td><td class="opt">optional integer</td><td>Page number. Default: 1.</td></tr>
         <tr><td>min_price</td><td class="opt">optional integer</td><td>Minimum price in rials (default variant). Must be ≥ 0.</td></tr>
         <tr><td>max_price</td><td class="opt">optional integer</td><td>Maximum price in rials (default variant). Must be ≥ 0.</td></tr>
-        <tr><td>search</td><td class="opt">optional string</td><td>Free-text search on <code>title</code> or <code>description</code>. Max 255 chars.</td></tr>
+        <tr><td>search</td><td class="opt">optional string</td><td>A product code (<code>bdp-XXXXXX</code>) or variant SKU (<code>bdv-XXXXXX</code>) is an <strong>exact</strong> lookup; any other term is a free-text contains-match on <code>title</code>, <code>description</code> or brand name. Max 255 chars.</td></tr>
         <tr><td>sort</td><td class="opt">optional string</td><td>Sort order: <code>cheapest</code> / <code>most_expensive</code> (default variant <code>base_price</code>) or <code>most_sold</code> (<code>sales_count</code>). Omitted → newest first. Any other value → 422.</td></tr>
       </table>
     </div>
@@ -1674,7 +1768,7 @@ GET /api/v1/catalog/products?available=true</pre>
     </div>
     <div class="endpoint-body">
       <p>Paginated admin listing of products in <strong>every</strong> status (both <code>draft</code> and <code>published</code>), newest first. Same product response shape as the public endpoints (including <code>sales_count</code> and per-variant <code>stock</code>).</p>
-      <div class="note">Addressed by the literal path <code>/products/admin</code>. Because the public <code>/products/{uuid}</code> route only matches hex/hyphen segments, <code>admin</code> never shadows it.</div>
+      <div class="note">Addressed by the literal path <code>/products/admin</code>. The public <code>/products/{uuid}</code> route matches only a legacy hex/hyphen segment or a <code>bdp-</code>-prefixed public code, so <code>admin</code> (and <code>slug</code>) can never shadow it.</div>
       <div class="block-label">Query Parameters</div>
       <table>
         <tr><th>Param</th><th>Type</th><th>Description</th></tr>
@@ -1684,7 +1778,7 @@ GET /api/v1/catalog/products?available=true</pre>
         <tr><td>category_id</td><td class="opt">optional integer</td><td>Filter by category ID. Must exist — 422 otherwise.</td></tr>
         <tr><td>min_price</td><td class="opt">optional integer</td><td>Minimum default-variant <code>base_price</code> in rials. ≥ 0.</td></tr>
         <tr><td>max_price</td><td class="opt">optional integer</td><td>Maximum default-variant <code>base_price</code> in rials. ≥ 0.</td></tr>
-        <tr><td>search</td><td class="opt">optional string</td><td>Free-text on <code>title</code>, <code>description</code>, <code>slug</code>, or variant <code>sku</code>. Max 255 chars.</td></tr>
+        <tr><td>search</td><td class="opt">optional string</td><td>Free-text contains-match on <code>title</code>, <code>description</code>, <code>slug</code>, or variant <code>sku</code>. Max 255 chars. <strong>Public-code exact search is deliberately not applied here</strong> — the admin list keeps its substring behaviour.</td></tr>
         <tr><td>sort</td><td class="opt">optional string</td><td><code>cheapest</code> / <code>most_expensive</code> (default variant <code>base_price</code>) or <code>most_sold</code> (<code>sales_count</code>). Omitted → newest first. Any other value → 422.</td></tr>
       </table>
       <div class="block-label">Response — 200 OK</div>
@@ -1749,7 +1843,7 @@ GET /api/v1/catalog/products?available=true</pre>
         <tr><td>variants.*.media_id</td><td class="opt">optional per item</td><td>Pre-uploaded media ID for a variant-specific image.</td></tr>
         <tr><td>variants.*.attributes</td><td class="opt">optional per item</td><td>Free-form key-value object, e.g. <code>{"رنگ": "مشکی", "حافظه": "256GB"}</code>.</td></tr>
       </table>
-      <div class="note"><strong>SKU is server-generated:</strong> Do <strong>not</strong> send a <code>sku</code> field — it is assigned automatically by the server (format <code>bdp{productId}-v{n}</code>) and any client-supplied value is ignored.</div>
+      <div class="note"><strong>SKU is server-generated:</strong> Do <strong>not</strong> send a <code>sku</code> field — it is assigned automatically by the server (format <code>bdv-XXXXXX</code>, see <a href="#public-codes">Public Codes</a>) and any client-supplied value is ignored.</div>
       <div class="note"><strong>Single-default invariant:</strong> When <code>variants</code> is provided, exactly one item must have <code>"is_default": true</code>. Sending zero or multiple defaults returns <strong>422</strong> with a validation error on the <code>variants</code> key. The individual variant routes handle this the same way.</div>
       <div class="block-label">Example A — Product shell only (add variants separately later)</div>
       <pre>{
@@ -2012,7 +2106,7 @@ GET /api/v1/catalog/products?available=true</pre>
         <tr><td>media_id</td><td class="opt">optional integer</td><td>Pre-uploaded media ID for a variant-specific image. Mutually exclusive with <code>variant_image</code>.</td></tr>
         <tr><td>variant_image</td><td class="opt">optional file</td><td>Variant image file (inline upload). JPEG/PNG/WebP, max 4 MB. Mutually exclusive with <code>media_id</code>.</td></tr>
       </table>
-      <div class="note"><strong>SKU is server-generated:</strong> Do <strong>not</strong> send a <code>sku</code> field — the server assigns it automatically (format <code>bdp{productId}-v{n}</code>). It is returned in the response below.</div>
+      <div class="note"><strong>SKU is server-generated:</strong> Do <strong>not</strong> send a <code>sku</code> field — the server assigns it automatically (format <code>bdv-XXXXXX</code>, see <a href="#public-codes">Public Codes</a>). It is returned in the response below.</div>
       <pre>{
   <span class="key">"type"</span>:            <span class="str">"color"</span>,
   <span class="key">"base_price"</span>:     <span class="num">89000000</span>,
@@ -2571,6 +2665,7 @@ await guestCartRequest('GET',  '/');
       <div class="block-label">Response — 201 Created</div>
       <pre>{
   <span class="key">"id"</span>:                  <span class="num">42</span>,
+  <span class="key">"public_code"</span>:                  <span class="str">"bdo-Q8M2XC"</span>,
   <span class="key">"status"</span>:              <span class="str">"pending"</span>,
   <span class="key">"total_amount"</span>:        <span class="num">267000000</span>,   <span class="comment">// rials, integer</span>
   <span class="key">"shipping_cost"</span>:       <span class="num">0</span>,
@@ -2657,12 +2752,19 @@ await guestCartRequest('GET',  '/');
         <tr><th>Parameter</th><th>Type</th><th>Default</th><th>Description</th></tr>
         <tr><td>per_page</td><td class="opt">integer</td><td>15</td><td>Items per page, clamped 1–100.</td></tr>
         <tr><td>page</td><td class="opt">integer</td><td>1</td><td>Page number.</td></tr>
+        <tr><td>search</td><td class="opt">string</td><td>—</td><td>An exact order public code (<code>bdo-XXXXXX</code>), case-insensitive and whitespace-trimmed. Partial codes never match.</td></tr>
       </table>
+      <div class="note"><strong>Search is always scoped to you.</strong> The authenticated-user filter is applied
+        unconditionally and is never widened by <code>search</code>. Another customer's real code returns an empty page
+        that is indistinguishable from a code which does not exist, so the parameter cannot be used to discover whether
+        someone else's order exists. Ordering and pagination are unchanged when no term is supplied. See
+        <a href="#public-codes">Public Codes</a>.</div>
       <div class="block-label">Response — 200 OK</div>
       <pre>{
   <span class="key">"data"</span>: [
     {
       <span class="key">"id"</span>:                 <span class="num">42</span>,
+      <span class="key">"public_code"</span>:                 <span class="str">"bdo-Q8M2XC"</span>,
       <span class="key">"status"</span>:             <span class="str">"pending"</span>,
       <span class="key">"total_amount"</span>:       <span class="num">267000000</span>,
       <span class="key">"shipping_cost"</span>:      <span class="num">0</span>,
@@ -2708,6 +2810,7 @@ await guestCartRequest('GET',  '/');
       <div class="block-label">Response — 200 OK</div>
       <pre>{
   <span class="key">"id"</span>:                  <span class="num">42</span>,
+  <span class="key">"public_code"</span>:                  <span class="str">"bdo-Q8M2XC"</span>,
   <span class="key">"status"</span>:              <span class="str">"cancelled"</span>,
   <span class="key">"total_amount"</span>:        <span class="num">267000000</span>,
   <span class="key">"shipping_cost"</span>:       <span class="num">0</span>,
@@ -2771,6 +2874,7 @@ await guestCartRequest('GET',  '/');
   <span class="key">"data"</span>: [
     {
       <span class="key">"id"</span>:           <span class="num">42</span>,
+      <span class="key">"public_code"</span>:           <span class="str">"bdo-Q8M2XC"</span>,
       <span class="key">"status"</span>:       <span class="str">"pending"</span>,
       <span class="key">"total_amount"</span>: <span class="num">267000000</span>,   <span class="comment">// rials, integer</span>
       <span class="key">"created_at"</span>:   <span class="str">"2026-06-26T12:34:56.000000Z"</span>,
@@ -2803,6 +2907,7 @@ await guestCartRequest('GET',  '/');
       <pre>{
   <span class="key">"data"</span>: {
     <span class="key">"id"</span>:              <span class="num">42</span>,
+    <span class="key">"public_code"</span>:              <span class="str">"bdo-Q8M2XC"</span>,
     <span class="key">"status"</span>:          <span class="str">"paid"</span>,
     <span class="key">"total_amount"</span>:    <span class="num">267000000</span>,
     <span class="key">"shipping_cost"</span>:   <span class="num">0</span>,
@@ -2819,7 +2924,7 @@ await guestCartRequest('GET',  '/');
     <span class="key">"shipping_address"</span>:  { <span class="comment">/* snapshotted address object */</span> },
     <span class="key">"shipment_snapshot"</span>: { <span class="comment">/* immutable method/cost/address/slot selection */</span> },
     <span class="key">"shipment"</span>: {                <span class="comment">// live status via ShipmentManagerInterface; null until paid</span>
-      <span class="key">"public_code"</span>:     <span class="str">"SH-X0T3K9ABCD"</span>,
+      <span class="key">"public_code"</span>:     <span class="str">"bds-Z9C3TR"</span>,
       <span class="key">"status"</span>:          <span class="str">"handed_to_post"</span>,
       <span class="key">"status_label"</span>:    <span class="str">"Handed to postal service"</span>,
       <span class="key">"method_code"</span>:     <span class="str">"post_standard"</span>,
@@ -3069,18 +3174,28 @@ if (canCancelOrders && order.status === 'pending') renderCancelButton();</pre>
 }</pre>
       <div class="block-label">Response — 200 OK (online)</div>
       <pre>{
-  <span class="key">"type"</span>:         <span class="str">"online"</span>,
-  <span class="key">"payment_id"</span>:   <span class="num">7</span>,
-  <span class="key">"status"</span>:       <span class="str">"initiated"</span>,
-  <span class="key">"redirect_url"</span>: <span class="str">"https://www.zarinpal.com/pg/StartPay/A0000000000000000000000000000012345"</span>
+  <span class="key">"type"</span>:                <span class="str">"online"</span>,
+  <span class="key">"payment_id"</span>:          <span class="num">7</span>,
+  <span class="key">"payment_public_code"</span>: <span class="str">"bdt-W4N7KP"</span>,
+  <span class="key">"order_public_code"</span>:   <span class="str">"bdo-Q8M2XC"</span>,
+  <span class="key">"status"</span>:              <span class="str">"initiated"</span>,
+  <span class="key">"redirect_url"</span>:        <span class="str">"https://www.zarinpal.com/pg/StartPay/A0000000000000000000000000000012345"</span>
 }</pre>
       <div class="block-label">Response — 200 OK (in_person)</div>
       <pre>{
-  <span class="key">"type"</span>:         <span class="str">"in_person"</span>,
-  <span class="key">"payment_id"</span>:   <span class="num">8</span>,
-  <span class="key">"status"</span>:       <span class="str">"pending_cash"</span>,
-  <span class="key">"redirect_url"</span>: <span class="null-val">null</span>
+  <span class="key">"type"</span>:                <span class="str">"in_person"</span>,
+  <span class="key">"payment_id"</span>:          <span class="num">8</span>,
+  <span class="key">"payment_public_code"</span>: <span class="str">"bdt-J7F7A9"</span>,
+  <span class="key">"order_public_code"</span>:   <span class="str">"bdo-Q8M2XC"</span>,
+  <span class="key">"status"</span>:              <span class="str">"pending_cash"</span>,
+  <span class="key">"redirect_url"</span>:        <span class="null-val">null</span>
 }</pre>
+      <div class="note"><strong>Naming:</strong> this response is a plain object carrying both a payment and an order, so
+        the codes are prefixed — <code>payment_public_code</code> and <code>order_public_code</code> — rather than a bare
+        <code>public_code</code> that would not say which entity it names. Payment <em>resources</em> elsewhere expose the
+        unambiguous <code>public_code</code>. The numeric <code>payment_id</code> is unchanged, and so are the gateway
+        authority and <code>transaction_reference</code>: the public code is a support reference, never a gateway
+        identifier. See <a href="#public-codes">Public Codes</a>.</div>
       <div class="block-label">Error Responses</div>
       <table>
         <tr><th>Status</th><th>Condition</th></tr>
@@ -3112,7 +3227,13 @@ if (canCancelOrders && order.status === 'pending') renderCancelButton();</pre>
         <tr><td>Status</td><td class="opt">string</td><td><code>OK</code> when the shopper approved payment; anything else is treated as a cancellation. <strong>Never used to decide the displayed success state</strong> — that comes from the persisted, verified Payment record.</td></tr>
       </table>
       <div class="block-label">Response — 200 OK (HTML)</div>
-      <p>The rendered page shows درگاه پرداختی (gateway), تاریخ تراکنش (date), شماره پیگیری (transaction reference) and the success/failure state, all read from the stored Payment row. Unknown values render as <code>نامشخص</code> / <code>—</code>; internal messages, stack traces, gateway credentials and raw callback payloads are never shown.</p>
+      <p>The rendered page shows درگاه پرداختی (gateway), تاریخ تراکنش (date), <strong>کد سفارش</strong> (the order's
+        <code>bdo-XXXXXX</code> public code), <strong>کد پرداخت</strong> (the payment's <code>bdt-XXXXXX</code> public
+        code), شماره پیگیری (the gateway's own transaction reference, kept for provider-side reconciliation) and the
+        success/failure state — all read from the stored Payment row and, for the order code, resolved through the Order
+        contract. The two public codes are what a shopper quotes to support. Unknown values render as
+        <code>نامشخص</code> / <code>—</code>; internal messages, stack traces, gateway credentials and raw callback
+        payloads are never shown.</p>
       <table>
         <tr><th>Case</th><th>Rendered state</th></tr>
         <tr><td>Verified &amp; captured</td><td class="opt">Success page; order marked paid (inventory committed + shipment activated exactly once, idempotent on repeat callbacks)</td></tr>
@@ -3189,8 +3310,12 @@ if (canCancelOrders && order.status === 'pending') renderCancelButton();</pre>
     <div class="endpoint-header"><span class="method get">GET</span><span class="endpoint-path">/shipments/{publicCode}</span><span class="badge auth">Requires auth:sanctum</span><span class="badge rate">throttle:api</span></div>
     <div class="endpoint-body">
       <p>Also available as <code>GET /orders/{order}/shipment</code>. The owner (permission <code>shipment.view-own</code>) or an operator (<code>shipment.view-admin</code>) may view it; anyone else gets 403. A shipment exists only after the order is <strong>paid</strong>.</p>
+      <div class="note"><strong>Two code formats resolve here.</strong> New shipments are issued
+        <code>bds-XXXXXX</code>; shipments created before that scheme kept their <code>SH-XXXXXXXXXX</code> code and were
+        never rewritten. Both are accepted on this route and on every <code>/admin/shipments/{publicCode}/*</code> action,
+        so treat <code>id</code> as an opaque string. See <a href="#public-codes">Public Codes</a>.</div>
       <pre>{
-  <span class="key">"id"</span>: <span class="str">"SH-X0T3K9ABCD"</span>, <span class="key">"order_id"</span>: <span class="num">42</span>,
+  <span class="key">"id"</span>: <span class="str">"bds-Z9C3TR"</span>, <span class="key">"order_id"</span>: <span class="num">42</span>,
   <span class="key">"method_code"</span>: <span class="str">"post_standard"</span>, <span class="key">"method_type"</span>: <span class="str">"postal"</span>, <span class="key">"shipping_cost"</span>: <span class="num">850000</span>,
   <span class="key">"status"</span>: <span class="str">"handed_to_post"</span>, <span class="key">"status_label"</span>: <span class="str">"Handed to postal service"</span>,
   <span class="key">"tracking_number"</span>: <span class="str">"TRK-999"</span>, <span class="key">"delivery_slot"</span>: <span class="null-val">null</span>, <span class="key">"pickup_location"</span>: <span class="null-val">null</span>,
@@ -3200,7 +3325,7 @@ if (canCancelOrders && order.status === 'pending') renderCancelButton();</pre>
   </div>
 
   <h3 id="shipment-admin">Admin / Operator Workflow</h3>
-  <p>Explicit business-action endpoints (permission-gated via <code>$user-&gt;can(...)</code>, <strong>403 before validation</strong>). There is no generic "set status" endpoint — each action validates its own method-specific transition and calling one out of order returns <strong>422</strong>, not 409. All routes require <code>auth:sanctum</code> + <code>throttle:api</code> and share the base path <code>/admin/shipments/{publicCode}</code> unless noted otherwise. <code>{publicCode}</code> is the same code shown to customers, e.g. <code>SH-X0T3K9ABCD</code>.</p>
+  <p>Explicit business-action endpoints (permission-gated via <code>$user-&gt;can(...)</code>, <strong>403 before validation</strong>). There is no generic "set status" endpoint — each action validates its own method-specific transition and calling one out of order returns <strong>422</strong>, not 409. All routes require <code>auth:sanctum</code> + <code>throttle:api</code> and share the base path <code>/admin/shipments/{publicCode}</code> unless noted otherwise. <code>{publicCode}</code> is the same code shown to customers, e.g. <code>bds-Z9C3TR</code> (or a legacy <code>SH-XXXXXXXXXX</code> code).</p>
   <table>
     <tr><th>Action (POST)</th><th>Permission</th><th>Transition</th><th>Body</th></tr>
     <tr><td><code>/start-preparing</code></td><td>shipment.start-preparing</td><td>pending → preparing (order → processing)</td><td><code>note?</code></td></tr>
@@ -3246,7 +3371,7 @@ if (canCancelOrders && order.status === 'pending') renderCancelButton();</pre>
       <pre>{
   <span class="key">"data"</span>: [
     {
-      <span class="key">"id"</span>: <span class="str">"SH-X0T3K9ABCD"</span>, <span class="key">"order_id"</span>: <span class="num">42</span>,
+      <span class="key">"id"</span>: <span class="str">"bds-Z9C3TR"</span>, <span class="key">"order_id"</span>: <span class="num">42</span>,
       <span class="key">"method_code"</span>: <span class="str">"local_delivery"</span>, <span class="key">"method_type"</span>: <span class="str">"local_delivery"</span>, <span class="key">"shipping_cost"</span>: <span class="num">300000</span>,
       <span class="key">"status"</span>: <span class="str">"ready_for_dispatch"</span>, <span class="key">"status_label"</span>: <span class="str">"Ready for dispatch"</span>,
       <span class="key">"tracking_number"</span>: <span class="null-val">null</span>,
@@ -3832,20 +3957,20 @@ async function deleteWorkingPeriod(token, id) {
     <p>Every product variant may configure <code>max_quantity_per_order</code>. It limits that exact SKU inside one cart and resulting Order. <code>null</code> means no special Catalog limit; configured values must be whole integers of at least <code>1</code>. Previous, paid, cancelled, pending, or other Orders are never counted. Inventory stock is independent and may impose a lower maximum.</p>
     <h3>Variant create and update</h3>
     <p>The field is accepted by standalone variant create/update, nested <code>variants[]</code> during Product creation, and variant upsert during Product update. Explicit <code>null</code> clears it. Existing Catalog permissions apply.</p>
-    <pre>{ "sku": "bdp12-v3", "base_price": 125000, "max_quantity_per_order": 5 }</pre>
+    <pre>{ "sku": "bdv-R7P4NZ", "base_price": 125000, "max_quantity_per_order": 5 }</pre>
     <table><tr><th>Input</th><th>Result</th></tr><tr><td><code>null</code> or omitted</td><td>No special per-order limit</td></tr><tr><td>Whole integer ≥ 1</td><td>Accepted</td></tr><tr><td>0, negative, float, decimal string</td><td>422 validation error</td></tr></table>
     <h3>Product and variant responses</h3>
-    <pre>{ "sku": "bdp12-v3", "stock": 18, "max_quantity_per_order": 5, "effective_max_quantity": 5 }</pre>
+    <pre>{ "sku": "bdv-R7P4NZ", "stock": 18, "max_quantity_per_order": 5, "effective_max_quantity": 5 }</pre>
     <p><code>effective_max_quantity</code> is the lower of stock and the configured limit, or current stock when the limit is null. Response values are advisory; mutations reload authoritative Catalog and Inventory state.</p>
     <h3>Cart add, update, merge, and item response</h3>
     <p><code>POST /api/v1/cart/items</code> validates existing + incoming quantity. <code>PATCH /api/v1/cart/items/{itemId}</code> validates the submitted final quantity. Guest and authenticated carts reject excess with 422 and remain unchanged.</p>
-    <pre>{ "message": "The maximum allowed quantity for SKU bdp12-v3 is 5 per order.", "errors": { "quantity": ["You can add a maximum of 5 units of this item to one order."] } }</pre>
+    <pre>{ "message": "The maximum allowed quantity for SKU bdv-R7P4NZ is 5 per order.", "errors": { "quantity": ["You can add a maximum of 5 units of this item to one order."] } }</pre>
     <p><code>POST /api/v1/cart/merge</code> sums duplicate SKUs and clamps to the lower of combined quantity, available stock, and the configured limit. Its response shape is unchanged.</p>
-    <pre>{ "sku": "bdp12-v3", "quantity": 3, "available_stock": 18, "max_quantity_per_order": 5, "effective_max_quantity": 5, "remaining_addable_quantity": 2, "quantity_valid": true }</pre>
+    <pre>{ "sku": "bdv-R7P4NZ", "quantity": 3, "available_stock": 18, "max_quantity_per_order": 5, "effective_max_quantity": 5, "remaining_addable_quantity": 2, "quantity_valid": true }</pre>
     <p>Lowering a limit does not rewrite existing carts; reads return <code>quantity_valid: false</code> until the customer reduces the quantity.</p>
     <h3>Order checkout and snapshot</h3>
     <p><code>POST /api/v1/orders</code> aggregates all lines by SKU and reloads current limits before any Order mutation, Inventory reservation, local-delivery hold, or Cart clearing. A violation returns 422 and changes nothing.</p>
-    <pre>{ "message": "The given data was invalid.", "errors": { "items.bdp12-v3.quantity": ["This item is limited to 5 units per order. Your cart currently contains 8."] } }</pre>
+    <pre>{ "message": "The given data was invalid.", "errors": { "items.bdv-R7P4NZ.quantity": ["This item is limited to 5 units per order. Your cart currently contains 8."] } }</pre>
     <p>Order items expose nullable <code>max_quantity_per_order_snapshot</code>. It records the rule at checkout; later Catalog changes do not alter historical Orders and the snapshot never validates future Orders.</p>
   </section>
 </main>

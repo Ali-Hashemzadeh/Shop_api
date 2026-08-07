@@ -12,6 +12,8 @@ class OrderDTO
 {
     public function __construct(
         public readonly int $id,
+        /** Customer-facing code (`bdo-XXXXXX`); the integer id is unchanged. */
+        public readonly ?string $publicCode,
         public readonly int $userId,
         public readonly OrderStatus $status,
         public readonly int $totalAmount,
@@ -33,6 +35,7 @@ class OrderDTO
     {
         return new self(
             id: $order->id,
+            publicCode: $order->public_code,
             userId: $order->user_id,
             status: OrderStatus::from($order->status),
             totalAmount: $order->total_amount,

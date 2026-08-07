@@ -59,6 +59,7 @@ class HandleZarinpalCallbackAction
                     Event::dispatch(new PaymentFailedEvent(
                         orderId: $order->id,
                         userId: $order->userId,
+                        orderPublicCode: $order->publicCode,
                     ));
                 }
 

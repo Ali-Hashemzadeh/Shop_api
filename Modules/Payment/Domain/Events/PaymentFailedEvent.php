@@ -14,5 +14,7 @@ class PaymentFailedEvent
     public function __construct(
         public readonly int $orderId,
         public readonly int $userId,
+        /** Customer-facing code (`bdo-XXXXXX`), alongside — not replacing — the id. */
+        public readonly ?string $orderPublicCode = null,
     ) {}
 }

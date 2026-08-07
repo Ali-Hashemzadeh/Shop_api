@@ -47,6 +47,7 @@ class AdminCancelOrderAction
             Event::dispatch(new OrderCancelledEvent(
                 orderId: $order->id,
                 userId: $order->user_id,
+                orderPublicCode: $order->public_code,
             ));
 
             $items = $order->items->map(fn (OrderItem $item) => OrderItemDTO::fromModel($item))->all();

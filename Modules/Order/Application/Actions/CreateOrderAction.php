@@ -90,7 +90,10 @@ class CreateOrderAction
                 $this->cancelOrder->releaseAndCancel($pending);
             }
 
-            $order = Order::create([
+            // createWithPublicCode: the `bdo-` code is assigned by the model hook
+            // before the insert, and retried here if the unique index rejects a
+            // concurrent duplicate.
+            $order = Order::createWithPublicCode([
                 'user_id' => $userId,
                 'status' => 'pending',
                 'total_amount' => $subtotal + $shippingCost,

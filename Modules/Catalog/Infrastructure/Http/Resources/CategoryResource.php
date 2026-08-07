@@ -16,6 +16,7 @@ class CategoryResource extends JsonResource
 
         return [
             'id' => $dto->id,
+            'public_code' => $dto->publicCode,
             'name' => $dto->name,
             'slug' => $dto->slug,
             'is_active' => $dto->isActive,

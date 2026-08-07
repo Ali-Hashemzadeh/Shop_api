@@ -15,8 +15,17 @@ interface CatalogManagerInterface
 
     public function findCategory(int $id): ?CategoryDTO;
 
-    /** @return LengthAwarePaginator<CategoryDTO> */
-    public function getActiveRootCategories(int $perPage = 15): LengthAwarePaginator;
+    /**
+     * Active categories for the storefront.
+     *
+     * Supported keys in $filters:
+     *   - search (string) — an exact `bdc-XXXXXX` public code (case-insensitive,
+     *     matched on categories.public_code at any depth), otherwise LIKE on
+     *     name or slug. Without a search term the result is the root menu only.
+     *
+     * @return LengthAwarePaginator<CategoryDTO>
+     */
+    public function getActiveRootCategories(array $filters = [], int $perPage = 15): LengthAwarePaginator;
 
     public function createCategory(array $data): CategoryDTO;
 
@@ -58,7 +67,12 @@ interface CatalogManagerInterface
      *   - brand_id     (int)    — exact match on brand_id
      *   - min_price    (int)    — default variant base_price >= value
      *   - max_price    (int)    — default variant base_price <= value
-     *   - search       (string) — LIKE %value% on title, description, OR brand name
+     *   - search       (string) — an exact `bdp-XXXXXX` product code (matched on
+     *                             products.uuid) or `bdv-XXXXXX` variant code
+     *                             (matched on product_variants.sku, returning the
+     *                             owning product), both case-insensitive and
+     *                             whole-string; anything else is LIKE %value% on
+     *                             title, description, OR brand name
      *   - sort         (string) — cheapest | most_expensive (default variant base_price) | most_sold (sales_count desc)
      *
      * @return LengthAwarePaginator<ProductDTO>

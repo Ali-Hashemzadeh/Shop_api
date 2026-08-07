@@ -18,6 +18,7 @@ class PaymentResource extends JsonResource
 
         return [
             'id' => $dto->id,
+            'public_code' => $dto->publicCode,
             'order_id' => $dto->orderId,
             'method_type' => $dto->methodType->value,
             'gateway' => $dto->gateway,

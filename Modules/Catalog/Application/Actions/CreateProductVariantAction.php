@@ -36,9 +36,6 @@ class CreateProductVariantAction
         }
 
         return DB::transaction(function () use ($productId, $data, $variantImage): ProductVariantDTO {
-            $existingCount = ProductVariant::where('product_id', $productId)->lockForUpdate()->count();
-            $sku = 'bdp'.$productId.'-'.($existingCount + 1).random_int(10000, 99999);
-
             $mediaId = $this->resolveMediaId($variantImage, $data['media_id'] ?? null);
             $isDefault = (bool) ($data['is_default'] ?? false);
 
@@ -50,8 +47,8 @@ class CreateProductVariantAction
                     ->update(['is_default' => false]);
             }
 
+            // No `sku` key: Catalog mints it (bdv-XXXXXX) in createProductVariant.
             return $this->catalog->createProductVariant($productId, [
-                'sku' => $sku,
                 'type' => $data['type'],
                 'is_default' => $isDefault,
                 'base_price' => (int) $data['base_price'],

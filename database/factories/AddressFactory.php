@@ -14,6 +14,10 @@ class AddressFactory extends Factory
     public function definition(): array
     {
         return [
+            // Assigned here rather than left to the model's creating hook, so the
+            // factory still produces a valid address when a caller disables model
+            // events (seeders run that way).
+            'public_code' => Address::generateUniquePublicCode(),
             'user_id' => 1, // or create a user factory and call ->for(User::factory())
             'province_id' => Province::factory(),
             'city_id' => City::factory(),

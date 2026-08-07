@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace Modules\Shipment\Domain\Models;
 
+use App\Support\HasPublicCode;
+use App\Support\PublicCodeEntity;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Support\Str;
 
 class Shipment extends Model
 {
+    use HasPublicCode;
+
     protected $fillable = [
         'public_code',
         'order_id',
@@ -59,12 +62,16 @@ class Shipment extends Model
         return $this->hasMany(ShipmentStatusHistory::class)->orderBy('id');
     }
 
-    public static function generateUniquePublicCode(): string
+    /**
+     * Customer/admin-facing handle. New shipments get `bds-XXXXXX`; shipments
+     * issued under the earlier `SH-<10 random>` scheme keep their code forever
+     * and stay fully addressable — the route constraints accept both.
+     *
+     * generateUniquePublicCode() itself comes from HasPublicCode, which checks
+     * `shipments.public_code` and nothing else.
+     */
+    public static function publicCodeEntity(): PublicCodeEntity
     {
-        do {
-            $code = 'SH-'.strtoupper(Str::random(10));
-        } while (self::where('public_code', $code)->exists());
-
-        return $code;
+        return PublicCodeEntity::Shipment;
     }
 }

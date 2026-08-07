@@ -47,10 +47,10 @@ class ProductVariantsTest extends TestCase
             ->assertJsonPath('base_price', 4999)
             ->assertJsonPath('is_default', true);
 
-        // SKUs are auto-generated as bdp{productId}-{seq}{random} — assert the
-        // stable prefix and reuse the returned value for the DB assertion.
+        // SKUs are server-generated public codes (bdv-XXXXXX over the human-safe
+        // alphabet) — assert the shape and reuse the value for the DB assertion.
         $sku = $response->json('sku');
-        $this->assertStringStartsWith('bdp'.$this->product->id.'-', $sku);
+        $this->assertMatchesRegularExpression('/^bdv-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{6}$/', $sku);
 
         $this->assertDatabaseHas('product_variants', [
             'sku' => $sku,
@@ -137,8 +137,9 @@ class ProductVariantsTest extends TestCase
             'type' => 'color', 'base_price' => 2000,
         ])->assertCreated()->json('sku');
 
-        $this->assertStringStartsWith('bdp'.$this->product->id.'-', $first);
-        $this->assertStringStartsWith('bdp'.$this->product->id.'-', $second);
+        $pattern = '/^bdv-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{6}$/';
+        $this->assertMatchesRegularExpression($pattern, $first);
+        $this->assertMatchesRegularExpression($pattern, $second);
         $this->assertNotSame($first, $second);
     }
 

@@ -71,7 +71,11 @@ class CategoriesController extends Controller
     public function indexRoots(IndexCategoriesRequest $request): AnonymousResourceCollection
     {
         $categories = $this->catalog->getActiveRootCategories(
-            $request->integer('per_page', 15)
+            array_filter(
+                ['search' => $request->string('search')->trim()->toString() ?: null],
+                fn ($v) => $v !== null,
+            ),
+            $request->integer('per_page', 15),
         );
 
         return CategoryResource::collection($categories);

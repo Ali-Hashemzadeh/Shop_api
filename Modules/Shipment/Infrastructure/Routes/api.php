@@ -14,6 +14,10 @@ Route::middleware(['api', 'auth:sanctum', 'throttle:api'])
         Route::get('shipment/methods', [ShipmentMethodController::class, 'index']);
         Route::get('shipment/delivery-slots', [ShipmentMethodController::class, 'deliverySlots']);
 
+        // `[A-Za-z0-9\-]+` deliberately spans both public-code generations: the new
+        // `bds-XXXXXX` and the legacy `SH-XXXXXXXXXX` codes issued before it.
+        // Existing shipment codes are never rewritten, so both must keep resolving —
+        // do not narrow this pattern to the new format. Same for the admin routes below.
         Route::get('shipments/{publicCode}', [ShipmentController::class, 'show'])
             ->where('publicCode', '[A-Za-z0-9\-]+');
         Route::get('orders/{order}/shipment', [ShipmentController::class, 'showForOrder'])

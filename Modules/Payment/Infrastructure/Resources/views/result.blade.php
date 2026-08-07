@@ -10,12 +10,17 @@
     and the breadcrumb home link navigate to the configured frontend app.
 
     View data (all derived from the persisted Payment record):
-        $success          bool     true = captured/verified, false = failed
-        $gateway          ?string  درگاه پرداختی
-        $date             ?string  تاریخ تراکنش
-        $trackId          ?string  شماره پیگیری
-        $frontendHomeUrl  ?string  frontend home URL (config only)
-        $frontendOrderUrl ?string  frontend order URL (null when no order)
+        $success            bool     true = captured/verified, false = failed
+        $gateway            ?string  درگاه پرداختی
+        $date               ?string  تاریخ تراکنش
+        $trackId            ?string  شماره پیگیری — the gateway's own reference
+        $orderPublicCode    ?string  کد سفارش (bdo-XXXXXX)
+        $paymentPublicCode  ?string  کد پرداخت (bdt-XXXXXX)
+        $frontendHomeUrl    ?string  frontend home URL (config only)
+        $frontendOrderUrl   ?string  frontend order URL (null when no order)
+
+    The two public codes are what a customer quotes to support; the gateway
+    reference is kept alongside them for provider-side reconciliation.
 
     Scope: card + breadcrumb only. The template's header/footer are omitted
     deliberately — they depend on scripts/app.js and swiper.css, which do not
@@ -133,6 +138,14 @@
                     <li>
                         <span>تاریخ تراکنش :</span>
                         <span class="text-gray-400">{{ $date ?: '—' }}</span>
+                    </li>
+                    <li>
+                        <span>کد سفارش :</span>
+                        <span class="text-gray-400">{{ $orderPublicCode ?: 'نامشخص' }}</span>
+                    </li>
+                    <li>
+                        <span>کد پرداخت :</span>
+                        <span class="text-gray-400">{{ $paymentPublicCode ?: 'نامشخص' }}</span>
                     </li>
                     <li>
                         <span>شماره پیگیری :</span>

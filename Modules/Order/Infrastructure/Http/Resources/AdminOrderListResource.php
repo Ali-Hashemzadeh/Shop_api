@@ -24,6 +24,7 @@ class AdminOrderListResource extends JsonResource
 
         return [
             'id' => $dto->id,
+            'public_code' => $dto->publicCode,
             'status' => $dto->status->value,
             'total_amount' => $dto->totalAmount,
             'created_at' => $dto->createdAt->toISOString(),

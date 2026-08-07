@@ -28,7 +28,7 @@ class SendPaymentFailedNotification implements ShouldHandleEventsAfterCommit
             type: NotificationType::PAYMENT_FAILED->value,
             title: 'پرداخت ناموفق',
             message: 'پرداخت سفارش شما ناموفق بود.',
-            data: ['order_id' => $event->orderId],
+            data: ['order_id' => $event->orderId, 'order_public_code' => $event->orderPublicCode],
             channels: [NotificationChannel::DATABASE],
         ));
     }

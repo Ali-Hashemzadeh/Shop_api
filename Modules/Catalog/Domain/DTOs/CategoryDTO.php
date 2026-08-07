@@ -8,6 +8,8 @@ class CategoryDTO
 {
     public function __construct(
         public readonly int $id,
+        /** Customer-facing code (`bdc-XXXXXX`); the integer id is unchanged. */
+        public readonly ?string $publicCode,
         public readonly string $name,
         public readonly string $slug,
         public readonly bool $isActive,
@@ -25,6 +27,7 @@ class CategoryDTO
     ): self {
         return new self(
             id: $category->id,
+            publicCode: $category->public_code,
             name: $category->name,
             slug: $category->slug,
             isActive: $category->is_active,

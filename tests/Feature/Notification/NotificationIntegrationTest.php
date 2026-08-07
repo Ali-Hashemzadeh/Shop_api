@@ -142,7 +142,10 @@ class NotificationIntegrationTest extends TestCase
         $this->assertNotNull($message);
         $this->assertSame('payment_success', $message->template);
         $this->assertSame('09121234567', $message->receiver);
-        $this->assertSame(['OrderId' => $order->id], $message->parameters);
+        // The parameter name stays `OrderId` (it is the provider-side template
+        // variable), but the value is now the customer-facing code.
+        $this->assertMatchesRegularExpression('/^bdo-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{6}$/', $order->public_code);
+        $this->assertSame(['OrderId' => $order->public_code], $message->parameters);
 
         $this->assertDatabaseHas('notification_deliveries', ['channel' => 'sms', 'status' => 'sent']);
     }
@@ -199,7 +202,7 @@ class NotificationIntegrationTest extends TestCase
             'user_id' => $admin->id,
             'type' => 'admin_order_paid',
             'title' => 'سفارش پرداخت شد',
-            'message' => "سفارش شماره {$order->id} پرداخت شد.",
+            'message' => "سفارش شماره {$order->public_code} پرداخت شد.",
         ]);
 
         // Admin notification is in-app only — no second SMS.
@@ -283,7 +286,7 @@ class NotificationIntegrationTest extends TestCase
         $message = $this->sms->lastMessage();
         $this->assertNotNull($message);
         $this->assertSame('order_cancelled', $message->template);
-        $this->assertSame(['OrderId' => $order->id], $message->parameters);
+        $this->assertSame(['OrderId' => $order->public_code], $message->parameters);
     }
 
     /** @test */

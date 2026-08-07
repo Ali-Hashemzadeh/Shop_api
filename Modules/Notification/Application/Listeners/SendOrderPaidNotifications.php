@@ -30,14 +30,20 @@ class SendOrderPaidNotifications implements ShouldHandleEventsAfterCommit
 
     public function handle(OrderPaidEvent $event): void
     {
+        // Anything a human reads quotes the public code; the numeric id stays in
+        // `data` because in-app deep links still resolve orders by id. The SMS
+        // parameter keeps the name `OrderId` — that name is the provider-side
+        // template variable, so renaming it would break configured templates.
+        $reference = $event->orderPublicCode ?? (string) $event->orderId;
+
         $this->notifications->send(new NotificationRequestDTO(
             userId: $event->userId,
             type: NotificationType::PAYMENT_SUCCESS->value,
             title: 'پرداخت موفق',
             message: 'پرداخت سفارش شما با موفقیت انجام شد.',
-            data: ['order_id' => $event->orderId],
+            data: ['order_id' => $event->orderId, 'order_public_code' => $event->orderPublicCode],
             channels: [NotificationChannel::DATABASE, NotificationChannel::SMS],
-            sms: new SmsPayloadDTO(NotificationTemplate::PAYMENT_SUCCESS, ['OrderId' => $event->orderId]),
+            sms: new SmsPayloadDTO(NotificationTemplate::PAYMENT_SUCCESS, ['OrderId' => $reference]),
         ));
 
         foreach ($this->identity->getAdminUserIds() as $adminId) {
@@ -45,8 +51,8 @@ class SendOrderPaidNotifications implements ShouldHandleEventsAfterCommit
                 userId: $adminId,
                 type: NotificationType::ADMIN_ORDER_PAID->value,
                 title: 'سفارش پرداخت شد',
-                message: "سفارش شماره {$event->orderId} پرداخت شد.",
-                data: ['order_id' => $event->orderId],
+                message: "سفارش شماره {$reference} پرداخت شد.",
+                data: ['order_id' => $event->orderId, 'order_public_code' => $event->orderPublicCode],
                 channels: [NotificationChannel::DATABASE],
             ));
         }

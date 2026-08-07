@@ -27,9 +27,12 @@ class SendOrderCancelledNotifications implements ShouldHandleEventsAfterCommit
             type: NotificationType::ORDER_CANCELLED->value,
             title: 'لغو سفارش',
             message: 'سفارش شما لغو شد.',
-            data: ['order_id' => $event->orderId],
+            // Numeric id kept for deep links; the code is what the SMS shows.
+            data: ['order_id' => $event->orderId, 'order_public_code' => $event->orderPublicCode],
             channels: [NotificationChannel::DATABASE, NotificationChannel::SMS],
-            sms: new SmsPayloadDTO(NotificationTemplate::ORDER_CANCELLED, ['OrderId' => $event->orderId]),
+            sms: new SmsPayloadDTO(NotificationTemplate::ORDER_CANCELLED, [
+                'OrderId' => $event->orderPublicCode ?? (string) $event->orderId,
+            ]),
         ));
     }
 }

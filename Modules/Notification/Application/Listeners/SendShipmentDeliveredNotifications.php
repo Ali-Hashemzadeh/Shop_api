@@ -27,9 +27,11 @@ class SendShipmentDeliveredNotifications implements ShouldHandleEventsAfterCommi
             type: NotificationType::SHIPMENT_DELIVERED->value,
             title: 'تحویل سفارش',
             message: 'سفارش شما تحویل داده شد.',
-            data: ['order_id' => $event->orderId],
+            data: ['order_id' => $event->orderId, 'order_public_code' => $event->orderPublicCode],
             channels: [NotificationChannel::DATABASE, NotificationChannel::SMS],
-            sms: new SmsPayloadDTO(NotificationTemplate::SHIPMENT_DELIVERED, ['OrderId' => $event->orderId]),
+            sms: new SmsPayloadDTO(NotificationTemplate::SHIPMENT_DELIVERED, [
+                'OrderId' => $event->orderPublicCode ?? (string) $event->orderId,
+            ]),
         ));
     }
 }

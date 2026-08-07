@@ -12,8 +12,9 @@ class ListAddresses
         private readonly AddressRepositoryInterface $addresses
     ) {}
 
-    public function handle(User $user): Collection
+    /** $search is an optional exact `bda-XXXXXX` code; ownership is always enforced. */
+    public function handle(User $user, ?string $search = null): Collection
     {
-        return $this->addresses->listForUser($user);
+        return $this->addresses->listForUser($user, $search);
     }
 }
