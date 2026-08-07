@@ -128,6 +128,16 @@ class EloquentOrderManager implements OrderManagerInterface
         return $order ? $this->toDTO($order) : null;
     }
 
+    public function findUserOrderByPublicCode(int $userId, string $publicCode): ?OrderDTO
+    {
+        $order = Order::with('items')
+            ->where('user_id', $userId)
+            ->where('public_code', PublicCodeGenerator::normalize($publicCode))
+            ->first();
+
+        return $order ? $this->toDTO($order) : null;
+    }
+
     public function getAdminOrders(array $filters = [], int $perPage = 15): LengthAwarePaginator
     {
         $query = Order::with('items')->orderByDesc('created_at');

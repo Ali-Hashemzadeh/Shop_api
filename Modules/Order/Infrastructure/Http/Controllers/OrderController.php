@@ -9,9 +9,11 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Modules\Order\Application\Actions\CancelOrderAction;
 use Modules\Order\Application\Actions\CreateOrderAction;
+use Modules\Order\Application\Actions\GetCustomerOrderDetailAction;
 use Modules\Order\Domain\Contracts\OrderManagerInterface;
 use Modules\Order\Domain\Exceptions\EmptyCartException;
 use Modules\Order\Infrastructure\Http\Requests\StoreOrderRequest;
+use Modules\Order\Infrastructure\Http\Resources\CustomerOrderDetailResource;
 use Modules\Order\Infrastructure\Http\Resources\OrderResource;
 use Modules\Shipment\Domain\Contracts\ShipmentManagerInterface;
 
@@ -20,6 +22,7 @@ class OrderController extends Controller
     public function __construct(
         private readonly CreateOrderAction $createOrder,
         private readonly CancelOrderAction $cancelOrder,
+        private readonly GetCustomerOrderDetailAction $getOrderDetail,
         private readonly OrderManagerInterface $manager,
         private readonly ShipmentManagerInterface $shipment,
     ) {}
@@ -60,6 +63,18 @@ class OrderController extends Controller
         );
 
         return response()->json(OrderResource::collection($paginator)->response()->getData(true));
+    }
+
+    public function show(Request $request, string $publicCode): JsonResponse
+    {
+        $detail = $this->getOrderDetail->handle(
+            userId: $request->user()->id,
+            publicCode: $publicCode,
+        );
+
+        abort_if($detail === null, 404, 'Order not found.');
+
+        return response()->json(new CustomerOrderDetailResource($detail));
     }
 
     public function cancel(Request $request, int $order): JsonResponse

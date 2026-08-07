@@ -180,6 +180,8 @@ Match the surrounding code. Concrete patterns used throughout:
 
 > Always re-check section 3 of `AGENT_CONTEXT.md` — it is the live ledger.
 
+Order customer detail is available at `GET /api/v1/orders/{publicCode}`: authenticated ownership is enforced in the exact Order query, and the endpoint-specific aggregate returns the existing Order/items plus all customer-safe Payment attempts and the full live Shipment/history without changing existing endpoints.
+
 | Module | Status | Notes |
 |---|---|---|
 | **Identity** | ✅ Complete | OTP + password auth (split-auth onboarding), profiles, RBAC, provinces/cities, addresses |

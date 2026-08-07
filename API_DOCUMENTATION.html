@@ -142,6 +142,7 @@
   <a href="#order-overview">Overview</a>
   <a href="#order-create">Place Order</a>
   <a href="#order-list">My Orders</a>
+  <a href="#order-detail">Order Detail</a>
   <a href="#order-cancel">Cancel Order</a>
 
   <div class="section-label">Admin — Orders</div>
@@ -2791,6 +2792,127 @@ await guestCartRequest('GET',  '/');
         <tr><td><code>completed</code></td><td>Local delivery <code>delivered</code> or pickup <code>picked_up</code> (neutral final state).</td></tr>
         <tr><td><code>cancelled</code></td><td>Cancelled (by user, by TTL expiry, or by a new checkout).</td></tr>
         <tr><td><code>failed</code></td><td>Payment or fulfilment failure.</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- GET /api/v1/orders/{publicCode} -->
+  <h3 id="order-detail">Order Detail</h3>
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/orders/{publicCode}</span>
+      <span class="badge auth">Requires auth:sanctum</span>
+      <span class="badge rate">throttle:api</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Returns one complete order owned by the authenticated customer. <code>{publicCode}</code> must be the exact Order public code in <code>bdo-XXXXXX</code> form (the namespace is deployment-configured); surrounding whitespace and letter case are normalized, but partial codes and numeric database IDs do not match.</p>
+      <div class="note"><strong>Ownership is part of the lookup.</strong> The query always combines the authenticated user's ID with the normalized public code. A missing code and another customer's real code both return the same <strong>404</strong>, so this endpoint cannot disclose whether another customer's order exists.</div>
+      <div class="note"><strong>Historical and live fulfillment data are separate.</strong> <code>shipment_snapshot</code> is the immutable checkout-time selection. <code>shipment</code> is the current live fulfillment record and is <code>null</code> until payment activates it. When present, it includes the complete status history.</div>
+      <div class="note"><strong>Payment attempts are plural.</strong> <code>payments</code> is always an array because an order may have multiple attempts. Every attempt is returned newest first (<code>created_at DESC</code>, then <code>id DESC</code>). Customer-safe fields are exposed; raw <code>gateway_response</code> and provider payloads are never returned.</div>
+      <div class="block-label">Response — 200 OK (no <code>data</code> envelope)</div>
+      <pre>{
+  <span class="key">"id"</span>:                         <span class="num">42</span>,
+  <span class="key">"public_code"</span>:                <span class="str">"bdo-Q8M2XC"</span>,
+  <span class="key">"status"</span>:                     <span class="str">"paid"</span>,
+  <span class="key">"total_amount"</span>:               <span class="num">267000000</span>,
+  <span class="key">"shipping_cost"</span>:                 <span class="num">850000</span>,
+  <span class="key">"tax_amount"</span>:                        <span class="num">0</span>,
+  <span class="key">"shipment_method_id"</span>:         <span class="null-val">null</span>,
+  <span class="key">"shipment_method_code"</span>:       <span class="str">"post_standard"</span>,
+  <span class="key">"shipping_address"</span>: {
+    <span class="key">"id"</span>: <span class="num">3</span>, <span class="key">"title"</span>: <span class="str">"Home"</span>, <span class="key">"province_id"</span>: <span class="num">8</span>, <span class="key">"city_id"</span>: <span class="num">114</span>,
+    <span class="key">"postal_code"</span>: <span class="str">"1234567890"</span>, <span class="key">"address"</span>: <span class="str">"No. 12, Azadi St., Tehran"</span>
+  },
+  <span class="key">"shipment_snapshot"</span>: {
+    <span class="key">"method_code"</span>: <span class="str">"post_standard"</span>, <span class="key">"method_title"</span>: <span class="str">"Standard Post"</span>, <span class="key">"method_type"</span>: <span class="str">"postal"</span>,
+    <span class="key">"shipping_cost"</span>: <span class="num">850000</span>, <span class="key">"requires_address"</span>: <span class="bool">true</span>, <span class="key">"address"</span>: { <span class="key">"id"</span>: <span class="num">3</span>, <span class="key">"address"</span>: <span class="str">"No. 12, Azadi St., Tehran"</span> },
+    <span class="key">"delivery_slot"</span>: <span class="null-val">null</span>, <span class="key">"pickup_location"</span>: <span class="null-val">null</span>
+  },
+  <span class="key">"customer_snapshot"</span>: { <span class="key">"name"</span>: <span class="str">"Sara"</span>, <span class="key">"last_name"</span>: <span class="str">"Ahmadi"</span>, <span class="key">"phone"</span>: <span class="str">"09123456789"</span>, <span class="key">"email"</span>: <span class="str">"sara@example.com"</span> },
+  <span class="key">"transaction_ref"</span>:            <span class="str">"REF-123456"</span>,
+  <span class="key">"notes"</span>:                      <span class="null-val">null</span>,
+  <span class="key">"created_at"</span>:                 <span class="str">"2026-08-07T12:00:00.000000Z"</span>,
+  <span class="key">"items"</span>: [
+    {
+      <span class="key">"id"</span>:                                  <span class="num">101</span>,
+      <span class="key">"sku"</span>:                                 <span class="str">"S25U-TBK-256"</span>,
+      <span class="key">"product_title"</span>:                       <span class="str">"Samsung Galaxy S25 Ultra"</span>,
+      <span class="key">"variant_attributes"</span>:                  { <span class="key">"color"</span>: <span class="str">"Titanium Black"</span> },
+      <span class="key">"product_snapshot"</span>:                    { <span class="key">"title"</span>: <span class="str">"Samsung Galaxy S25 Ultra"</span>, <span class="key">"sku"</span>: <span class="str">"S25U-TBK-256"</span>, <span class="key">"image_url"</span>: <span class="str">"/storage/products/s25.webp"</span>, <span class="key">"attributes"</span>: { <span class="key">"color"</span>: <span class="str">"Titanium Black"</span> } },
+      <span class="key">"quantity"</span>:                               <span class="num">2</span>,
+      <span class="key">"max_quantity_per_order_snapshot"</span>:      <span class="num">3</span>,
+      <span class="key">"price_per_unit"</span>:                    <span class="num">129575000</span>,
+      <span class="key">"line_total"</span>:                        <span class="num">259150000</span>
+    }
+  ],
+  <span class="key">"payments"</span>: [
+    {
+      <span class="key">"id"</span>:                       <span class="num">8</span>,
+      <span class="key">"public_code"</span>:          <span class="str">"bdt-R3K8XM"</span>,
+      <span class="key">"order_id"</span>:                  <span class="num">42</span>,
+      <span class="key">"method_type"</span>:          <span class="str">"online"</span>,
+      <span class="key">"gateway"</span>:              <span class="str">"zarinpal"</span>,
+      <span class="key">"status"</span>:                <span class="str">"captured"</span>,
+      <span class="key">"amount"</span>:                    <span class="num">267000000</span>,
+      <span class="key">"transaction_reference"</span>: <span class="str">"REF-123456"</span>,
+      <span class="key">"created_at"</span>:            <span class="str">"2026-08-07T12:05:00.000000Z"</span>
+    },
+    {
+      <span class="key">"id"</span>:                       <span class="num">7</span>,
+      <span class="key">"public_code"</span>:          <span class="str">"bdt-W4N7KP"</span>,
+      <span class="key">"order_id"</span>:                  <span class="num">42</span>,
+      <span class="key">"method_type"</span>:          <span class="str">"online"</span>,
+      <span class="key">"gateway"</span>:              <span class="str">"zarinpal"</span>,
+      <span class="key">"status"</span>:                <span class="str">"failed"</span>,
+      <span class="key">"amount"</span>:                    <span class="num">267000000</span>,
+      <span class="key">"transaction_reference"</span>: <span class="null-val">null</span>,
+      <span class="key">"created_at"</span>:            <span class="str">"2026-08-07T12:01:00.000000Z"</span>
+    }
+  ],
+  <span class="key">"shipment"</span>: {
+    <span class="key">"id"</span>:                    <span class="str">"bds-Z9C3TR"</span>,
+    <span class="key">"order_id"</span>:                  <span class="num">42</span>,
+    <span class="key">"method_code"</span>:          <span class="str">"post_standard"</span>,
+    <span class="key">"method_title"</span>:         <span class="str">"Standard Post"</span>,
+    <span class="key">"method_type"</span>:          <span class="str">"postal"</span>,
+    <span class="key">"shipping_cost"</span>:            <span class="num">850000</span>,
+    <span class="key">"status"</span>:               <span class="str">"handed_to_post"</span>,
+    <span class="key">"status_label"</span>:         <span class="str">"Handed to postal service"</span>,
+    <span class="key">"address"</span>:              { <span class="key">"id"</span>: <span class="num">3</span>, <span class="key">"postal_code"</span>: <span class="str">"1234567890"</span>, <span class="key">"address"</span>: <span class="str">"No. 12, Azadi St., Tehran"</span> },
+    <span class="key">"delivery_slot"</span>:        <span class="null-val">null</span>,
+    <span class="key">"pickup_location"</span>:      <span class="null-val">null</span>,
+    <span class="key">"carrier_name"</span>:         <span class="str">"Iran Post"</span>,
+    <span class="key">"tracking_number"</span>:      <span class="str">"TRACK-123"</span>,
+    <span class="key">"receiver_name"</span>:        <span class="null-val">null</span>,
+    <span class="key">"failure_reason"</span>:       <span class="null-val">null</span>,
+    <span class="key">"note"</span>:                 <span class="null-val">null</span>,
+    <span class="key">"handed_to_post_at"</span>:    <span class="str">"2026-08-07T14:00:00.000000Z"</span>,
+    <span class="key">"out_for_delivery_at"</span>:  <span class="null-val">null</span>,
+    <span class="key">"delivered_at"</span>:         <span class="null-val">null</span>,
+    <span class="key">"ready_for_pickup_at"</span>:  <span class="null-val">null</span>,
+    <span class="key">"picked_up_at"</span>:         <span class="null-val">null</span>,
+    <span class="key">"created_at"</span>:           <span class="str">"2026-08-07T12:06:00.000000Z"</span>,
+    <span class="key">"history"</span>: [
+      {
+        <span class="key">"from_status"</span>: <span class="str">"ready_for_post"</span>,
+        <span class="key">"to_status"</span>:   <span class="str">"handed_to_post"</span>,
+        <span class="key">"reason"</span>:      <span class="null-val">null</span>,
+        <span class="key">"note"</span>:        <span class="str">"Transferred to carrier"</span>,
+        <span class="key">"metadata"</span>:    { <span class="key">"carrier"</span>: <span class="str">"Iran Post"</span> },
+        <span class="key">"created_at"</span>:  <span class="str">"2026-08-07T14:00:00.000000Z"</span>
+      }
+    ]
+  }
+}</pre>
+      <div class="block-label">Payment status values</div>
+      <p><code>initiated</code>, <code>captured</code>, <code>failed</code>, <code>refunded</code>, and <code>pending_cash</code>. Failed and initiated attempts remain visible; attempts are never collapsed by status or gateway.</p>
+      <div class="block-label">Error Responses</div>
+      <table>
+        <tr><th>Status</th><th>Condition</th></tr>
+        <tr><td>401</td><td class="opt">No Bearer token provided</td></tr>
+        <tr><td>404</td><td class="opt">Code is missing, malformed, partial, numeric, or belongs to another customer</td></tr>
+        <tr><td>429</td><td class="opt">Rate limit exceeded — see <code>Retry-After</code> header</td></tr>
       </table>
     </div>
   </div>

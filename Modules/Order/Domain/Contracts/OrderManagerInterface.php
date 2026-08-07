@@ -36,6 +36,12 @@ interface OrderManagerInterface
     public function findOrder(int $orderId): ?OrderDTO;
 
     /**
+     * Find one order by its customer-facing code, scoped in the query to the
+     * authenticated owner. Missing and foreign-owned codes both return null.
+     */
+    public function findUserOrderByPublicCode(int $userId, string $publicCode): ?OrderDTO;
+
+    /**
      * Admin/operator order listing. Paginator items are OrderDTOs (newest first).
      * Supported filter keys: status, order_id, user_id, date_from, date_to.
      *

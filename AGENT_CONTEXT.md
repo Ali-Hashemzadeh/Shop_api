@@ -233,6 +233,7 @@ replaces no primary key, foreign key, relation, cron input, internal query, or a
       * `order_items`: `id`, `order_id` (FK → orders, cascade delete), `sku`, `product_title`, `variant_attributes` (JSON), `product_snapshot` (nullable JSON — `{title, sku, image_url, attributes}`, captured from the enriched `CartItemDTO` at checkout, **not** a second Catalog call; later catalog edits never touch it), `quantity` (int), `max_quantity_per_order_snapshot` (nullable int), `price_per_unit` (int), `line_total` (int), timestamps. All monetary columns are integers (Cents Rule). Prices and snapshots are captured at order creation — they never update even if the catalog or the customer's profile changes.
   * **Domain Models (internal):** `Order`, `OrderItem`.
   * **Public Contract:** `Modules\Order\Domain\Contracts\OrderManagerInterface`:
+      * `findUserOrderByPublicCode(int $userId, string $publicCode): ?OrderDTO` performs the exact normalized Order-code lookup with ownership in the same query and eager-loads items; missing and foreign-owned codes both return null.
       * `createOrderFromCart(int $userId, int $addressId, int $shipmentMethodId, ?string $notes): OrderDTO` — full checkout orchestration.
       * `markAsPaid(int $orderId, string $transactionRef): OrderDTO` — transitions to `paid`, stores transaction reference.
       * `markAsComplete(int $orderId): OrderDTO` — transitions to `processing`.
@@ -252,6 +253,7 @@ replaces no primary key, foreign key, relation, cron input, internal query, or a
   * **`CancelExpiredOrdersAction`** — dep: `CancelOrderAction`. Finds pending orders with `created_at < now() - 15 min` and calls `releaseAndCancel` per order (each wrapped in its own transaction). Run every minute by `orders:cancel-expired` Artisan command scheduled in `routes/console.php`.
   * **`AdminCancelOrderAction`** — dep: `CancelOrderAction`. Admin/operator cancel: no ownership check, but reuses `CancelOrderAction::releaseAndCancel` (no duplicated release/cancel logic). Restricted to `pending` orders only — 404 if missing, 422 if not pending. Paid/shipped cancellation (refund + committed-stock return) is a deliberate future flow, not exposed here.
   * **HTTP Endpoints (customer):**
+      * `GET /api/v1/orders/{publicCode}` — authenticated, owner-scoped complete detail by exact Order public code. `GetCustomerOrderDetailAction` composes `OrderDTO`, all customer-safe `PaymentDTO` attempts (newest first), and the complete `ShipmentDTO`/history (or null) into the endpoint-specific `CustomerOrderDetailDTO` and resource. Missing and foreign-owned codes both return 404.
       * `POST /api/v1/orders` — body `{address_id, shipment_method_id, notes?}`; requires `auth:sanctum` + `order.create`; returns 201 OrderResource. 422 on empty cart or invalid address.
       * `GET /api/v1/orders` — paginated order history for the authenticated user; requires `auth:sanctum`; returns paginated OrderResource collection.
       * `POST /api/v1/orders/{order}/cancel` — user cancels **their own** pending order; releases reserved stock and returns 200 OrderResource. `auth:sanctum`; 403 for another user's order, 404 if missing, 422 if not `pending`.
@@ -267,6 +269,7 @@ replaces no primary key, foreign key, relation, cron input, internal query, or a
 * **Responsibility:** Hybrid payment processing — cash/offline (`in_person`) and online gateway (`online`) via the Strategy Pattern.
   * **Tables:** `payments`: id, order_id (indexed bigint, no cascade FK), method_type (string), gateway (string nullable), transaction_reference (string unique nullable), amount (int — Cents Rule), status (string), gateway_response (json nullable), timestamps.
   * **Domain Enums:** `PaymentMethodType` (ONLINE, IN_PERSON), `PaymentStatus` (INITIATED, CAPTURED, FAILED, REFUNDED, PENDING_CASH).
+  * **Order read contract:** `PaymentManagerInterface::getForOrder(int $orderId): list<PaymentDTO>` returns every attempt ordered by `created_at DESC, id DESC`; the Payment module owns the query.
   * **Contracts:** `PaymentGatewayDriverInterface` (requestPayment, verifyPayment), `PaymentManagerInterface` (`initializePayment(orderId, userId, methodType, gateway?)` — `userId` threads the caller through for the ownership check).
   * **Gateway Drivers (Strategy):** `ZarinpalGatewayDriver` (production — Zarinpal REST API v4), `MockGatewayDriver` (test-only, `shouldVerifySucceed` flag), `PaymentGatewayFactory` (singleton, resolves name → driver via `app()`).
   * **Actions:** `InitializePaymentAction` — **aborts 403 unless the order belongs to the calling `userId`** (checked right after the 404 guard), then in_person → pending_cash + markAsPaid; online → gateway redirect + initiated row. `HandleZarinpalCallbackAction` (idempotency guard, verify, capture/fail, markAsPaid).
@@ -351,4 +354,3 @@ replaces no primary key, foreign key, relation, cron input, internal query, or a
 | Sms | ✅ Infrastructure ready | 13 passing (SmsManagerTest) |
 
 **Shipment adds 55 tests, 225 assertions — all green.** (5 unrelated, pre-existing ProfileTest/ProductsTest failures are out of scope.)
-

@@ -1,5 +1,7 @@
 <?php
 
+use App\Support\PublicCodeEntity;
+use App\Support\PublicCodeGenerator;
 use Illuminate\Support\Facades\Route;
 use Modules\Order\Infrastructure\Http\Controllers\AdminOrderController;
 use Modules\Order\Infrastructure\Http\Controllers\OrderController;
@@ -9,6 +11,8 @@ Route::middleware(['api', 'auth:sanctum', 'throttle:api'])
     ->group(function () {
         Route::post('/', [OrderController::class, 'store']);
         Route::get('/', [OrderController::class, 'index']);
+        Route::get('/{publicCode}', [OrderController::class, 'show'])
+            ->where('publicCode', PublicCodeGenerator::routePattern(PublicCodeEntity::Order));
         Route::post('/{order}/cancel', [OrderController::class, 'cancel'])->whereNumber('order');
     });
 

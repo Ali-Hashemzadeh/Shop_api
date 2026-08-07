@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Feature — customer Order detail by owned public code
+
+- Added authenticated, rate-limited `GET /api/v1/orders/{publicCode}`. The normalized Order code and authenticated user ID are matched in one exact query; missing and foreign-owned codes both return 404. The unwrapped response preserves the existing customer Order/item shape and adds all customer-safe Payment attempts (newest first) plus the complete live Shipment and history, or `null` before activation. Cross-module reads use Contracts + DTOs only; raw gateway responses remain hidden and existing endpoints are unchanged.
+
 ### Fix — demo seeders: give the demo customers addresses the fulfillment rules can actually accept
 
 - **`php artisan migrate:fresh --seed` aborted** with `Local delivery is not available for this address.` from `EloquentShipmentManager::validateSelection()` whenever a service area was configured (`SHIPMENT_LOCAL_DELIVERY_PROVINCE_IDS` / `SHIPMENT_LOCAL_DELIVERY_CITY_IDS`). `OrderSampleDataSeeder` created each demo address with a null `province_id`/`city_id`, so `ConfigLocalDeliveryEligibility::isEligible(null, null)` rejected every `local_delivery` blueprint. It went unnoticed because an unconfigured service area (the `.env.example` default) makes eligibility permissive.
