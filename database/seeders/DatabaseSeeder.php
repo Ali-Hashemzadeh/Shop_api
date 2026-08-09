@@ -15,6 +15,8 @@ use Modules\Order\Infrastructure\Persistence\Seeders\OrderPermissionsSeeder;
 use Modules\Order\Infrastructure\Persistence\Seeders\OrderSampleDataSeeder;
 use Modules\Payment\Infrastructure\Persistence\Seeders\PaymentPermissionsSeeder;
 use Modules\Payment\Infrastructure\Persistence\Seeders\PaymentSampleDataSeeder;
+use Modules\Promotion\Infrastructure\Persistence\Seeders\PromotionPermissionsSeeder;
+use Modules\Promotion\Infrastructure\Persistence\Seeders\PromotionSampleDataSeeder;
 use Modules\Shipment\Infrastructure\Persistence\Seeders\ShipmentPermissionsSeeder;
 use Modules\Shipment\Infrastructure\Persistence\Seeders\ShipmentSampleDataSeeder;
 use Modules\Shipment\Infrastructure\Persistence\Seeders\ShipmentScheduleSeeder;
@@ -37,7 +39,11 @@ class DatabaseSeeder extends Seeder
             PaymentPermissionsSeeder::class,
             ShipmentPermissionsSeeder::class,
             NotificationPermissionsSeeder::class,
+            PromotionPermissionsSeeder::class,
             CatalogSampleDataSeeder::class,
+            // Runs after the catalog demo data: promotion targets are loose
+            // references to real product/category ids, so those rows must exist first.
+            PromotionSampleDataSeeder::class,
             InventorySampleDataSeeder::class,
             // Working periods + generated sessions must exist before orders are seeded:
             // the local-delivery demo orders book a real, bookable slot at "checkout".

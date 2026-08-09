@@ -17,7 +17,7 @@ class UpdateProductVariantRequest extends FormRequest
     {
         $cast = [];
 
-        foreach (['base_price', 'compare_at_price', 'max_quantity_per_order'] as $field) {
+        foreach (['base_price', 'max_quantity_per_order'] as $field) {
             $value = $this->input($field);
             if (is_string($value) && preg_match('/^\d+$/', $value)) {
                 $cast[$field] = (int) $value;
@@ -33,8 +33,8 @@ class UpdateProductVariantRequest extends FormRequest
     {
         return [
             'type' => ['sometimes', 'in:image,color'],
+            // Regular price only — see StoreProductVariantRequest.
             'base_price' => ['sometimes', 'integer', 'min:0'],
-            'compare_at_price' => ['nullable', 'integer', 'min:0'],
             'max_quantity_per_order' => ['nullable', 'integer', 'min:1'],
             'is_default' => ['sometimes', 'boolean'],
             'media_id' => ['nullable', 'integer', 'prohibits:variant_image'],

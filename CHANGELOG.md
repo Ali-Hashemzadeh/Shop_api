@@ -2,6 +2,48 @@
 
 ## [Unreleased]
 
+### Feature — Promotion module: automatic discounts, coupons, and campaigns
+
+**New bounded context `Modules/Promotion/`** (provider registered in `bootstrap/providers.php` *before* Catalog, since Catalog resolves it for live pricing). Promotion imports no Catalog/Cart/Order/Payment model, contract, or DTO — everything it needs arrives as primitives or its own DTOs, so the dependency arrow stays one-way and no cycle forms.
+
+**Pricing model replaced.** `product_variants.compare_at_price` is **dropped**. Catalog now stores only `base_price` (the regular price); the applicable promotional price is computed live by Promotion on every read. A price column could not express a sale spanning many products, a schedule, an instant off switch, a cap, or two overlapping sales — all of which are now first-class.
+
+- Removed from the create/nested-create/update/variant-upsert requests, `CreateProductVariantAction`, `UpdateProductVariantAction`, `ProductVariant`, `ProductVariantDTO`, `ProductVariantResource`, `CartItemDTO`, `CartItemResource`, and the Catalog sample seeder. Sending the field is now silently ignored rather than stored.
+- **`order_items.compare_at_price` is deliberately kept** and still renders for orders placed before this change. New orders always write `null`. Historical orders are financial records and are never rewritten or backfilled.
+
+**Automatic discounts — one winner, never a stack.** A variant may match a variant rule, several product rules, several category rules (including ones aimed at an ancestor), and several brand rules at once. Every candidate is costed in rials and only the largest actual reduction applies. Specificity does **not** override savings — a 30% product rule beats a 20% variant rule. Exact ties break deterministically: most specific target (variant → product → category → brand), then higher `priority`, then lowest discount id, so the snapshot stored on an order is reproducible forever.
+
+- **Integer basis points only.** 20% is `2000`, 12.5% is `1250`, 100% is `10000`. `DiscountCalculator` multiplies before dividing (`intdiv($amount * $bps, 10000)`) so small amounts are not truncated to zero, floors consistently so a cart total and an order total can never disagree by a rial, and clamps to `[0, amount]` so a price can never go negative. No PHP float touches a price.
+- **Batched evaluation.** `evaluateAutomaticDiscounts()` is batch-only; `EloquentCatalogManager` prices a whole page in one call alongside the existing media/stock batching. A regression test asserts a 10-product page costs no more Promotion queries than a 1-product page.
+- **Category ancestry is Catalog's job.** New `Modules/Catalog/Domain/Services/CategoryHierarchy` (scoped binding) loads `id → parent_id` once per request and walks it both ways: upwards for the pricing context, downwards for `has_discount` and campaign product lists. Promotion never traverses the Catalog tree.
+- **Targets are loose references with no FK into Catalog**, and are never validated for existence — doing so would require Promotion to call Catalog, closing the cycle. A target naming a deleted row simply becomes inert.
+
+**`has_discount` reimplemented.** It now means "at least one variant currently has an applicable active automatic discount", compiled into a SQL constraint on Catalog's own tables from the target ids Promotion publishes — so `total`, `last_page`, and later pages stay correct. The constraint carries explicit `IS NOT NULL` guards because `NULL IN (…)` is `NULL` in SQL, which would otherwise drop every uncategorized, brandless product from a `has_discount=false` page. `min_price`, `max_price`, `sort=cheapest`, and `sort=most_expensive` **keep their existing base-price semantics**.
+
+**Cart.** Lines are charged at the effective price. `CartItemResource` gains `effective_price`, `automatic_discount`, `regular_line_total`, and `automatic_discount_amount`; `CartResource` gains `regular_total_price` and `automatic_discount_total`. Cart still talks only to Catalog, never to Promotion, and stores nothing promotional — so a discount ending between two page loads is reflected immediately. **No coupon state is stored on a cart.**
+
+**Order.** Checkout re-reads Catalog and snapshots the winner: new `order_items.regular_price_per_unit`, `automatic_discount_amount_per_unit`, and `automatic_discount_snapshot` (self-contained, so a historical line stays explainable after the rule is edited or deleted). `price_per_unit` is now the effective price and `line_total` follows it.
+
+**Coupons.** A coupon is a marketing code (`SUMMER10`) activating a dormant `trigger_type=coupon`, `scope=all` rule. `scope=all` does **not** mean a store-wide sale — it means "applies to the whole post-automatic merchandise subtotal *once a code activates it*". Coupon rules may carry no targets; automatic rules must be `targeted` with at least one target and reject the coupon-only `min_subtotal`. Codes are trimmed/uppercased, restricted to `A–Z 0–9 - _`, uniquely indexed, and immutable once redeemed.
+
+- One coupon per order, stacking **after** automatic pricing (20% then 10% gives 72, not 70). Shipping and tax are excluded from both the `min_subtotal` test and the calculation.
+- **Never allocated across items** — stored once at order level. New `orders.coupon_code`, `coupon_discount_amount`, `coupon_snapshot`, `payment_pricing_finalized_at`.
+- New advisory `POST /api/v1/orders/{order}/coupon/check` (auth + ownership, no promotion permission). Reserves nothing, mutates nothing.
+- **The first payment initialization freezes pricing**, including the decision to use *no* coupon. Retrying with the same code (in any case) or omitting it is allowed; a different code returns 422. `POST /payments/initialize` accepts only `coupon_code` — never an amount, total, or percentage.
+- **Order, not Payment, owns the money.** New `OrderManagerInterface::finalizeForPayment()`; Payment charges the frozen `order.total_amount` and runs no pricing logic. A gateway failure leaves the freeze and the reservation intact so the retry charges the identical figure.
+- **Concurrency-safe reservation:** the coupon row is locked `FOR UPDATE` *before* counting, then limits are checked and the reservation written; a unique `coupon_redemptions.order_id` is the backstop and enforces one-coupon-per-order. Limits count `reserved + redeemed`, never `released`.
+- **Lifecycle hangs off the existing shared primitives** rather than being duplicated: release in `CancelOrderAction::releaseAndCancel()` (customer cancel, admin cancel, TTL expiry, pending-order replacement) and redemption in `EloquentOrderManager::markAsPaid()` (online capture and in-person cash alike). Both idempotent. A failed payment deliberately does **not** release.
+
+**Campaigns.** A merchandising grouping, not a pricing rule: one campaign links many *different* automatic discounts, so its products can each carry a different discount. A campaign never forces its own rule to win — a product also matching a stronger unrelated rule shows that stronger price. Coupon-backed rules cannot be linked. Storefront endpoints live in **Catalog** (`GET /catalog/campaigns`, `/campaigns/{slug}`, `/campaigns/{slug}/products`) because resolving products needs Catalog's tables and visibility rules; Promotion publishes only metadata and raw target ids.
+
+**Admin API + permissions.** `/api/v1/admin/promotions/{discounts,coupons,campaigns,redemptions}` behind `auth:sanctum` + `throttle:api`. Six new permissions seeded to `admin` and to no customer: `promotion.view-admin`, `promotion.create`, `promotion.update`, `promotion.delete`, `promotion.coupon.manage`, `promotion.campaign.manage`. Coupon/campaign mutations are split from discount CRUD so a marketing operator can manage codes and merchandising without rewriting pricing rules. Deletes are soft-deletes — redemption history and order snapshots are never destroyed.
+
+**Migrations:** `discounts`, `discount_targets`, `coupons`, `coupon_redemptions`, `campaigns`, `campaign_discount`; drop `product_variants.compare_at_price`; add the OrderItem snapshot and Order coupon columns. No cross-module foreign keys. Verified on SQLite via `migrate:fresh --seed`.
+
+**Docs:** new `DISCOUNT_ARCHITECTURE.html` explains the pricing model, winner algorithm, tie-breaking, integer math, coupon lifecycle, freeze semantics, campaigns, schema, API, and permissions.
+
+**Tests:** 120 new tests, all green — `tests/Unit/Promotion/` (integer math, winner selection, tie-breaking) and `tests/Feature/Promotion/` (targeting and ancestry, `has_discount` pagination, base-price filter/sort preservation, cart and order pricing, the full coupon lifecycle including limits and idempotency, campaigns, and the six-permission matrix). Suite: **641 passed**, with the one pre-existing unrelated `ProfileTest` failure unchanged.
+
 ### Fix — customer Address detail resolves public code
 
 - Changed only customer `GET /api/v1/addresses/{publicCode}` to normalize and exactly resolve the existing `bda-XXXXXX` identifier. Numeric/malformed/missing codes return 404; existing owner/view-any authorization remains unchanged. Address mutations, checkout `address_id`, Shipment eligibility, internal contracts, and admin Address routes continue to use numeric ids.

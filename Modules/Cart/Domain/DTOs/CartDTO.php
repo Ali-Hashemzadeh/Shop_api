@@ -15,14 +15,22 @@ class CartDTO
         public readonly array $items,
         public readonly int $itemCount,
         public readonly int $totalQuantity,
+        /** Payable merchandise total: the sum of effective-price line totals. */
         public readonly int $totalPrice,
+        /** The same basket at regular prices, for a strike-through figure. */
+        public readonly int $regularTotalPrice = 0,
+        /** regularTotalPrice − totalPrice; what automatic discounts saved. */
+        public readonly int $automaticDiscountTotal = 0,
     ) {}
 
     /** @param CartItemDTO[] $items */
     public static function fromModel(Cart $cart, array $items = []): self
     {
         $totalQuantity = array_sum(array_map(static fn (CartItemDTO $i) => $i->quantity, $items));
+        // Already net of automatic discounts — CartItemDTO::lineTotal is priced at
+        // effectivePrice, so this is what checkout will charge for merchandise.
         $totalPrice = array_sum(array_map(static fn (CartItemDTO $i) => $i->lineTotal, $items));
+        $regularTotalPrice = array_sum(array_map(static fn (CartItemDTO $i) => $i->regularLineTotal, $items));
 
         return new self(
             id: $cart->id,
@@ -32,6 +40,8 @@ class CartDTO
             itemCount: count($items),
             totalQuantity: $totalQuantity,
             totalPrice: $totalPrice,
+            regularTotalPrice: $regularTotalPrice,
+            automaticDiscountTotal: max(0, $regularTotalPrice - $totalPrice),
         );
     }
 }

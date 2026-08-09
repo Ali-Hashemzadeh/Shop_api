@@ -18,7 +18,11 @@ class CartResource extends JsonResource
             'items' => CartItemResource::collection($this->items),
             'item_count' => $this->itemCount,
             'total_quantity' => $this->totalQuantity,
+            // Payable merchandise total, already net of automatic discounts.
+            // No coupon state is ever held on a cart — coupons apply to an order.
             'total_price' => $this->totalPrice,
+            'regular_total_price' => $this->regularTotalPrice,
+            'automatic_discount_total' => $this->automaticDiscountTotal,
         ];
     }
 }

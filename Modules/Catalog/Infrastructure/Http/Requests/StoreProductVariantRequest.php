@@ -17,7 +17,7 @@ class StoreProductVariantRequest extends FormRequest
     {
         $cast = [];
 
-        foreach (['base_price', 'compare_at_price', 'max_quantity_per_order'] as $field) {
+        foreach (['base_price', 'max_quantity_per_order'] as $field) {
             $value = $this->input($field);
             // Cast whole-number strings to int so the Cents Rule guard in
             // CreateProductVariantAction never sees a string.
@@ -35,8 +35,9 @@ class StoreProductVariantRequest extends FormRequest
     {
         return [
             'type' => ['required', 'in:image,color'],
+            // Regular price only — promotional pricing is owned by the Promotion
+            // module and computed live, never written to a variant.
             'base_price' => ['required', 'integer', 'min:0'],
-            'compare_at_price' => ['nullable', 'integer', 'min:0'],
             'max_quantity_per_order' => ['nullable', 'integer', 'min:1'],
             'is_default' => ['nullable', 'boolean'],
             'media_id' => ['nullable', 'integer', 'prohibits:variant_image'],

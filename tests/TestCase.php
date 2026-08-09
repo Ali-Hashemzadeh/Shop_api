@@ -12,6 +12,7 @@ use Modules\Media\Infrastructure\Persistence\Seeders\MediaPermissionsSeeder;
 use Modules\Notification\Infrastructure\Persistence\Seeders\NotificationPermissionsSeeder;
 use Modules\Order\Infrastructure\Persistence\Seeders\OrderPermissionsSeeder;
 use Modules\Payment\Infrastructure\Persistence\Seeders\PaymentPermissionsSeeder;
+use Modules\Promotion\Infrastructure\Persistence\Seeders\PromotionPermissionsSeeder;
 use Modules\Shipment\Infrastructure\Persistence\Seeders\ShipmentPermissionsSeeder;
 
 abstract class TestCase extends BaseTestCase
@@ -54,6 +55,11 @@ abstract class TestCase extends BaseTestCase
     protected function seedNotificationPermissions(): void
     {
         $this->seed(NotificationPermissionsSeeder::class);
+    }
+
+    protected function seedPromotionPermissions(): void
+    {
+        $this->seed(PromotionPermissionsSeeder::class);
     }
 
     protected function actingAsCustomer(?User $user = null): User

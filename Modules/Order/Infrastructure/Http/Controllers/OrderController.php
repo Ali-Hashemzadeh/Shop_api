@@ -8,10 +8,12 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Modules\Order\Application\Actions\CancelOrderAction;
+use Modules\Order\Application\Actions\CheckOrderCouponAction;
 use Modules\Order\Application\Actions\CreateOrderAction;
 use Modules\Order\Application\Actions\GetCustomerOrderDetailAction;
 use Modules\Order\Domain\Contracts\OrderManagerInterface;
 use Modules\Order\Domain\Exceptions\EmptyCartException;
+use Modules\Order\Infrastructure\Http\Requests\CheckCouponRequest;
 use Modules\Order\Infrastructure\Http\Requests\StoreOrderRequest;
 use Modules\Order\Infrastructure\Http\Resources\CustomerOrderDetailResource;
 use Modules\Order\Infrastructure\Http\Resources\OrderResource;
@@ -22,6 +24,7 @@ class OrderController extends Controller
     public function __construct(
         private readonly CreateOrderAction $createOrder,
         private readonly CancelOrderAction $cancelOrder,
+        private readonly CheckOrderCouponAction $checkCoupon,
         private readonly GetCustomerOrderDetailAction $getOrderDetail,
         private readonly OrderManagerInterface $manager,
         private readonly ShipmentManagerInterface $shipment,
@@ -75,6 +78,20 @@ class OrderController extends Controller
         abort_if($detail === null, 404, 'Order not found.');
 
         return response()->json(new CustomerOrderDetailResource($detail));
+    }
+
+    /**
+     * Advisory coupon preview. Reserves nothing — see CheckOrderCouponAction.
+     */
+    public function checkCoupon(CheckCouponRequest $request, int $order): JsonResponse
+    {
+        return response()->json(
+            $this->checkCoupon->handle(
+                orderId: $order,
+                userId: $request->user()->id,
+                code: (string) $request->input('code'),
+            )
+        );
     }
 
     public function cancel(Request $request, int $order): JsonResponse

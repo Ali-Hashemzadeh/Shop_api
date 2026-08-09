@@ -166,7 +166,6 @@ class OrderTest extends TestCase
             'sku' => 'IPH16-BLK-256',
             'type' => 'color',
             'base_price' => 800000,
-            'compare_at_price' => 1000000,
             'is_default' => true,
             'media_id' => $variantImage->id,
             'attributes' => ['color' => 'Black', 'storage' => '256GB'],
@@ -188,7 +187,13 @@ class OrderTest extends TestCase
             ->assertJsonPath('items.0.product_snapshot.attributes.color', 'Black')
             ->assertJsonPath('items.0.product_snapshot.attributes.storage', '256GB')
             ->assertJsonPath('items.0.price_per_unit', 800000)
-            ->assertJsonPath('items.0.compare_at_price', 1000000)
+            // No promotion applies, so the effective price equals the regular price
+            // and no automatic-discount snapshot is written.
+            ->assertJsonPath('items.0.regular_price_per_unit', 800000)
+            ->assertJsonPath('items.0.automatic_discount_amount_per_unit', 0)
+            ->assertJsonPath('items.0.automatic_discount', null)
+            // The legacy Catalog cross-out column is never populated by new orders.
+            ->assertJsonPath('items.0.compare_at_price', null)
             ->assertJsonPath('items.0.line_total', 1600000);
 
         $orderItem = OrderItem::where('sku', 'IPH16-BLK-256')->latest('id')->first();
@@ -199,7 +204,10 @@ class OrderTest extends TestCase
         $this->assertNotSame($orderItem->product_snapshot['image_url'], $orderItem->product_snapshot['primary_image_url']);
         $this->assertSame(['color' => 'Black', 'storage' => '256GB'], $orderItem->product_snapshot['attributes']);
         $this->assertSame(800000, $orderItem->price_per_unit);
-        $this->assertSame(1000000, $orderItem->compare_at_price);
+        $this->assertSame(800000, $orderItem->regular_price_per_unit);
+        $this->assertSame(0, $orderItem->automatic_discount_amount_per_unit);
+        $this->assertNull($orderItem->automatic_discount_snapshot);
+        $this->assertNull($orderItem->compare_at_price);
         $this->assertSame(1600000, $orderItem->line_total);
 
         $this->postJson('/api/v1/payments/initialize', [
@@ -235,7 +243,6 @@ class OrderTest extends TestCase
             'sku' => 'IMMUT-001',
             'type' => 'color',
             'base_price' => 800000,
-            'compare_at_price' => 1000000,
             'is_default' => true,
             'media_id' => $oldVariantImage->id,
             'attributes' => ['color' => 'Red'],
@@ -254,7 +261,7 @@ class OrderTest extends TestCase
         $originalCustomerSnapshot = $order->customer_snapshot;
         $originalProductSnapshot = $orderItem->product_snapshot;
         $originalPricePerUnit = $orderItem->price_per_unit;
-        $originalCompareAtPrice = $orderItem->compare_at_price;
+        $originalRegularPricePerUnit = $orderItem->regular_price_per_unit;
 
         // Simulate later profile + catalog edits — the snapshot must not move.
         $user->update([
@@ -269,7 +276,6 @@ class OrderTest extends TestCase
         ]);
         $variant->update([
             'base_price' => 700000,
-            'compare_at_price' => 900000,
             'media_id' => $newVariantImage->id,
         ]);
 
@@ -282,8 +288,9 @@ class OrderTest extends TestCase
         $this->assertSame($oldPrimaryImage->url, $orderItem->product_snapshot['primary_image_url']);
         $this->assertSame(800000, $originalPricePerUnit);
         $this->assertSame(800000, $orderItem->price_per_unit);
-        $this->assertSame(1000000, $originalCompareAtPrice);
-        $this->assertSame(1000000, $orderItem->compare_at_price);
+        // The frozen regular price survives the later base_price edit too.
+        $this->assertSame(800000, $originalRegularPricePerUnit);
+        $this->assertSame(800000, $orderItem->regular_price_per_unit);
         $this->assertNotSame('Changed Name', $order->customer_snapshot['name']);
         $this->assertNotSame('Renamed Product', $orderItem->product_snapshot['title']);
     }

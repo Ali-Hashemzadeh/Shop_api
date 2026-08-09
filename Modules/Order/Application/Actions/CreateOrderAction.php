@@ -65,7 +65,16 @@ class CreateOrderAction
             throw ValidationException::withMessages($errors);
         }
 
-        $subtotal = $enrichedCart->totalPrice;
+        // Authoritative pricing comes from the variants just re-read from Catalog —
+        // which already carry live automatic-discount pricing — not from whatever the
+        // cart displayed earlier. A discount that ended while the customer was on the
+        // checkout page therefore does not carry into the order.
+        $subtotal = 0;
+        foreach ($enrichedCart->items as $cartItem) {
+            $variant = $variantsBySku[$cartItem->sku];
+            $subtotal += $variant->effectivePrice() * $cartItem->quantity;
+        }
+
         $shippingCost = $selection->shippingCost;
         $snapshot = $selection->toSnapshot();
         $expiresAt = now()->addMinutes((int) config('shipment.pending_order_ttl_minutes', 15));
@@ -108,6 +117,10 @@ class CreateOrderAction
 
             $itemDTOs = [];
             foreach ($enrichedCart->items as $cartItem) {
+                $variant = $variantsBySku[$cartItem->sku];
+                $automaticDiscount = $variant->automaticDiscount;
+                $effectivePrice = $variant->effectivePrice();
+
                 $orderItem = OrderItem::create([
                     'order_id' => $order->id,
                     'sku' => $cartItem->sku,
@@ -121,10 +134,18 @@ class CreateOrderAction
                         'attributes' => $cartItem->attributes,
                     ],
                     'quantity' => $cartItem->quantity,
-                    'max_quantity_per_order_snapshot' => $variantsBySku[$cartItem->sku]->maxQuantityPerOrder,
-                    'price_per_unit' => $cartItem->basePrice ?? 0,
-                    'compare_at_price' => $cartItem->compareAtPrice,
-                    'line_total' => $cartItem->lineTotal,
+                    'max_quantity_per_order_snapshot' => $variant->maxQuantityPerOrder,
+                    // The strike-through price at checkout.
+                    'regular_price_per_unit' => $variant->basePrice,
+                    'automatic_discount_amount_per_unit' => $automaticDiscount?->discountAmount ?? 0,
+                    // Self-contained record of the winning rule, so this line stays
+                    // explainable even if the discount is later edited or deleted.
+                    'automatic_discount_snapshot' => $automaticDiscount?->toSnapshot(),
+                    // What is actually charged per unit, before any order-level coupon.
+                    'price_per_unit' => $effectivePrice,
+                    // Legacy Catalog column, deliberately null on every new order.
+                    'compare_at_price' => null,
+                    'line_total' => $effectivePrice * $cartItem->quantity,
                 ]);
                 $itemDTOs[] = OrderItemDTO::fromModel($orderItem);
 

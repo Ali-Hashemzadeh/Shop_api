@@ -170,12 +170,22 @@ class EloquentCartManager implements CartManagerInterface
 
         $items = $cart->items->map(function (CartItem $item) use ($variants, $stocks): CartItemDTO {
             $variant = $variants[$item->sku] ?? null;
+            $discount = $variant?->automaticDiscount;
 
             return CartItemDTO::fromModel(
                 $item,
                 productName: $variant?->productName,
                 basePrice: $variant?->basePrice,
-                compareAtPrice: $variant?->compareAtPrice,
+                // Catalog has already applied the winning automatic discount, so the
+                // cart charges the promotional price without ever calling Promotion.
+                effectivePrice: $variant?->effectivePrice(),
+                automaticDiscount: $discount === null ? null : [
+                    'name' => $discount->discountName,
+                    'type' => $discount->discountType->value,
+                    'percentage_bps' => $discount->percentageBps,
+                    'fixed_amount' => $discount->fixedAmount,
+                    'amount' => $discount->discountAmount,
+                ],
                 imageUrl: $variant?->imageUrl,
                 attributes: $variant?->attributes ?? [],
                 availableStock: $stocks[$item->sku]->availableQuantity ?? 0,

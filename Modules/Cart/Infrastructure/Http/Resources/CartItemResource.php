@@ -23,11 +23,18 @@ class CartItemResource extends JsonResource
             'product_name' => $this->productName,
             'type' => $this->type,
             'attributes' => $this->attributes,
+            // Regular price, and what this unit actually costs after the winning
+            // automatic discount. Both are recomputed live on every cart read.
             'base_price' => $this->basePrice,
-            'compare_at_price' => $this->compareAtPrice,
+            'effective_price' => $this->effectivePrice,
+            'automatic_discount' => $this->automaticDiscount,
             'image_url' => $this->imageUrl,
             'primary_image_url' => $this->primaryImageUrl,
+            // line_total is the payable amount (effective_price × quantity);
+            // regular_line_total is the strike-through figure.
             'line_total' => $this->lineTotal,
+            'regular_line_total' => $this->regularLineTotal,
+            'automatic_discount_amount' => $this->automaticDiscountAmount,
         ];
     }
 }

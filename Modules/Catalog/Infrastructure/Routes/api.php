@@ -4,6 +4,7 @@ use App\Support\PublicCodeEntity;
 use App\Support\PublicCodeGenerator;
 use Illuminate\Support\Facades\Route;
 use Modules\Catalog\Infrastructure\Http\Controllers\BrandsController;
+use Modules\Catalog\Infrastructure\Http\Controllers\CampaignsController;
 use Modules\Catalog\Infrastructure\Http\Controllers\CategoriesController;
 use Modules\Catalog\Infrastructure\Http\Controllers\ProductGalleryController;
 use Modules\Catalog\Infrastructure\Http\Controllers\ProductsController;
@@ -34,6 +35,13 @@ Route::middleware('api')->prefix('api/v1/catalog')->group(function () use ($prod
 
         Route::get('/brands', [BrandsController::class, 'index']);
         Route::get('/brands/{id}', [BrandsController::class, 'show']);
+
+        // Campaign merchandising. Served by Catalog (not Promotion) because
+        // resolving a campaign's products needs Catalog's own tables — see
+        // CampaignsController.
+        Route::get('/campaigns', [CampaignsController::class, 'index']);
+        Route::get('/campaigns/{slug}/products', [CampaignsController::class, 'products']);
+        Route::get('/campaigns/{slug}', [CampaignsController::class, 'show']);
 
         Route::get('/products', [ProductsController::class, 'index']);
         Route::get('/products/slug/{slug}', [ProductsController::class, 'showBySlug']);

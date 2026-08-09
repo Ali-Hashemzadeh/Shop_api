@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Modules\Order\Domain\Contracts;
 
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Validation\ValidationException;
 use Modules\Order\Domain\DTOs\AdminOrderDetailDTO;
 use Modules\Order\Domain\DTOs\OrderDTO;
 use Modules\Shipment\Domain\DTOs\ShipmentSelectionDTO;
@@ -12,6 +13,27 @@ use Modules\Shipment\Domain\DTOs\ShipmentSelectionDTO;
 interface OrderManagerInterface
 {
     public function createOrderFromCart(int $userId, ShipmentSelectionDTO $selection, ?string $notes = null): OrderDTO;
+
+    /**
+     * Freeze the order's payable pricing before a payment attempt is created.
+     *
+     * Order — not Payment — owns this, because it is the module that knows the
+     * merchandise subtotal, shipping, and tax, and it is the order that must charge
+     * one identical amount across every payment attempt.
+     *
+     * The FIRST call locks the coupon decision, including the decision to use none,
+     * and stamps payment_pricing_finalized_at. Afterwards the coupon, its amount,
+     * its snapshot, and total_amount are immutable: a later call may repeat the same
+     * code or omit it entirely, but supplying a *different* code is rejected. A
+     * failed gateway call deliberately leaves the freeze in place so a retry charges
+     * the same figure.
+     *
+     * @param  string|null  $couponCode  Raw customer input; normalization happens inside.
+     *
+     * @throws ValidationException 422 when the coupon is
+     *                             unusable, would change frozen pricing, or would leave a non-positive total
+     */
+    public function finalizeForPayment(int $orderId, int $userId, ?string $couponCode = null): OrderDTO;
 
     public function markAsPaid(int $orderId, string $transactionRef): OrderDTO;
 

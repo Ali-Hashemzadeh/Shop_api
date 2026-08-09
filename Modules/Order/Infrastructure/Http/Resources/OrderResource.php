@@ -23,6 +23,12 @@ class OrderResource extends JsonResource
             'total_amount' => $dto->totalAmount,
             'shipping_cost' => $dto->shippingCost,
             'tax_amount' => $dto->taxAmount,
+            // Order-level coupon. Null / 0 until the first payment initialization
+            // freezes the pricing; unchangeable afterwards.
+            'coupon_code' => $dto->couponCode,
+            'coupon_discount_amount' => $dto->couponDiscountAmount,
+            'coupon_snapshot' => $dto->couponSnapshot,
+            'payment_pricing_finalized_at' => $dto->paymentPricingFinalizedAt?->toISOString(),
             'shipment_method_id' => $dto->shipmentMethodId,
             'shipment_method_code' => $dto->shipmentMethodCode,
             'shipping_address' => $dto->shippingAddress,

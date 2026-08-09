@@ -13,14 +13,28 @@ class ProductVariantResource extends JsonResource
     {
         /** @var ProductVariantDTO $dto */
         $dto = $this->resource;
+        $discount = $dto->automaticDiscount;
 
         return [
             'id' => $dto->id,
             'sku' => $dto->sku,
             'type' => $dto->type,
             'is_default' => $dto->isDefault,
+            // The regular price, always present.
             'base_price' => $dto->basePrice,
-            'compare_at_price' => $dto->compareAtPrice,
+            // What the customer actually pays right now. Equal to base_price when no
+            // automatic discount applies, so clients can render this field alone and
+            // never need to compute a promotional price themselves.
+            'effective_price' => $dto->effectivePrice(),
+            // The one winning rule (automatic discounts never stack), or null.
+            'discount' => $discount === null ? null : [
+                'name' => $discount->discountName,
+                'type' => $discount->discountType->value,
+                'percentage_bps' => $discount->percentageBps,
+                'fixed_amount' => $discount->fixedAmount,
+                // Actual rial reduction after any cap — base_price − effective_price.
+                'amount' => $discount->discountAmount,
+            ],
             'max_quantity_per_order' => $dto->maxQuantityPerOrder,
             'attributes' => $dto->attributes,
             'image_url' => $dto->imageUrl,

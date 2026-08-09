@@ -20,15 +20,25 @@ use Modules\Catalog\Domain\Models\Category;
 use Modules\Catalog\Domain\Models\Product;
 use Modules\Catalog\Domain\Models\ProductImage;
 use Modules\Catalog\Domain\Models\ProductVariant;
+use Modules\Catalog\Domain\Services\CategoryHierarchy;
 use Modules\Inventory\Domain\Contracts\InventoryManagerInterface;
 use Modules\Media\Domain\Contracts\MediaManagerInterface;
 use Modules\Media\Domain\DTOs\MediaDTO;
+use Modules\Promotion\Domain\Contracts\PromotionManagerInterface;
+use Modules\Promotion\Domain\DTOs\AutomaticDiscountContextDTO;
+use Modules\Promotion\Domain\DTOs\AutomaticDiscountResultDTO;
+use Modules\Promotion\Domain\DTOs\AutomaticTargetDefinitionsDTO;
 
 class EloquentCatalogManager implements CatalogManagerInterface
 {
     public function __construct(
         private readonly MediaManagerInterface $media,
         private readonly InventoryManagerInterface $inventory,
+        // Catalog depends on Promotion, never the reverse: Promotion is handed the
+        // product context it needs and answers with pricing, so it never queries
+        // Catalog and no cycle forms.
+        private readonly PromotionManagerInterface $promotion,
+        private readonly CategoryHierarchy $categories,
     ) {}
 
     // ── Categories ────────────────────────────────────────────────────────────
@@ -237,6 +247,88 @@ class EloquentCatalogManager implements CatalogManagerInterface
         return $this->paginateProducts($query, $perPage);
     }
 
+    public function getCampaignProducts(string $slug, array $filters = [], int $perPage = 15): ?LengthAwarePaginator
+    {
+        // Promotion answers only "which Catalog ids does this campaign reach?".
+        // Null means the campaign is missing, inactive, or outside its window.
+        $definitions = $this->promotion->getCampaignTargetDefinitions($slug);
+
+        if ($definitions === null) {
+            return null;
+        }
+
+        $query = Product::query()
+            ->where('status', 'published')
+            ->with(['images', 'variants']);
+
+        if ($definitions->isEmpty()) {
+            // A live campaign whose rules have all expired merchandises nothing —
+            // an empty page, not a 404, because the campaign itself still exists.
+            $query->whereRaw('1 = 0');
+        } else {
+            $this->applyTargetDefinitionsFilter($query, $definitions);
+        }
+
+        $this->applyProductFilters($query, $filters);
+        $this->applyProductSort($query, $filters['sort'] ?? null);
+
+        // A single DISTINCT-free query: the OR-group below cannot duplicate a product
+        // row, because whereHas is a subquery rather than a join. Products matched by
+        // several of the campaign's rules therefore appear exactly once.
+        return $this->paginateProducts($query, $perPage);
+    }
+
+    /**
+     * Turn Promotion's raw target ids into a Catalog-side OR constraint.
+     *
+     * Variant targets resolve to their owning product; category targets expand to
+     * descendants. Shared by the has_discount filter and campaign product lists so
+     * the two can never disagree about what a target means.
+     */
+    private function applyTargetDefinitionsFilter($query, AutomaticTargetDefinitionsDTO $definitions): void
+    {
+        $categoryIds = $this->categories->descendantsOf($definitions->categoryIds);
+
+        $query->where(fn ($q) => $this->targetDefinitionsConstraint($q, $definitions, $categoryIds));
+    }
+
+    /**
+     * The OR-group shared by the has_discount filter and campaign product lists.
+     *
+     * `category_id` and `brand_id` are nullable, and in SQL `NULL IN (...)` is NULL
+     * rather than false — so under a NOT() the whole group would evaluate to NULL
+     * and silently drop every uncategorized, brandless product from a
+     * `has_discount=false` page. The explicit IS NOT NULL guards force a real
+     * boolean, which is what makes the negation correct.
+     *
+     * @param  array<int, int>  $categoryIds  Already expanded to descendants.
+     */
+    private function targetDefinitionsConstraint($query, AutomaticTargetDefinitionsDTO $definitions, array $categoryIds): void
+    {
+        // Seed with a false literal so every branch below can be an OR.
+        $query->whereRaw('1 = 0');
+
+        if ($definitions->productIds !== []) {
+            $query->orWhereIn('products.id', $definitions->productIds);
+        }
+
+        if ($definitions->brandIds !== []) {
+            $query->orWhere(fn ($q) => $q
+                ->whereNotNull('products.brand_id')
+                ->whereIn('products.brand_id', $definitions->brandIds));
+        }
+
+        if ($categoryIds !== []) {
+            $query->orWhere(fn ($q) => $q
+                ->whereNotNull('products.category_id')
+                ->whereIn('products.category_id', $categoryIds));
+        }
+
+        if ($definitions->variantIds !== []) {
+            $query->orWhereHas('variants', fn ($vq) => $vq->whereIn('id', $definitions->variantIds));
+        }
+    }
+
     public function createProduct(array $data): ProductDTO
     {
         // createWithPublicCode: the `uuid` public code is minted by the model hook
@@ -318,9 +410,25 @@ class EloquentCatalogManager implements CatalogManagerInterface
     {
         $variant = ProductVariant::with('product')->find($variantId);
 
-        return $variant
-            ? ProductVariantDTO::fromModel($variant, $this->resolveUrl((int) $variant->media_id), $variant->product?->title, $this->availableStockFor($variant->sku))
-            : null;
+        return $variant ? $this->hydrateVariant($variant) : null;
+    }
+
+    /**
+     * Build one variant DTO with live pricing. The single-item counterpart to the
+     * batched paths above; used by create/update/show, never inside a loop.
+     */
+    private function hydrateVariant(ProductVariant $variant): ProductVariantDTO
+    {
+        $discountMap = $this->discountMapForVariants(collect([$variant]));
+
+        return ProductVariantDTO::fromModel(
+            $variant,
+            $this->resolveUrl((int) $variant->media_id),
+            $variant->product?->title,
+            $this->availableStockFor($variant->sku),
+            null,
+            $discountMap[$variant->id] ?? null,
+        );
     }
 
     public function findVariantBySku(string $sku): ?ProductVariantDTO
@@ -341,6 +449,9 @@ class EloquentCatalogManager implements CatalogManagerInterface
             ->whereIn('sku', $skus)
             ->get();
         $stockMap = $this->availableStockMap($variants->pluck('sku')->all());
+        // One Promotion call for every SKU asked for — this is the path Cart uses
+        // for the whole basket and Order uses for the whole checkout.
+        $discountMap = $this->discountMapForVariants($variants);
         $mediaIds = $variants
             ->flatMap(fn (ProductVariant $variant): array => [
                 $variant->media_id,
@@ -361,6 +472,7 @@ class EloquentCatalogManager implements CatalogManagerInterface
                 $variant->product?->primary_media_id
                     ? $mediaMap->get($variant->product->primary_media_id)?->url
                     : null,
+                $discountMap[$variant->id] ?? null,
             ),
         ])->all();
     }
@@ -382,7 +494,7 @@ class EloquentCatalogManager implements CatalogManagerInterface
 
         $variant->load('product');
 
-        return ProductVariantDTO::fromModel($variant, $this->resolveUrl((int) $variant->media_id), $variant->product?->title, $this->availableStockFor($variant->sku));
+        return $this->hydrateVariant($variant);
     }
 
     public function updateProductVariant(int $variantId, array $data): ProductVariantDTO
@@ -405,7 +517,7 @@ class EloquentCatalogManager implements CatalogManagerInterface
             $variant->refresh();
             $variant->load('product');
 
-            return ProductVariantDTO::fromModel($variant, $this->resolveUrl((int) $variant->media_id), $variant->product?->title, $this->availableStockFor($variant->sku));
+            return $this->hydrateVariant($variant);
         });
     }
 
@@ -440,19 +552,7 @@ class EloquentCatalogManager implements CatalogManagerInterface
         }
 
         if (array_key_exists('has_discount', $filters)) {
-            if ($filters['has_discount']) {
-                $query->whereHas('variants', function ($variantQuery) {
-                    $variantQuery
-                        ->whereNotNull('compare_at_price')
-                        ->whereColumn('compare_at_price', '>', 'base_price');
-                });
-            } else {
-                $query->whereDoesntHave('variants', function ($variantQuery) {
-                    $variantQuery
-                        ->whereNotNull('compare_at_price')
-                        ->whereColumn('compare_at_price', '>', 'base_price');
-                });
-            }
+            $this->applyHasDiscountFilter($query, (bool) $filters['has_discount']);
         }
 
         if (isset($filters['max_price'])) {
@@ -509,6 +609,100 @@ class EloquentCatalogManager implements CatalogManagerInterface
         }
 
         return false;
+    }
+
+    /**
+     * Constrain a product query to products that do (or do not) currently carry an
+     * applicable automatic discount.
+     *
+     * Expressed entirely as SQL on Catalog's own tables. Filtering a fetched page in
+     * PHP instead would corrupt `total`, `last_page`, and every page after the
+     * first, so the constraint has to be part of the query that paginates.
+     *
+     * Promotion contributes only raw target ids through its contract — there is no
+     * join across the module wall.
+     */
+    private function applyHasDiscountFilter($query, bool $hasDiscount): void
+    {
+        $definitions = $this->promotion->getActiveAutomaticTargetDefinitions();
+
+        if ($definitions->isEmpty()) {
+            // Nothing is discounted, so "on sale" matches nothing and "not on sale"
+            // matches everything — no constraint needed in the latter case.
+            if ($hasDiscount) {
+                $query->whereRaw('1 = 0');
+            }
+
+            return;
+        }
+
+        // A discount aimed at "Electronics" reaches products filed under "Android".
+        // Catalog owns the hierarchy, so it expands the targeted ids downwards;
+        // Promotion never walks the tree.
+        $categoryIds = $this->categories->descendantsOf($definitions->categoryIds);
+
+        $constraint = fn ($q) => $this->targetDefinitionsConstraint($q, $definitions, $categoryIds);
+
+        $hasDiscount ? $query->where($constraint) : $query->whereNot($constraint);
+    }
+
+    /**
+     * Price a whole page of products in ONE Promotion call.
+     *
+     * @param  Collection<int, Product>  $products
+     * @return array<int, AutomaticDiscountResultDTO> keyed by variant id
+     */
+    private function discountMapForProducts($products): array
+    {
+        $contexts = [];
+        // One hierarchy resolution for every category on the page, not one per product.
+        $ancestors = $this->categories->ancestorsFor(
+            $products->pluck('category_id')->filter()->unique()->all()
+        );
+
+        foreach ($products as $product) {
+            foreach ($product->variants as $variant) {
+                $contexts[] = new AutomaticDiscountContextDTO(
+                    variantId: $variant->id,
+                    productId: $product->id,
+                    categoryIds: $ancestors[$product->category_id] ?? [],
+                    brandId: $product->brand_id === null ? null : (int) $product->brand_id,
+                    basePrice: (int) $variant->base_price,
+                );
+            }
+        }
+
+        return $this->promotion->evaluateAutomaticDiscounts($contexts);
+    }
+
+    /**
+     * Price a set of standalone variants (each carrying its product) in one call.
+     * Used by the SKU-keyed lookups that Cart and Order checkout depend on.
+     *
+     * @param  Collection<int, ProductVariant>  $variants
+     * @return array<int, AutomaticDiscountResultDTO> keyed by variant id
+     */
+    private function discountMapForVariants($variants): array
+    {
+        $withProduct = $variants->filter(fn (ProductVariant $variant): bool => $variant->product !== null);
+
+        if ($withProduct->isEmpty()) {
+            return [];
+        }
+
+        $ancestors = $this->categories->ancestorsFor(
+            $withProduct->pluck('product.category_id')->filter()->unique()->all()
+        );
+
+        $contexts = $withProduct->map(fn (ProductVariant $variant): AutomaticDiscountContextDTO => new AutomaticDiscountContextDTO(
+            variantId: $variant->id,
+            productId: (int) $variant->product_id,
+            categoryIds: $ancestors[$variant->product->category_id] ?? [],
+            brandId: $variant->product->brand_id === null ? null : (int) $variant->product->brand_id,
+            basePrice: (int) $variant->base_price,
+        ))->values()->all();
+
+        return $this->promotion->evaluateAutomaticDiscounts($contexts);
     }
 
     /**
@@ -602,15 +796,21 @@ class EloquentCatalogManager implements CatalogManagerInterface
                 ->all()
         );
 
-        return $paginator->through(fn (Product $p) => $this->hydrateProduct($p, $mediaMap, $stockMap));
+        // Same batching discipline as media and stock: the entire page is priced in
+        // a single Promotion call, so a 100-product listing never becomes 100
+        // discount lookups.
+        $discountMap = $this->discountMapForProducts($paginator->getCollection());
+
+        return $paginator->through(fn (Product $p) => $this->hydrateProduct($p, $mediaMap, $stockMap, $discountMap));
     }
 
-    private function hydrateProduct(Product $product, ?Collection $mediaMap = null, ?array $stockMap = null): ProductDTO
+    private function hydrateProduct(Product $product, ?Collection $mediaMap = null, ?array $stockMap = null, ?array $discountMap = null): ProductDTO
     {
         // Single-item callers omit the maps and get them built for this product;
         // list callers pass shared, page-wide maps each built in a single fetch.
         $mediaMap ??= $this->buildMediaMap($this->productMediaIds($product));
         $stockMap ??= $this->availableStockMap($product->variants->pluck('sku')->all());
+        $discountMap ??= $this->discountMapForProducts(collect([$product]));
 
         $primaryImageUrl = $product->primary_media_id
             ? $mediaMap->get($product->primary_media_id)?->url
@@ -630,6 +830,7 @@ class EloquentCatalogManager implements CatalogManagerInterface
                 $product->title,
                 $stockMap[$v->sku] ?? 0,
                 $primaryImageUrl,
+                $discountMap[$v->id] ?? null,
             ))
             ->all();
 

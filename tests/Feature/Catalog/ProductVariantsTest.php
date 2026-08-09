@@ -4,6 +4,7 @@ namespace Tests\Feature\Catalog;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Modules\Catalog\Domain\Models\Product;
 use Modules\Catalog\Domain\Models\ProductVariant;
@@ -42,9 +43,13 @@ class ProductVariantsTest extends TestCase
         ]);
 
         $response->assertCreated()
-            ->assertJsonStructure(['id', 'sku', 'type', 'is_default', 'base_price', 'compare_at_price', 'attributes', 'image_url'])
+            ->assertJsonStructure(['id', 'sku', 'type', 'is_default', 'base_price', 'effective_price', 'discount', 'attributes', 'image_url'])
             ->assertJsonPath('type', 'color')
             ->assertJsonPath('base_price', 4999)
+            // With no promotion in play the effective price is the base price and
+            // the discount payload is null.
+            ->assertJsonPath('effective_price', 4999)
+            ->assertJsonPath('discount', null)
             ->assertJsonPath('is_default', true);
 
         // SKUs are server-generated public codes (bdv-XXXXXX over the human-safe
@@ -143,16 +148,38 @@ class ProductVariantsTest extends TestCase
         $this->assertNotSame($first, $second);
     }
 
-    /** @test */
-    public function it_stores_a_compare_at_price_alongside_the_base_price(): void
+    /**
+     * compare_at_price was Catalog's old promotional-price column. Promotional
+     * pricing now belongs entirely to the Promotion module, so the field is neither
+     * accepted on input nor present on output — sending it is silently ignored
+     * rather than stored.
+     *
+     * @test
+     */
+    public function it_no_longer_accepts_or_returns_compare_at_price(): void
     {
-        $this->postJson("/api/v1/catalog/products/{$this->product->uuid}/variants", [
+        $response = $this->postJson("/api/v1/catalog/products/{$this->product->uuid}/variants", [
             'type' => 'color',
             'base_price' => 1999,
             'compare_at_price' => 2999,
         ])->assertCreated()
             ->assertJsonPath('base_price', 1999)
-            ->assertJsonPath('compare_at_price', 2999);
+            ->assertJsonPath('effective_price', 1999)
+            ->assertJsonMissingPath('compare_at_price');
+
+        $this->assertDatabaseHas('product_variants', [
+            'sku' => $response->json('sku'),
+            'base_price' => 1999,
+        ]);
+    }
+
+    /** @test */
+    public function the_product_variants_table_no_longer_has_a_compare_at_price_column(): void
+    {
+        $this->assertFalse(
+            Schema::hasColumn('product_variants', 'compare_at_price'),
+            'compare_at_price should have been dropped from product_variants.'
+        );
     }
 
     /** @test */
@@ -281,10 +308,9 @@ class ProductVariantsTest extends TestCase
 
         $this->patchJson("/api/v1/catalog/variants/{$variant->id}", [
             'base_price' => 2500,
-            'compare_at_price' => 3000,
         ])->assertOk()
             ->assertJsonPath('base_price', 2500)
-            ->assertJsonPath('compare_at_price', 3000);
+            ->assertJsonPath('effective_price', 2500);
     }
 
     /** @test */

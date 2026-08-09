@@ -24,9 +24,9 @@ class CatalogSampleDataSeeder extends Seeder
             slug: 'galaxy-s25',
             description: 'Flagship Android phone with top-tier camera.',
             variants: [
-                ['price' => 45_000_000, 'compare' => 50_000_000, 'attrs' => ['storage' => '128GB', 'color' => 'black']],
-                ['price' => 52_000_000, 'compare' => 58_000_000, 'attrs' => ['storage' => '256GB', 'color' => 'white']],
-                ['price' => 62_000_000, 'compare' => 70_000_000, 'attrs' => ['storage' => '512GB', 'color' => 'violet']],
+                ['price' => 45_000_000, 'attrs' => ['storage' => '128GB', 'color' => 'black']],
+                ['price' => 52_000_000, 'attrs' => ['storage' => '256GB', 'color' => 'white']],
+                ['price' => 62_000_000, 'attrs' => ['storage' => '512GB', 'color' => 'violet']],
             ],
         );
 
@@ -36,8 +36,8 @@ class CatalogSampleDataSeeder extends Seeder
             slug: 'iphone-16',
             description: 'Apple flagship with A18 chip.',
             variants: [
-                ['price' => 60_000_000, 'compare' => 65_000_000, 'attrs' => ['storage' => '128GB', 'color' => 'black']],
-                ['price' => 70_000_000, 'compare' => 75_000_000, 'attrs' => ['storage' => '256GB', 'color' => 'pink']],
+                ['price' => 60_000_000, 'attrs' => ['storage' => '128GB', 'color' => 'black']],
+                ['price' => 70_000_000, 'attrs' => ['storage' => '256GB', 'color' => 'pink']],
             ],
         );
 
@@ -47,8 +47,8 @@ class CatalogSampleDataSeeder extends Seeder
             slug: 'macbook-pro-14',
             description: 'M4 chip, 14-inch Liquid Retina XDR display.',
             variants: [
-                ['price' => 120_000_000, 'compare' => 130_000_000, 'attrs' => ['chip' => 'M4', 'ram' => '16GB', 'storage' => '512GB']],
-                ['price' => 170_000_000, 'compare' => 185_000_000, 'attrs' => ['chip' => 'M4 Pro', 'ram' => '24GB', 'storage' => '1TB']],
+                ['price' => 120_000_000, 'attrs' => ['chip' => 'M4', 'ram' => '16GB', 'storage' => '512GB']],
+                ['price' => 170_000_000, 'attrs' => ['chip' => 'M4 Pro', 'ram' => '24GB', 'storage' => '1TB']],
             ],
         );
 
@@ -58,7 +58,7 @@ class CatalogSampleDataSeeder extends Seeder
             slug: 'airpods-pro-2',
             description: 'Active noise-cancelling wireless earbuds.',
             variants: [
-                ['price' => 15_000_000, 'compare' => 17_000_000, 'attrs' => ['color' => 'white']],
+                ['price' => 15_000_000, 'attrs' => ['color' => 'white']],
             ],
         );
 
@@ -68,8 +68,8 @@ class CatalogSampleDataSeeder extends Seeder
             slug: 'usb-c-hub-7in1',
             description: 'HDMI, USB-A x3, SD card, PD charging.',
             variants: [
-                ['price' => 3_500_000, 'compare' => 4_000_000, 'attrs' => ['color' => 'space-grey']],
-                ['price' => 3_500_000, 'compare' => 4_000_000, 'attrs' => ['color' => 'silver']],
+                ['price' => 3_500_000, 'attrs' => ['color' => 'space-grey']],
+                ['price' => 3_500_000, 'attrs' => ['color' => 'silver']],
             ],
         );
 
@@ -104,7 +104,7 @@ class CatalogSampleDataSeeder extends Seeder
         return $category;
     }
 
-    /** @param array<int,array{price:int,compare:int,attrs:array<string,string>}> $variants */
+    /** @param array<int,array{price:int,attrs:array<string,string>}> $variants */
     private function seedProduct(Category $category, string $title, string $slug, string $description, array $variants): void
     {
         // Seeders run under WithoutModelEvents, which mutes the `creating` hook that
@@ -136,7 +136,6 @@ class CatalogSampleDataSeeder extends Seeder
                 'type' => 'color',
                 'is_default' => $i === 0,
                 'base_price' => $v['price'],
-                'compare_at_price' => $v['compare'],
                 'attributes' => $v['attrs'],
             ]);
             // Same story as the product code: `sku` is server-owned, not fillable,

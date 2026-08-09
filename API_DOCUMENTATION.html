@@ -170,6 +170,12 @@
   <a href="#notifications-list">List Notifications</a>
   <a href="#notifications-read">Mark as Read</a>
   <a href="#notifications-triggers">When They Appear</a>
+
+  <div class="section-label">Promotions</div>
+  <a href="#promotions">Pricing Model</a>
+  <a href="#promotions-campaigns">Campaigns</a>
+  <a href="#promotions-admin">Admin API</a>
+  <a href="#promotions-permissions">Permissions</a>
 </nav>
 
 <main>
@@ -1710,7 +1716,8 @@ GET /api/v1/catalog/products?available=true</pre>
       <span class="key">"type"</span>:            <span class="str">"color"</span>,
       <span class="key">"is_default"</span>:     <span class="bool">true</span>,
       <span class="key">"base_price"</span>:     <span class="num">89000000</span>,
-      <span class="key">"compare_at_price"</span>: <span class="num">95000000</span>,
+      <span class="key">"effective_price"</span>:     <span class="num">89000000</span>,
+      <span class="key">"discount"</span>:     <span class="null-val">null</span>,
       <span class="key">"attributes"</span>:    { <span class="key">"رنگ"</span>: <span class="str">"مشکی تیتانیومی"</span>, <span class="key">"حافظه"</span>: <span class="str">"۲۵۶ گیگابایت"</span> },
       <span class="key">"image_url"</span>:     <span class="null-val">null</span>,
       <span class="key">"stock"</span>:         <span class="num">42</span>
@@ -1721,7 +1728,8 @@ GET /api/v1/catalog/products?available=true</pre>
       <span class="key">"type"</span>:            <span class="str">"color"</span>,
       <span class="key">"is_default"</span>:     <span class="bool">false</span>,
       <span class="key">"base_price"</span>:     <span class="num">99000000</span>,
-      <span class="key">"compare_at_price"</span>: <span class="null-val">null</span>,
+      <span class="key">"effective_price"</span>:     <span class="num">99000000</span>,
+      <span class="key">"discount"</span>:     <span class="null-val">null</span>,
       <span class="key">"attributes"</span>:    { <span class="key">"رنگ"</span>: <span class="str">"مشکی تیتانیومی"</span>, <span class="key">"حافظه"</span>: <span class="str">"۵۱۲ گیگابایت"</span> },
       <span class="key">"image_url"</span>:     <span class="null-val">null</span>,
       <span class="key">"stock"</span>:         <span class="num">17</span>
@@ -1842,8 +1850,7 @@ GET /api/v1/catalog/products?available=true</pre>
         <tr><td>variants</td><td class="opt">optional array</td><td>Array of variant objects to create atomically alongside the product. If omitted the product is created with no variants (add them later via the standalone variant routes). Must contain ≥ 1 item when provided.</td></tr>
         <tr><td>variants.*.type</td><td class="opt">required per item</td><td>Variant display type. Allowed values: <code>image</code> or <code>color</code>.</td></tr>
         <tr><td>variants.*.base_price</td><td class="opt">required per item</td><td>Selling price in rials (integer ≥ 0). No floats.</td></tr>
-        <tr><td>variants.*.compare_at_price</td><td class="opt">optional per item</td><td>Struck-through original price in rials. Must be ≥ 0 if provided.</td></tr>
-        <tr><td>variants.*.is_default</td><td class="opt">required per item</td><td>Boolean. Exactly one variant in the array must be <code>true</code> — zero or multiple defaults returns 422.</td></tr>
+                <tr><td>variants.*.is_default</td><td class="opt">required per item</td><td>Boolean. Exactly one variant in the array must be <code>true</code> — zero or multiple defaults returns 422.</td></tr>
         <tr><td>variants.*.media_id</td><td class="opt">optional per item</td><td>Pre-uploaded media ID for a variant-specific image.</td></tr>
         <tr><td>variants.*.attributes</td><td class="opt">optional per item</td><td>Free-form key-value object, e.g. <code>{"رنگ": "مشکی", "حافظه": "256GB"}</code>.</td></tr>
       </table>
@@ -1867,14 +1874,16 @@ GET /api/v1/catalog/products?available=true</pre>
     {
       <span class="key">"type"</span>:             <span class="str">"color"</span>,
       <span class="key">"base_price"</span>:      <span class="num">89000000</span>,
-      <span class="key">"compare_at_price"</span>: <span class="num">95000000</span>,
+      <span class="key">"effective_price"</span>:      <span class="num">89000000</span>,
+      <span class="key">"discount"</span>:      <span class="null-val">null</span>,
       <span class="key">"is_default"</span>:      <span class="bool">true</span>,
       <span class="key">"attributes"</span>: { <span class="key">"رنگ"</span>: <span class="str">"مشکی تیتانیومی"</span>, <span class="key">"حافظه"</span>: <span class="str">"۲۵۶ گیگابایت"</span> }
     },
     {
       <span class="key">"type"</span>:             <span class="str">"color"</span>,
       <span class="key">"base_price"</span>:      <span class="num">99000000</span>,
-      <span class="key">"compare_at_price"</span>: <span class="null-val">null</span>,
+      <span class="key">"effective_price"</span>:      <span class="num">99000000</span>,
+      <span class="key">"discount"</span>:      <span class="null-val">null</span>,
       <span class="key">"is_default"</span>:      <span class="bool">false</span>,
       <span class="key">"attributes"</span>: { <span class="key">"رنگ"</span>: <span class="str">"مشکی تیتانیومی"</span>, <span class="key">"حافظه"</span>: <span class="str">"۵۱۲ گیگابایت"</span> }
     }
@@ -1891,8 +1900,8 @@ GET /api/v1/catalog/products?available=true</pre>
   <span class="key">"primary_image_url"</span>: <span class="null-val">null</span>,
   <span class="key">"images"</span>:            [],
   <span class="key">"variants"</span>: [
-    { <span class="key">"id"</span>: <span class="num">201</span>, <span class="key">"sku"</span>: <span class="str">"S25U-TBK-256"</span>, <span class="key">"type"</span>: <span class="str">"color"</span>, <span class="key">"is_default"</span>: <span class="bool">true</span>,  <span class="key">"base_price"</span>: <span class="num">89000000</span>, <span class="key">"compare_at_price"</span>: <span class="num">95000000</span>, <span class="key">"attributes"</span>: { <span class="comment">/* … */</span> }, <span class="key">"image_url"</span>: <span class="null-val">null</span>, <span class="key">"stock"</span>: <span class="num">0</span> },
-    { <span class="key">"id"</span>: <span class="num">202</span>, <span class="key">"sku"</span>: <span class="str">"S25U-TBK-512"</span>, <span class="key">"type"</span>: <span class="str">"color"</span>, <span class="key">"is_default"</span>: <span class="bool">false</span>, <span class="key">"base_price"</span>: <span class="num">99000000</span>, <span class="key">"compare_at_price"</span>: <span class="null-val">null</span>,     <span class="key">"attributes"</span>: { <span class="comment">/* … */</span> }, <span class="key">"image_url"</span>: <span class="null-val">null</span>, <span class="key">"stock"</span>: <span class="num">0</span> }
+    { <span class="key">"id"</span>: <span class="num">201</span>, <span class="key">"sku"</span>: <span class="str">"S25U-TBK-256"</span>, <span class="key">"type"</span>: <span class="str">"color"</span>, <span class="key">"is_default"</span>: <span class="bool">true</span>,  <span class="key">"base_price"</span>: <span class="num">89000000</span>, <span class="key">"attributes"</span>: { <span class="comment">/* … */</span> }, <span class="key">"image_url"</span>: <span class="null-val">null</span>, <span class="key">"stock"</span>: <span class="num">0</span> },
+    { <span class="key">"id"</span>: <span class="num">202</span>, <span class="key">"sku"</span>: <span class="str">"S25U-TBK-512"</span>, <span class="key">"type"</span>: <span class="str">"color"</span>, <span class="key">"is_default"</span>: <span class="bool">false</span>, <span class="key">"base_price"</span>: <span class="num">99000000</span>,     <span class="key">"attributes"</span>: { <span class="comment">/* … */</span> }, <span class="key">"image_url"</span>: <span class="null-val">null</span>, <span class="key">"stock"</span>: <span class="num">0</span> }
   ]
 }</pre>
       <div class="block-label">Validation error — zero or multiple defaults</div>
@@ -1927,8 +1936,7 @@ GET /api/v1/catalog/products?available=true</pre>
         <tr><td>variants.*.id</td><td class="opt">optional per item</td><td>Existing variant ID. If it already belongs to this product the variant is updated; if omitted (or unknown) a new variant is created with a server-generated SKU. Never send a <code>sku</code> — it is assigned automatically.</td></tr>
         <tr><td>variants.*.type</td><td class="opt">required per item</td><td>Variant display type. Allowed values: <code>image</code> or <code>color</code>.</td></tr>
         <tr><td>variants.*.base_price</td><td class="opt">required per item</td><td>Selling price in rials (integer ≥ 0).</td></tr>
-        <tr><td>variants.*.compare_at_price</td><td class="opt">optional per item</td><td>Struck-through price in rials, or <code>null</code>.</td></tr>
-        <tr><td>variants.*.is_default</td><td class="opt">required per item</td><td>Boolean. At most one submitted variant may be <code>true</code>. Zero is valid when you are not changing the default.</td></tr>
+                <tr><td>variants.*.is_default</td><td class="opt">required per item</td><td>Boolean. At most one submitted variant may be <code>true</code>. Zero is valid when you are not changing the default.</td></tr>
         <tr><td>variants.*.media_id</td><td class="opt">optional per item</td><td>Pre-uploaded media ID for this variant's image.</td></tr>
         <tr><td>variants.*.attributes</td><td class="opt">optional per item</td><td>Free-form key-value object, e.g. <code>{"رنگ":"مشکی"}</code>.</td></tr>
       </table>
@@ -1947,7 +1955,8 @@ GET /api/v1/catalog/products?available=true</pre>
       <span class="key">"id"</span>:               <span class="num">201</span>,             <span class="comment">// exists → updated</span>
       <span class="key">"type"</span>:             <span class="str">"color"</span>,
       <span class="key">"base_price"</span>:      <span class="num">92000000</span>,
-      <span class="key">"compare_at_price"</span>: <span class="num">95000000</span>,
+      <span class="key">"effective_price"</span>:      <span class="num">92000000</span>,
+      <span class="key">"discount"</span>:      <span class="null-val">null</span>,
       <span class="key">"is_default"</span>:      <span class="bool">true</span>,
       <span class="key">"attributes"</span>: { <span class="key">"رنگ"</span>: <span class="str">"مشکی تیتانیومی"</span>, <span class="key">"حافظه"</span>: <span class="str">"۲۵۶ گیگابایت"</span> }
     },
@@ -1955,7 +1964,8 @@ GET /api/v1/catalog/products?available=true</pre>
       <span class="comment">// no id → created with a server-generated SKU</span>
       <span class="key">"type"</span>:             <span class="str">"color"</span>,
       <span class="key">"base_price"</span>:      <span class="num">115000000</span>,
-      <span class="key">"compare_at_price"</span>: <span class="null-val">null</span>,
+      <span class="key">"effective_price"</span>:      <span class="num">115000000</span>,
+      <span class="key">"discount"</span>:      <span class="null-val">null</span>,
       <span class="key">"is_default"</span>:      <span class="bool">false</span>,
       <span class="key">"attributes"</span>: { <span class="key">"رنگ"</span>: <span class="str">"مشکی تیتانیومی"</span>, <span class="key">"حافظه"</span>: <span class="str">"۱ ترابایت"</span> }
     }
@@ -1973,8 +1983,8 @@ GET /api/v1/catalog/products?available=true</pre>
   <span class="key">"primary_image_url"</span>: <span class="str">"http://localhost:8000/storage/products/s25-hero.webp"</span>,
   <span class="key">"images"</span>: [ <span class="comment">/* … */</span> ],
   <span class="key">"variants"</span>: [
-    { <span class="key">"id"</span>: <span class="num">201</span>, <span class="key">"sku"</span>: <span class="str">"S25U-TBK-256"</span>, <span class="key">"type"</span>: <span class="str">"color"</span>, <span class="key">"is_default"</span>: <span class="bool">true</span>,  <span class="key">"base_price"</span>: <span class="num">92000000</span>,  <span class="key">"compare_at_price"</span>: <span class="num">95000000</span>, <span class="key">"attributes"</span>: { <span class="comment">/* … */</span> }, <span class="key">"image_url"</span>: <span class="null-val">null</span>, <span class="key">"stock"</span>: <span class="num">36</span> },
-    { <span class="key">"id"</span>: <span class="num">205</span>, <span class="key">"sku"</span>: <span class="str">"S25U-TBK-1T"</span>,  <span class="key">"type"</span>: <span class="str">"color"</span>, <span class="key">"is_default"</span>: <span class="bool">false</span>, <span class="key">"base_price"</span>: <span class="num">115000000</span>, <span class="key">"compare_at_price"</span>: <span class="null-val">null</span>,     <span class="key">"attributes"</span>: { <span class="comment">/* … */</span> }, <span class="key">"image_url"</span>: <span class="null-val">null</span>, <span class="key">"stock"</span>: <span class="num">8</span> }
+    { <span class="key">"id"</span>: <span class="num">201</span>, <span class="key">"sku"</span>: <span class="str">"S25U-TBK-256"</span>, <span class="key">"type"</span>: <span class="str">"color"</span>, <span class="key">"is_default"</span>: <span class="bool">true</span>,  <span class="key">"base_price"</span>: <span class="num">92000000</span>, <span class="key">"attributes"</span>: { <span class="comment">/* … */</span> }, <span class="key">"image_url"</span>: <span class="null-val">null</span>, <span class="key">"stock"</span>: <span class="num">36</span> },
+    { <span class="key">"id"</span>: <span class="num">205</span>, <span class="key">"sku"</span>: <span class="str">"S25U-TBK-1T"</span>,  <span class="key">"type"</span>: <span class="str">"color"</span>, <span class="key">"is_default"</span>: <span class="bool">false</span>, <span class="key">"base_price"</span>: <span class="num">115000000</span>,     <span class="key">"attributes"</span>: { <span class="comment">/* … */</span> }, <span class="key">"image_url"</span>: <span class="null-val">null</span>, <span class="key">"stock"</span>: <span class="num">8</span> }
   ]
 }</pre>
       <div class="block-label">Validation error — multiple defaults</div>
@@ -2055,6 +2065,14 @@ GET /api/v1/catalog/products?available=true</pre>
   <p>Variants are the purchasable options of a product (e.g. color/size combinations). Each variant has a unique SKU and a price in rials. Exactly one variant per product has <code>is_default: true</code> — this is the variant shown by default.</p>
   <div class="warn"><strong>Prices are integers in rials.</strong> Never send floats. Send <code>"base_price": 89000000</code> for 89,000,000 rials (8,900,000 tomans).</div>
   <div class="note"><strong>Read-only <code>stock</code> field.</strong> Every variant object (here and inside a product's <code>variants</code> array) carries a <code>stock</code> integer = available units for that SKU (physical − reserved), sourced from the Inventory module. It is computed server-side and never accepted from client input. A SKU with no inventory record reports <code>0</code>.</div>
+  <div class="warn"><strong><code>compare_at_price</code> has been removed.</strong> Catalog now stores only <code>base_price</code>, the regular price. Promotional pricing is computed live by the Promotion module and returned as <code>effective_price</code> + <code>discount</code>. Sending <code>compare_at_price</code> on a create or update is ignored.</div>
+  <div class="note"><strong>Live promotional pricing.</strong> Every variant object carries:
+    <ul>
+      <li><code>base_price</code> — the regular price, always present.</li>
+      <li><code>effective_price</code> — what the customer actually pays right now. Equal to <code>base_price</code> when nothing applies, so you can render this field alone.</li>
+      <li><code>discount</code> — the single winning rule (<code>name</code>, <code>type</code>, <code>percentage_bps</code>, <code>fixed_amount</code>, <code>amount</code>), or <code>null</code>.</li>
+    </ul>
+    <strong>Automatic discounts never stack</strong> — where several rules match a variant, the one producing the largest actual rial reduction wins and the rest do nothing. The server response is authoritative; never compute a promotional price on the client. See <a href="#promotions">Promotions</a>.</div>
 
   <div class="endpoint">
     <div class="endpoint-header">
@@ -2069,8 +2087,15 @@ GET /api/v1/catalog/products?available=true</pre>
   <span class="key">"sku"</span>:             <span class="str">"S25U-TBK-256"</span>,
   <span class="key">"type"</span>:            <span class="str">"color"</span>,
   <span class="key">"is_default"</span>:     <span class="bool">true</span>,
-  <span class="key">"base_price"</span>:     <span class="num">89000000</span>,
-  <span class="key">"compare_at_price"</span>: <span class="num">95000000</span>,
+  <span class="key">"base_price"</span>:      <span class="num">89000000</span>,
+  <span class="key">"effective_price"</span>: <span class="num">71200000</span>,
+  <span class="key">"discount"</span>: {
+    <span class="key">"name"</span>:           <span class="str">"Galaxy Launch Offer"</span>,
+    <span class="key">"type"</span>:           <span class="str">"percentage"</span>,
+    <span class="key">"percentage_bps"</span>: <span class="num">2000</span>,
+    <span class="key">"fixed_amount"</span>:   <span class="null-val">null</span>,
+    <span class="key">"amount"</span>:         <span class="num">17800000</span>
+  },
   <span class="key">"attributes"</span>: {
     <span class="key">"رنگ"</span>:    <span class="str">"مشکی تیتانیومی"</span>,
     <span class="key">"حافظه"</span>: <span class="str">"۲۵۶ گیگابایت"</span>
@@ -2104,8 +2129,7 @@ GET /api/v1/catalog/products?available=true</pre>
         <tr><th>Field</th><th>Type</th><th>Description</th></tr>
         <tr><td>type</td><td class="req">required string</td><td>Variant display type. Allowed values: <code>image</code> or <code>color</code>.</td></tr>
         <tr><td>base_price</td><td class="req">required integer</td><td>Selling price in rials. Must be ≥ 0. No floats.</td></tr>
-        <tr><td>compare_at_price</td><td class="opt">optional integer</td><td>Original/crossed-out price in rials. Used for showing discounts. Must be ≥ 0.</td></tr>
-        <tr><td>is_default</td><td class="opt">optional boolean</td><td>Set to <code>true</code> to make this the default variant. Automatically unsets the current default.</td></tr>
+                <tr><td>is_default</td><td class="opt">optional boolean</td><td>Set to <code>true</code> to make this the default variant. Automatically unsets the current default.</td></tr>
         <tr><td>attributes</td><td class="opt">optional object</td><td>Free-form key-value pairs for display. E.g. <code>{"رنگ": "آبی", "سایز": "XL"}</code>.</td></tr>
         <tr><td>media_id</td><td class="opt">optional integer</td><td>Pre-uploaded media ID for a variant-specific image. Mutually exclusive with <code>variant_image</code>.</td></tr>
         <tr><td>variant_image</td><td class="opt">optional file</td><td>Variant image file (inline upload). JPEG/PNG/WebP, max 4 MB. Mutually exclusive with <code>media_id</code>.</td></tr>
@@ -2113,8 +2137,15 @@ GET /api/v1/catalog/products?available=true</pre>
       <div class="note"><strong>SKU is server-generated:</strong> Do <strong>not</strong> send a <code>sku</code> field — the server assigns it automatically (format <code>bdv-XXXXXX</code>, see <a href="#public-codes">Public Codes</a>). It is returned in the response below.</div>
       <pre>{
   <span class="key">"type"</span>:            <span class="str">"color"</span>,
-  <span class="key">"base_price"</span>:     <span class="num">89000000</span>,
-  <span class="key">"compare_at_price"</span>: <span class="num">95000000</span>,
+  <span class="key">"base_price"</span>:      <span class="num">89000000</span>,
+  <span class="key">"effective_price"</span>: <span class="num">71200000</span>,
+  <span class="key">"discount"</span>: {
+    <span class="key">"name"</span>:           <span class="str">"Galaxy Launch Offer"</span>,
+    <span class="key">"type"</span>:           <span class="str">"percentage"</span>,
+    <span class="key">"percentage_bps"</span>: <span class="num">2000</span>,
+    <span class="key">"fixed_amount"</span>:   <span class="null-val">null</span>,
+    <span class="key">"amount"</span>:         <span class="num">17800000</span>
+  },
   <span class="key">"is_default"</span>:     <span class="bool">true</span>,
   <span class="key">"attributes"</span>: {
     <span class="key">"رنگ"</span>:    <span class="str">"مشکی تیتانیومی"</span>,
@@ -2128,8 +2159,15 @@ GET /api/v1/catalog/products?available=true</pre>
   <span class="key">"sku"</span>:             <span class="str">"S25U-TBK-256"</span>,
   <span class="key">"type"</span>:            <span class="str">"color"</span>,
   <span class="key">"is_default"</span>:     <span class="bool">true</span>,
-  <span class="key">"base_price"</span>:     <span class="num">89000000</span>,
-  <span class="key">"compare_at_price"</span>: <span class="num">95000000</span>,
+  <span class="key">"base_price"</span>:      <span class="num">89000000</span>,
+  <span class="key">"effective_price"</span>: <span class="num">71200000</span>,
+  <span class="key">"discount"</span>: {
+    <span class="key">"name"</span>:           <span class="str">"Galaxy Launch Offer"</span>,
+    <span class="key">"type"</span>:           <span class="str">"percentage"</span>,
+    <span class="key">"percentage_bps"</span>: <span class="num">2000</span>,
+    <span class="key">"fixed_amount"</span>:   <span class="null-val">null</span>,
+    <span class="key">"amount"</span>:         <span class="num">17800000</span>
+  },
   <span class="key">"attributes"</span>: { <span class="key">"رنگ"</span>: <span class="str">"مشکی تیتانیومی"</span>, <span class="key">"حافظه"</span>: <span class="str">"۲۵۶ گیگابایت"</span> },
   <span class="key">"image_url"</span>:     <span class="str">"http://localhost:8000/storage/variants/s25-black.webp"</span>,
   <span class="key">"stock"</span>:         <span class="num">0</span>
@@ -2147,6 +2185,8 @@ GET /api/v1/catalog/products?available=true</pre>
       <p>Partial update. Only fields you send are changed. Setting <code>is_default: true</code> automatically unsets the previous default variant for this product.</p>
       <pre>{
   <span class="key">"base_price"</span>: <span class="num">85000000</span>,
+  <span class="key">"effective_price"</span>: <span class="num">85000000</span>,
+  <span class="key">"discount"</span>: <span class="null-val">null</span>,
   <span class="key">"is_default"</span>: <span class="bool">true</span>
 }</pre>
       <div class="block-label">Response — 200 OK</div>
@@ -2156,7 +2196,8 @@ GET /api/v1/catalog/products?available=true</pre>
   <span class="key">"type"</span>:            <span class="str">"color"</span>,
   <span class="key">"is_default"</span>:     <span class="bool">true</span>,
   <span class="key">"base_price"</span>:     <span class="num">85000000</span>,
-  <span class="key">"compare_at_price"</span>: <span class="num">95000000</span>,
+  <span class="key">"effective_price"</span>:     <span class="num">85000000</span>,
+  <span class="key">"discount"</span>:     <span class="null-val">null</span>,
   <span class="key">"attributes"</span>: { <span class="key">"رنگ"</span>: <span class="str">"مشکی تیتانیومی"</span>, <span class="key">"حافظه"</span>: <span class="str">"۲۵۶ گیگابایت"</span> },
   <span class="key">"image_url"</span>:     <span class="null-val">null</span>,
   <span class="key">"stock"</span>:         <span class="num">36</span>
@@ -2336,7 +2377,11 @@ GET /api/v1/catalog/products?available=true</pre>
   </div>
 
   <div class="note">
-    <strong>All prices are integers (rials).</strong> <code>base_price</code>, <code>compare_at_price</code>, and <code>line_total</code> are raw integer rials. Divide by 10 for tomans. <code>total_price</code> on the cart object is the sum of all line totals.
+    <strong>All prices are integers (rials).</strong> <code>base_price</code>, <code>effective_price</code>, and <code>line_total</code> are raw integer rials. Divide by 10 for tomans.
+    <br><br>
+    <strong>Cart lines are charged at <code>effective_price</code>.</strong> Each item carries <code>base_price</code> (regular), <code>effective_price</code> (after the winning automatic discount), <code>automatic_discount</code> (the rule, or <code>null</code>), <code>line_total</code> = <code>effective_price × quantity</code>, <code>regular_line_total</code> = <code>base_price × quantity</code>, and <code>automatic_discount_amount</code> = the difference. The cart object adds <code>total_price</code> (payable), <code>regular_total_price</code>, and <code>automatic_discount_total</code>.
+    <br><br>
+    Cart pricing is <strong>live</strong> — it is recomputed on every read, so a promotion starting or ending between two requests is reflected immediately. <strong>No coupon state is ever stored on a cart</strong>; coupons apply to an order (see <a href="#order-coupon-check">Check Coupon</a>).
   </div>
 
   <div class="note">
@@ -2361,7 +2406,9 @@ GET /api/v1/catalog/products?available=true</pre>
   <span class="key">"item_count"</span>:     <span class="num">2</span>,
   <span class="key">"total_quantity"</span>: <span class="num">3</span>,
   <span class="key">"total_price"</span>:    <span class="num">267000000</span>,
-  <span class="key">"items"</span>: [
+ . qq{  <span class="key">"regular_total_price"</span>:    <span class="num">267000000</span>,
+  <span class="key">"automatic_discount_total"</span>: <span class="num">0</span>,
+} .   <span class="key">"items"</span>: [
     {
       <span class="key">"id"</span>:               <span class="num">55</span>,
       <span class="key">"sku"</span>:              <span class="str">"S25U-TBK-256"</span>,
@@ -2370,10 +2417,13 @@ GET /api/v1/catalog/products?available=true</pre>
       <span class="key">"type"</span>:             <span class="str">"color"</span>,
       <span class="key">"attributes"</span>:       { <span class="key">"color"</span>: <span class="str">"Titanium Black"</span>, <span class="key">"storage"</span>: <span class="str">"256GB"</span> },
       <span class="key">"base_price"</span>:       <span class="num">89000000</span>,
-      <span class="key">"compare_at_price"</span>: <span class="num">95000000</span>,
+      <span class="key">"effective_price"</span>:       <span class="num">89000000</span>,
+      <span class="key">"automatic_discount"</span>:       <span class="null-val">null</span>,
       <span class="key">"image_url"</span>:        <span class="str">"http://localhost:8000/storage/variants/s25-black.webp"</span>,
       <span class="key">"primary_image_url"</span>: <span class="str">"http://localhost:8000/storage/products/s25-primary.webp"</span>,
-      <span class="key">"line_total"</span>:       <span class="num">178000000</span>
+      <span class="key">"line_total"</span>:       <span class="num">178000000</span>,
+      <span class="key">"regular_line_total"</span>:       <span class="num">178000000</span>,
+      <span class="key">"automatic_discount_amount"</span>: <span class="num">0</span>
     },
     {
       <span class="key">"id"</span>:               <span class="num">56</span>,
@@ -2383,10 +2433,13 @@ GET /api/v1/catalog/products?available=true</pre>
       <span class="key">"type"</span>:             <span class="str">"image"</span>,
       <span class="key">"attributes"</span>:       [],
       <span class="key">"base_price"</span>:       <span class="num">89000000</span>,
-      <span class="key">"compare_at_price"</span>: <span class="null-val">null</span>,
+      <span class="key">"effective_price"</span>:       <span class="num">89000000</span>,
+      <span class="key">"automatic_discount"</span>:       <span class="null-val">null</span>,
       <span class="key">"image_url"</span>:        <span class="null-val">null</span>,
       <span class="key">"primary_image_url"</span>: <span class="str">"http://localhost:8000/storage/products/airpods-pro2.webp"</span>,
-      <span class="key">"line_total"</span>:       <span class="num">89000000</span>
+      <span class="key">"line_total"</span>:       <span class="num">89000000</span>,
+      <span class="key">"regular_line_total"</span>:       <span class="num">89000000</span>,
+      <span class="key">"automatic_discount_amount"</span>: <span class="num">0</span>
     }
   ]
 }</pre>
@@ -2625,11 +2678,13 @@ await guestCartRequest('GET',  '/');
   </div>
 
   <div class="note">
-    <strong>Price snapshot.</strong> <code>price_per_unit</code> is the variant selling/base price at checkout; nullable <code>compare_at_price</code> is the optional compare-at/reference price shown for display. <code>line_total</code> is always <code>price_per_unit × quantity</code>. Compare-at price never affects line totals, order totals, tax, shipping, payment amounts, or inventory. These integer-rial values are immutable even if Catalog prices change later.
+    <strong>Price snapshot.</strong> At checkout each item freezes: <code>regular_price_per_unit</code> (Catalog's regular price), <code>automatic_discount_amount_per_unit</code> and <code>automatic_discount</code> (the winning Promotion rule, or <code>null</code>), and <code>price_per_unit</code> — the effective price actually charged, before any order-level coupon. <code>line_total</code> is always <code>price_per_unit × quantity</code>.
+    <br><br>
+    These integer-rial values are immutable: editing, expiring, or deleting the discount afterwards never changes a placed order, and the snapshot is self-contained so a historical line stays explainable without the live rule. The legacy <code>compare_at_price</code> field is retained for orders placed before promotions existed and is always <code>null</code> on new orders.
   </div>
 
   <div class="note">
-    <strong>Customer &amp; product snapshots.</strong> Orders are historical records, so every order carries a frozen copy of the buyer's identity and each purchased product. <code>product_snapshot.image_url</code> is the purchased variant image; <code>product_snapshot.primary_image_url</code> is the parent product's primary image. Both come from the enriched Cart item and are never refreshed from Catalog. Historical snapshots created before <code>primary_image_url</code> existed remain valid without that key. The shared <code>OrderItemResource</code> exposes these snapshots and <code>compare_at_price</code> consistently in customer and admin Order detail responses.
+    <strong>Customer &amp; product snapshots.</strong> Orders are historical records, so every order carries a frozen copy of the buyer's identity and each purchased product. <code>product_snapshot.image_url</code> is the purchased variant image; <code>product_snapshot.primary_image_url</code> is the parent product's primary image. Both come from the enriched Cart item and are never refreshed from Catalog. Historical snapshots created before <code>primary_image_url</code> existed remain valid without that key. The shared <code>OrderItemResource</code> exposes these snapshots and the automatic-discount fields consistently in customer and admin Order detail responses.
   </div>
 
   <div class="note">
@@ -2708,9 +2763,20 @@ await guestCartRequest('GET',  '/');
         <span class="key">"attributes"</span>: { <span class="key">"color"</span>: <span class="str">"Titanium Black"</span>, <span class="key">"storage"</span>: <span class="str">"256GB"</span> }
       },
       <span class="key">"quantity"</span>:           <span class="num">2</span>,
-      <span class="key">"price_per_unit"</span>:     <span class="num">89000000</span>,   <span class="comment">// snapshotted at checkout</span>
-      <span class="key">"compare_at_price"</span>:   <span class="num">95000000</span>,   <span class="comment">// display/reference only; excluded from totals</span>
-      <span class="key">"line_total"</span>:         <span class="num">178000000</span>
+      <span class="key">"regular_price_per_unit"</span>:             <span class="num">89000000</span>,   <span class="comment">// strike-through price at checkout</span>
+      <span class="key">"automatic_discount_amount_per_unit"</span>: <span class="num">17800000</span>,
+      <span class="key">"automatic_discount"</span>: {                          <span class="comment">// frozen; null when none applied</span>
+        <span class="key">"discount_id"</span>:         <span class="num">7</span>,
+        <span class="key">"name"</span>:                <span class="str">"Galaxy Launch Offer"</span>,
+        <span class="key">"type"</span>:                <span class="str">"percentage"</span>,
+        <span class="key">"percentage_bps"</span>:      <span class="num">2000</span>,
+        <span class="key">"matched_target_type"</span>: <span class="str">"product"</span>,
+        <span class="key">"discount_amount"</span>:     <span class="num">17800000</span>,
+        <span class="key">"effective_price"</span>:     <span class="num">71200000</span>
+      },
+      <span class="key">"price_per_unit"</span>:     <span class="num">71200000</span>,   <span class="comment">// effective price charged</span>
+      <span class="key">"compare_at_price"</span>:   <span class="null-val">null</span>,       <span class="comment">// legacy; always null on new orders</span>
+      <span class="key">"line_total"</span>:         <span class="num">142400000</span>
     },
     {
       <span class="key">"id"</span>:                 <span class="num">102</span>,
@@ -2726,7 +2792,6 @@ await guestCartRequest('GET',  '/');
       },
       <span class="key">"quantity"</span>:           <span class="num">1</span>,
       <span class="key">"price_per_unit"</span>:     <span class="num">89000000</span>,
-      <span class="key">"compare_at_price"</span>:   <span class="null-val">null</span>,
       <span class="key">"line_total"</span>:         <span class="num">89000000</span>
     }
   ]
@@ -2850,7 +2915,6 @@ await guestCartRequest('GET',  '/');
       <span class="key">"quantity"</span>:                               <span class="num">2</span>,
       <span class="key">"max_quantity_per_order_snapshot"</span>:      <span class="num">3</span>,
       <span class="key">"price_per_unit"</span>:                    <span class="num">129575000</span>,
-      <span class="key">"compare_at_price"</span>:                  <span class="num">139000000</span>,
       <span class="key">"line_total"</span>:                        <span class="num">259150000</span>
     }
   ],
@@ -2921,6 +2985,68 @@ await guestCartRequest('GET',  '/');
         <tr><td>401</td><td class="opt">No Bearer token provided</td></tr>
         <tr><td>404</td><td class="opt">Code is missing, malformed, partial, numeric, or belongs to another customer</td></tr>
         <tr><td>429</td><td class="opt">Rate limit exceeded — see <code>Retry-After</code> header</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- POST /api/v1/orders/{order}/coupon/check -->
+  <h3 id="order-coupon-check">Check Coupon</h3>
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/orders/{order}/coupon/check</span>
+      <span class="badge auth">Requires auth:sanctum</span>
+      <span class="badge rate">throttle:api</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Previews what a coupon would take off one of your own <strong>pending</strong> orders. Typically called from the payment page, after the order exists. The order ID goes in the URL as a numeric id.</p>
+
+      <div class="note"><strong>Customer self-service.</strong> No <code>promotion.*</code> permission is required — authentication plus ownership of the order is what protects this. A guest gets 401; another customer's order gets 403.</div>
+
+      <div class="warn"><strong>Advisory only — this reserves nothing and changes nothing.</strong> You may try as many codes as you like without consuming a use. Because nothing is held, the coupon can still expire, be disabled, or be exhausted by someone else before you pay — <a href="#payment-initialize">Initialize Payment</a> revalidates authoritatively and is the only thing that decides what you are charged.</div>
+
+      <div class="block-label">Request body</div>
+      <table>
+        <tr><th>Field</th><th>Rules</th><th>Notes</th></tr>
+        <tr><td>code</td><td class="req">required string</td><td>Max 32 chars. Trimmed and uppercased server-side, so <code>summer10</code> and <code>SUMMER10</code> are the same coupon.</td></tr>
+      </table>
+      <pre>{ <span class="key">"code"</span>: <span class="str">"SUMMER10"</span> }</pre>
+
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{
+  <span class="key">"code"</span>:                 <span class="str">"SUMMER10"</span>,   <span class="comment">// normalized</span>
+  <span class="key">"discount_type"</span>:        <span class="str">"percentage"</span>,
+  <span class="key">"percentage_bps"</span>:       <span class="num">1000</span>,         <span class="comment">// 1000 bps = 10%</span>
+  <span class="key">"fixed_amount"</span>:         <span class="null-val">null</span>,
+  <span class="key">"discount_amount"</span>:      <span class="num">18000000</span>,
+  <span class="key">"merchandise_subtotal"</span>: <span class="num">180000000</span>,   <span class="comment">// AFTER automatic discounts</span>
+  <span class="key">"shipping_cost"</span>:        <span class="num">850000</span>,
+  <span class="key">"tax_amount"</span>:           <span class="num">0</span>,
+  <span class="key">"total_before_coupon"</span>:  <span class="num">180850000</span>,
+  <span class="key">"total_after_coupon"</span>:   <span class="num">162850000</span>
+}</pre>
+
+      <div class="note"><strong>What the coupon is calculated from.</strong> Always the <strong>merchandise subtotal</strong> — the sum of order item line totals, which already reflect any automatic discounts. <strong>Shipping and tax are excluded</strong> from both the minimum-spend test and the percentage, so a coupon never discounts delivery.
+        <br><br>
+        Layers compose, they do not add: a 20% automatic discount followed by a 10% coupon gives 72% of the original, not 70%.</div>
+
+      <div class="block-label">Errors — 422</div>
+      <table>
+        <tr><th>Condition</th><th>Message</th></tr>
+        <tr><td>Unknown, inactive, or soft-deleted code</td><td>Deliberately generic (<em>"This coupon code is invalid."</em>) so the endpoint cannot be used to discover which codes exist</td></tr>
+        <tr><td>Not yet started / expired</td><td>Not currently available</td></tr>
+        <tr><td>Global usage limit reached</td><td>Usage limit reached</td></tr>
+        <tr><td>Per-user limit reached</td><td>Already used the maximum number of times</td></tr>
+        <tr><td>Minimum subtotal not met</td><td>Names the required minimum</td></tr>
+        <tr><td>Pricing already finalized for this order</td><td>The coupon can no longer be changed</td></tr>
+        <tr><td>Would leave a non-positive total</td><td>Cannot be applied to this order</td></tr>
+      </table>
+      <table>
+        <tr><th>Status</th><th>Condition</th></tr>
+        <tr><td>401</td><td class="opt">No Bearer token</td></tr>
+        <tr><td>403</td><td class="opt">Order belongs to another customer</td></tr>
+        <tr><td>404</td><td class="opt">Order does not exist</td></tr>
+        <tr><td>422</td><td class="opt">Order is not pending, or any coupon rejection above</td></tr>
       </table>
     </div>
   </div>
@@ -3076,7 +3202,6 @@ await guestCartRequest('GET',  '/');
         },
         <span class="key">"quantity"</span>:           <span class="num">2</span>,
         <span class="key">"price_per_unit"</span>:     <span class="num">89000000</span>,
-        <span class="key">"compare_at_price"</span>:   <span class="num">95000000</span>,
         <span class="key">"line_total"</span>:         <span class="num">178000000</span>
       }
     ]
@@ -3187,7 +3312,7 @@ if (canCancelOrders && order.status === 'pending') renderCancelButton();</pre>
   <ul>
     <li><strong>Order</strong> — <code>id</code>, <code>status</code>, the amounts (<code>total_amount</code>, <code>shipping_cost</code>, <code>tax_amount</code>), <code>transaction_ref</code>, <code>notes</code>, <code>created_at</code>.</li>
     <li><strong>Customer</strong> — from <code>data.customer</code> (the order's <code>customer_snapshot</code>): <code>name</code>, <code>last_name</code>, <code>phone</code>, <code>email</code>.</li>
-    <li><strong>Items</strong> — <code>data.items[]</code>. Render each from its immutable <code>product_snapshot</code>; <code>image_url</code> is the purchased variant image and <code>primary_image_url</code> is the parent product primary image. <code>price_per_unit</code> is the selling price; nullable <code>compare_at_price</code> is display-only reference pricing.</li>
+    <li><strong>Items</strong> — <code>data.items[]</code>. Render each from its immutable <code>product_snapshot</code>; <code>image_url</code> is the purchased variant image and <code>primary_image_url</code> is the parent product primary image. <code>price_per_unit</code> is the effective price charged; <code>regular_price_per_unit</code> is the strike-through figure and <code>automatic_discount</code> explains the reduction.</li>
     <li><strong>Shipping &amp; fulfillment</strong> — <code>shipping_address</code> + <code>shipment_snapshot</code> (what was chosen at checkout), and <code>data.shipment</code> (the live status).</li>
   </ul>
   <pre>async function loadAdminOrder(token, orderId) {
@@ -3298,7 +3423,23 @@ if (canCancelOrders && order.status === 'pending') renderCancelButton();</pre>
         <tr><td>order_id</td><td class="req">required integer</td><td>The order to pay. Must belong to the authenticated user (403 otherwise). Returns 404 if it does not exist.</td></tr>
         <tr><td>method_type</td><td class="req">required string</td><td><code>online</code> or <code>in_person</code>. Any other value → 422.</td></tr>
         <tr><td>gateway</td><td class="opt">optional string</td><td>Online gateway key. Defaults to <code>payment.default_gateway</code> config (<code>zarinpal</code>). Ignored for <code>in_person</code>.</td></tr>
+        <tr><td>coupon_code</td><td class="opt">optional string</td><td>A coupon code to apply, max 32 chars, case-insensitive. <strong>Only the code is accepted</strong> — the discount amount, final total, and percentage are always computed server-side. Sending them has no effect.</td></tr>
       </table>
+
+      <div class="warn"><strong>The first initialization freezes this order's pricing.</strong> An order may have many payment attempts and every one must charge the same amount, so the first call to reach pricing finalization locks the coupon decision — <em>including the decision to use no coupon</em> — and stamps <code>payment_pricing_finalized_at</code>. After that <code>coupon_code</code>, <code>coupon_discount_amount</code>, <code>coupon_snapshot</code>, and <code>total_amount</code> never change.
+        <table style="margin-top:10px">
+          <tr><th>Frozen state</th><th>Later request</th><th>Result</th></tr>
+          <tr><td>SUMMER10</td><td><code>coupon_code</code> omitted</td><td>allowed — uses the frozen pricing</td></tr>
+          <tr><td>SUMMER10</td><td><code>summer10</code></td><td>allowed — normalizes to the same code</td></tr>
+          <tr><td>SUMMER10</td><td><code>VIP20</code></td><td>422 — the coupon can no longer be changed</td></tr>
+          <tr><td>no coupon</td><td><code>coupon_code</code> omitted</td><td>allowed</td></tr>
+          <tr><td>no coupon</td><td>any code</td><td>422</td></tr>
+        </table>
+      </div>
+
+      <div class="note"><strong>Authoritative revalidation.</strong> The advisory <a href="#order-coupon-check">coupon check</a> reserves nothing, so between preview and payment a coupon may expire, be disabled, or have its last use taken. This endpoint revalidates from scratch, reserves the coupon under a row lock, and recomputes the total. A coupon that would leave a non-positive payable total is rejected with 422 rather than creating a free order — and the rejection rolls back the reservation, so the coupon is not consumed.
+        <br><br>
+        <strong>Order, not Payment, owns the money.</strong> Payment charges the frozen <code>order.total_amount</code> and runs no pricing logic of its own. A gateway failure afterwards leaves the freeze and the reservation intact, so a retry charges the identical figure. Automatic (item-level) discounts are <em>not</em> re-evaluated here — they were frozen when the order was created.</div>
       <div class="block-label">Request — online</div>
       <pre>{
   <span class="key">"order_id"</span>:    <span class="num">42</span>,
@@ -4111,6 +4252,336 @@ async function deleteWorkingPeriod(token, id) {
     <pre>{ "message": "The given data was invalid.", "errors": { "items.bdv-R7P4NZ.quantity": ["This item is limited to 5 units per order. Your cart currently contains 8."] } }</pre>
     <p>Order items expose nullable <code>max_quantity_per_order_snapshot</code>. It records the rule at checkout; later Catalog changes do not alter historical Orders and the snapshot never validates future Orders.</p>
   </section>
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <h2 id="promotions">Promotions — Pricing Model</h2>
+
+  <p>There are exactly two pricing layers, and they compose in a fixed order.</p>
+
+  <pre>regular price          100,000,000     product_variants.base_price
+      │
+      ▼  layer 1 — ONE automatic discount (never two)
+effective price         80,000,000     20% off, evaluated live
+      │
+      ▼  layer 2 — ONE coupon per order, on the merchandise subtotal
+payable merchandise     72,000,000     10% off the 80,000,000
+      │
+      ▼  + shipping + tax
+order total</pre>
+
+  <div class="warn"><strong><code>compare_at_price</code> is gone.</strong> Catalog previously carried a per-variant "was" price. That column has been dropped: Catalog now stores only <code>base_price</code> (the regular price), and any promotional price is computed live. <code>order_items.compare_at_price</code> is retained purely so orders placed before this change keep rendering — it is always <code>null</code> on new orders.</div>
+
+  <h3>Layer 1 — Automatic discounts</h3>
+  <p>Always on, need no code, and apply per variant. A single variant may be matched by a variant rule, several product rules, several category rules (including ones aimed at an ancestor category), and several brand rules — all at once.</p>
+
+  <div class="warn"><strong>Automatic discounts never stack.</strong> Every matching rule is costed in rials and only the one producing the <strong>largest actual reduction</strong> is applied. The rest do nothing.</div>
+
+  <p>Worked example, base price 100,000,000:</p>
+  <table>
+    <tr><th>Rule</th><th>Target</th><th>Configured</th><th>Actual reduction</th><th>Outcome</th></tr>
+    <tr><td>Phones Category Sale</td><td>category</td><td>10%</td><td>10,000,000</td><td>loses</td></tr>
+    <tr><td>Galaxy Launch Offer</td><td>product</td><td>20%</td><td><strong>20,000,000</strong></td><td><strong>wins</strong></td></tr>
+    <tr><td>Base Model Rebate</td><td>variant</td><td>15,000,000 fixed</td><td>15,000,000</td><td>loses</td></tr>
+  </table>
+  <p><strong>effective_price = 80,000,000.</strong> Not 45,000,000 — the three rules are not added together.</p>
+
+  <div class="note"><strong>Specificity does not override savings.</strong> A 30% <em>product</em> rule beats a 20% <em>variant</em> rule, because the customer saves more. Specificity is only a tie-breaker: when two rules produce the exact same rial reduction the price is identical either way, and the winner is chosen deterministically by matched target (variant → product → category → brand), then higher priority, then lowest discount id — so the rule recorded on an order is always reproducible.</div>
+
+  <div class="note"><strong>Category discounts reach descendants.</strong> A rule aimed at <code>Electronics</code> also discounts a product filed under <code>Electronics → Phones → Android</code>.</div>
+
+  <h3>What the storefront returns</h3>
+  <p>Every variant object — on product detail, product lists, category lists, and campaign product lists — carries:</p>
+  <pre>{
+  <span class="key">"base_price"</span>:      <span class="num">100000000</span>,
+  <span class="key">"effective_price"</span>:  <span class="num">80000000</span>,
+  <span class="key">"discount"</span>: {
+    <span class="key">"name"</span>:           <span class="str">"Galaxy Launch Offer"</span>,
+    <span class="key">"type"</span>:           <span class="str">"percentage"</span>,
+    <span class="key">"percentage_bps"</span>: <span class="num">2000</span>,
+    <span class="key">"fixed_amount"</span>:   <span class="null-val">null</span>,
+    <span class="key">"amount"</span>:         <span class="num">20000000</span>
+  }
+}</pre>
+  <p>With no discount, <code>effective_price === base_price</code> and <code>discount</code> is <code>null</code>.</p>
+
+  <div class="warn"><strong>Never compute a promotional price on the client.</strong> The server response is authoritative and is what checkout will charge. Percentages are integer <strong>basis points</strong> (<code>2000</code> = 20%, <code>1250</code> = 12.5%, <code>10000</code> = 100%) and all arithmetic is integer with consistent flooring, so a client recomputing from a percentage can disagree with the server by a rial.</div>
+
+  <h3>Filtering by discount</h3>
+  <table>
+    <tr><th>Query</th><th>Meaning</th></tr>
+    <tr><td><code>?has_discount=true</code></td><td>Products where at least one variant currently has an applicable active automatic discount</td></tr>
+    <tr><td><code>?has_discount=false</code></td><td>Products where none does</td></tr>
+  </table>
+  <div class="note"><strong>Price filters and sorts still use <code>base_price</code>.</strong> <code>min_price</code>, <code>max_price</code>, <code>sort=cheapest</code>, and <code>sort=most_expensive</code> deliberately keep their existing regular-price semantics — they are <em>not</em> promotion-aware. <code>has_discount</code> paginates correctly (it is applied in SQL, not after fetching a page).</div>
+
+  <h3>Layer 2 — Coupons</h3>
+  <p>A coupon is a marketing code the customer types. It does nothing at all until it is supplied — coupon-backed rules never affect the storefront, never appear in product responses, and never make a product "on sale".</p>
+  <ul>
+    <li><strong>One coupon per order</strong>, applied after automatic discounts.</li>
+    <li>Calculated on the <strong>post-automatic merchandise subtotal</strong>; shipping and tax are excluded.</li>
+    <li><strong>Never allocated across items.</strong> A 100,000 coupon on a ten-item order does not put 10,000 on each line — it is recorded once at order level.</li>
+    <li>Codes are case-insensitive and whitespace-trimmed.</li>
+  </ul>
+  <p>Flow: create the order → <a href="#order-coupon-check">check the coupon</a> (advisory) → <a href="#payment-initialize">initialize payment</a> with <code>coupon_code</code> (authoritative, and freezes the price).</p>
+
+  <div class="note"><strong>Order fields.</strong> Order responses carry <code>coupon_code</code>, <code>coupon_discount_amount</code>, <code>coupon_snapshot</code> (an immutable record readable without the live coupon), and <code>payment_pricing_finalized_at</code>. Before the first payment attempt these are <code>null</code> / <code>0</code> / <code>null</code> / <code>null</code>.</div>
+
+  <h3>Live vs frozen</h3>
+  <table>
+    <tr><th>Stage</th><th>Automatic pricing</th></tr>
+    <tr><td>Product &amp; campaign responses</td><td><strong>Live</strong> — recomputed every request</td></tr>
+    <tr><td>Cart</td><td><strong>Live</strong> — a preview, nothing promotional is stored</td></tr>
+    <tr><td>Checkout (<code>POST /orders</code>)</td><td>Re-reads current prices, then <strong>freezes</strong> them</td></tr>
+    <tr><td>Payment initialization</td><td>Not re-evaluated — uses the frozen order</td></tr>
+  </table>
+  <div class="warn">If a promotion ends between the cart page and checkout, the order is created at the <strong>new</strong> price. Treat cart pricing as a preview and always re-read the order response after creating it.</div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <h2 id="promotions-campaigns">Promotions — Campaigns</h2>
+
+  <p>A campaign is a <strong>merchandising group</strong>, not a pricing rule. It answers "why is this product shown here?" — never "what does it cost?". One campaign links many <em>different</em> automatic discounts, so the products inside it can each carry a different discount instead of all sharing one.</p>
+
+  <div class="warn"><strong>A campaign never forces its own discount to win.</strong> If a Summer Sale product also matches a stronger unrelated rule, both the product page and the campaign page show that stronger price. Opening a campaign page never changes what something costs.</div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/catalog/campaigns</span>
+      <span class="badge">Public</span>
+      <span class="badge rate">throttle:public</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Currently visible campaigns, ordered by <code>sort_order</code> then id. Add <code>?landing=true</code> to narrow to the ones flagged for the landing page.</p>
+      <p>A campaign is visible only when it is active, not deleted, and within its <code>starts_at</code>/<code>ends_at</code> window. Inactive, future, and expired campaigns are omitted entirely.</p>
+      <div class="block-label">Response — 200 OK</div>
+      <pre>{
+  <span class="key">"data"</span>: [
+    {
+      <span class="key">"slug"</span>:        <span class="str">"summer-sale"</span>,
+      <span class="key">"name"</span>:        <span class="str">"Summer Sale"</span>,
+      <span class="key">"description"</span>: <span class="str">"Hand-picked deals across phones, laptops, and accessories."</span>,
+      <span class="key">"starts_at"</span>:   <span class="str">"2026-08-01T00:00:00.000000Z"</span>,
+      <span class="key">"ends_at"</span>:     <span class="str">"2026-09-01T00:00:00.000000Z"</span>
+    }
+  ]
+}</pre>
+      <div class="note">The <code>slug</code> is the public handle used to fetch the campaign's products. Operational fields (<code>is_active</code>, <code>show_on_landing</code>, <code>sort_order</code>, linked-discount count) are admin-only and never exposed here.</div>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/catalog/campaigns/{slug}</span>
+      <span class="badge">Public</span>
+      <span class="badge rate">throttle:public</span>
+    </div>
+    <div class="endpoint-body">
+      <p>One visible campaign. Returns 404 when the slug is unknown, or the campaign is inactive, not yet started, or expired.</p>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/catalog/campaigns/{slug}/products</span>
+      <span class="badge">Public</span>
+      <span class="badge rate">throttle:public</span>
+    </div>
+    <div class="endpoint-body">
+      <p>The campaign's published products as <strong>ordinary <code>ProductResource</code> objects</strong> with live pricing — the same shape as <code>/catalog/products</code>, and paginated identically. Supports the usual <code>page</code>, <code>per_page</code>, <code>brand_id</code>, <code>category_id</code>, <code>min_price</code>, <code>max_price</code>, <code>search</code>, <code>sort</code>, and <code>available</code> parameters.</p>
+      <p>Membership is resolved from the campaign's linked, currently-active automatic discounts:</p>
+      <table>
+        <tr><th>Target</th><th>Resolves to</th></tr>
+        <tr><td>product</td><td>that product</td></tr>
+        <tr><td>variant</td><td>the owning product</td></tr>
+        <tr><td>category</td><td>products in that category <em>and all descendants</em></td></tr>
+        <tr><td>brand</td><td>products of that brand</td></tr>
+      </table>
+      <p>Products matched by several of the campaign's rules appear exactly once.</p>
+      <div class="note"><strong>404 vs empty page.</strong> A missing or non-visible campaign returns <strong>404</strong>. A live campaign whose linked rules have all expired returns <strong>200</strong> with an empty <code>data</code> array — the campaign still exists, it just merchandises nothing right now.</div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <h2 id="promotions-admin">Promotions — Admin API</h2>
+
+  <p>All routes below sit under <code>/api/v1/admin/promotions</code> and require <code>auth:sanctum</code> + <code>throttle:api</code> plus the permission named in each row. Guests get <strong>401</strong>; authenticated users without the permission get <strong>403</strong>.</p>
+
+  <table>
+    <tr><th>Method</th><th>Path</th><th>Permission</th></tr>
+    <tr><td>GET</td><td><code>/discounts</code>, <code>/discounts/{id}</code></td><td><code>promotion.view-admin</code></td></tr>
+    <tr><td>POST</td><td><code>/discounts</code></td><td><code>promotion.create</code></td></tr>
+    <tr><td>PATCH / PUT</td><td><code>/discounts/{id}</code></td><td><code>promotion.update</code></td></tr>
+    <tr><td>DELETE</td><td><code>/discounts/{id}</code></td><td><code>promotion.delete</code></td></tr>
+    <tr><td>GET</td><td><code>/coupons</code>, <code>/coupons/{id}</code></td><td><code>promotion.view-admin</code></td></tr>
+    <tr><td>POST / PATCH / PUT / DELETE</td><td><code>/coupons</code>, <code>/coupons/{id}</code></td><td><code>promotion.coupon.manage</code></td></tr>
+    <tr><td>GET</td><td><code>/campaigns</code>, <code>/campaigns/{id}</code></td><td><code>promotion.view-admin</code></td></tr>
+    <tr><td>POST / PATCH / PUT / DELETE</td><td><code>/campaigns</code>, <code>/campaigns/{id}</code></td><td><code>promotion.campaign.manage</code></td></tr>
+    <tr><td>GET</td><td><code>/redemptions</code></td><td><code>promotion.view-admin</code></td></tr>
+  </table>
+
+  <h3 id="promotions-admin-discounts">Discounts</h3>
+
+  <div class="warn"><strong>A discount has exactly two legal shapes.</strong> Anything else is rejected with 422.
+    <table style="margin-top:10px">
+      <tr><th></th><th>trigger_type</th><th>scope</th><th>targets</th><th>min_subtotal</th></tr>
+      <tr><td><strong>Automatic</strong></td><td><code>automatic</code></td><td><code>targeted</code></td><td>at least one</td><td>rejected</td></tr>
+      <tr><td><strong>Coupon</strong></td><td><code>coupon</code></td><td><code>all</code></td><td>exactly zero</td><td>allowed</td></tr>
+    </table>
+  </div>
+
+  <div class="note"><strong><code>scope=all</code> is not a store-wide sale.</strong> It means "once activated by a code, this applies to the entire post-automatic merchandise subtotal". Without a code it does nothing. Store-wide <em>automatic</em> discounts are not supported — an always-on rule with no target is an unbounded sale with no obvious off switch.</div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/admin/promotions/discounts</span>
+      <span class="badge auth">promotion.create</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="block-label">Request body</div>
+      <table>
+        <tr><th>Field</th><th>Rules</th><th>Notes</th></tr>
+        <tr><td>name</td><td class="req">required string</td><td>Max 255</td></tr>
+        <tr><td>description</td><td class="opt">optional string</td><td></td></tr>
+        <tr><td>trigger_type</td><td class="req">required</td><td><code>automatic</code> or <code>coupon</code></td></tr>
+        <tr><td>scope</td><td class="req">required</td><td><code>targeted</code> or <code>all</code> — see the shape table above</td></tr>
+        <tr><td>discount_type</td><td class="req">required</td><td><code>percentage</code> or <code>fixed_amount</code></td></tr>
+        <tr><td>percentage_bps</td><td class="opt">percentage only</td><td>Integer basis points, 1–10000. Required for percentage, forbidden for fixed.</td></tr>
+        <tr><td>fixed_amount</td><td class="opt">fixed only</td><td>Integer rials ≥ 1. Required for fixed, forbidden for percentage.</td></tr>
+        <tr><td>max_discount_amount</td><td class="opt">optional integer</td><td>Caps the reduction ("20% off, up to 5,000,000")</td></tr>
+        <tr><td>min_subtotal</td><td class="opt">coupon only</td><td>Minimum merchandise subtotal. Rejected on automatic rules.</td></tr>
+        <tr><td>starts_at / ends_at</td><td class="opt">optional dates</td><td><code>ends_at</code> must not precede <code>starts_at</code></td></tr>
+        <tr><td>is_active</td><td class="opt">optional boolean</td><td>Defaults to <code>true</code></td></tr>
+        <tr><td>priority</td><td class="opt">optional integer</td><td>Tie-break only — it never beats a larger reduction</td></tr>
+        <tr><td>targets[]</td><td class="req">automatic only</td><td>Each <code>{ "target_type": "product|variant|category|brand", "target_id": &lt;positive int&gt; }</code></td></tr>
+      </table>
+
+      <pre>{
+  <span class="key">"name"</span>:            <span class="str">"Summer Mobile Promotion"</span>,
+  <span class="key">"trigger_type"</span>:    <span class="str">"automatic"</span>,
+  <span class="key">"scope"</span>:           <span class="str">"targeted"</span>,
+  <span class="key">"discount_type"</span>:   <span class="str">"percentage"</span>,
+  <span class="key">"percentage_bps"</span>:  <span class="num">2000</span>,
+  <span class="key">"starts_at"</span>:      <span class="str">"2026-08-01 00:00:00"</span>,
+  <span class="key">"ends_at"</span>:        <span class="str">"2026-09-01 00:00:00"</span>,
+  <span class="key">"targets"</span>: [
+    { <span class="key">"target_type"</span>: <span class="str">"product"</span>,  <span class="key">"target_id"</span>: <span class="num">15</span> },
+    { <span class="key">"target_type"</span>: <span class="str">"product"</span>,  <span class="key">"target_id"</span>: <span class="num">18</span> },
+    { <span class="key">"target_type"</span>: <span class="str">"variant"</span>,  <span class="key">"target_id"</span>: <span class="num">91</span> },
+    { <span class="key">"target_type"</span>: <span class="str">"category"</span>, <span class="key">"target_id"</span>: <span class="num">7</span>  },
+    { <span class="key">"target_type"</span>: <span class="str">"brand"</span>,    <span class="key">"target_id"</span>: <span class="num">4</span>  }
+  ]
+}</pre>
+
+      <div class="note"><strong>Target ids are not verified against the catalog.</strong> Promotion deliberately never calls Catalog (Catalog already calls Promotion for pricing, and a mutual dependency would make neither reasonable alone). A target naming a product that does not exist — or is later deleted — is stored and simply becomes inert. Use the existing Catalog admin APIs to pick real ids. Duplicate targets are collapsed.</div>
+
+      <div class="note">On update, <strong>omitting <code>targets</code> leaves the existing targets untouched</strong>; sending an empty array on an automatic rule is rejected. Switching <code>discount_type</code> clears the unused value field.</div>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method delete">DELETE</span>
+      <span class="endpoint-path">/admin/promotions/discounts/{id}</span>
+      <span class="badge auth">promotion.delete</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Returns <strong>204</strong>. This is a <strong>soft delete</strong>: the rule stops pricing immediately, but the row survives and every redemption, order snapshot, and payment amount is left untouched. Historical orders are never rewritten.</p>
+    </div>
+  </div>
+
+  <h3 id="promotions-admin-coupons">Coupons</h3>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/admin/promotions/coupons</span>
+      <span class="badge auth">promotion.coupon.manage</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="block-label">Request body</div>
+      <table>
+        <tr><th>Field</th><th>Rules</th><th>Notes</th></tr>
+        <tr><td>discount_id</td><td class="req">required integer</td><td>Must be a <code>trigger_type=coupon</code>, <code>scope=all</code> discount (422 otherwise). Several codes may share one rule.</td></tr>
+        <tr><td>code</td><td class="req">required string</td><td>Max 32 chars, <code>A–Z 0–9 - _</code> only. Trimmed and uppercased before the uniqueness check.</td></tr>
+        <tr><td>is_active</td><td class="opt">optional boolean</td><td>Defaults to <code>true</code></td></tr>
+        <tr><td>usage_limit</td><td class="opt">optional integer</td><td>Total across all customers. <code>null</code> = unlimited.</td></tr>
+        <tr><td>usage_limit_per_user</td><td class="opt">optional integer</td><td>Per customer. <code>null</code> = unlimited.</td></tr>
+      </table>
+      <pre>{
+  <span class="key">"discount_id"</span>:          <span class="num">12</span>,
+  <span class="key">"code"</span>:                 <span class="str">"SUMMER10"</span>,
+  <span class="key">"usage_limit"</span>:          <span class="num">500</span>,
+  <span class="key">"usage_limit_per_user"</span>: <span class="num">1</span>
+}</pre>
+      <div class="note"><strong>Usage counts <code>reserved + redeemed</code>, never <code>released</code></strong> — an abandoned or cancelled checkout returns its use to the pool. Responses include <code>used_count</code> and <code>remaining_uses</code>.</div>
+      <div class="warn"><strong>Codes are immutable once redeemed.</strong> Renaming a coupon that already has redemptions returns 422, and deletion is a soft delete that keeps the code reserved — a retired code can never be reissued against different terms.</div>
+    </div>
+  </div>
+
+  <h3 id="promotions-admin-campaigns">Campaigns</h3>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/admin/promotions/campaigns</span>
+      <span class="badge auth">promotion.campaign.manage</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="block-label">Request body</div>
+      <table>
+        <tr><th>Field</th><th>Rules</th><th>Notes</th></tr>
+        <tr><td>name</td><td class="req">required string</td><td></td></tr>
+        <tr><td>slug</td><td class="opt">optional string</td><td>Unique; derived from <code>name</code> when omitted. This is the public handle.</td></tr>
+        <tr><td>description</td><td class="opt">optional string</td><td></td></tr>
+        <tr><td>starts_at / ends_at</td><td class="opt">optional dates</td><td></td></tr>
+        <tr><td>is_active</td><td class="opt">optional boolean</td><td>Defaults to <code>true</code></td></tr>
+        <tr><td>show_on_landing</td><td class="opt">optional boolean</td><td>Editorial opt-in for the landing list; defaults to <code>false</code></td></tr>
+        <tr><td>sort_order</td><td class="opt">optional integer</td><td></td></tr>
+        <tr><td>discount_ids[]</td><td class="opt">optional array</td><td>Membership. Replaces the whole set when sent; omit to leave unchanged.</td></tr>
+      </table>
+      <div class="warn"><strong>Only automatic discounts can be linked.</strong> A coupon-backed rule is store-wide and has no product identity, so it could never answer "which products belong here?" — linking one returns 422 on <code>discount_ids</code>.</div>
+    </div>
+  </div>
+
+  <h3 id="promotions-admin-redemptions">Redemptions</h3>
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/admin/promotions/redemptions</span>
+      <span class="badge auth">promotion.view-admin</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Coupon usage history. Filters: <code>coupon_id</code>, <code>order_id</code>, <code>user_id</code>, <code>status</code>. <strong>Read-only</strong> — redemption rows are financial history, mutated only by the order lifecycle.</p>
+      <table>
+        <tr><th>Status</th><th>Means</th></tr>
+        <tr><td><code>reserved</code></td><td>Claimed at payment initialization; survives failed attempts because the order is still payable</td></tr>
+        <tr><td><code>redeemed</code></td><td>The order was paid</td></tr>
+        <tr><td><code>released</code></td><td>The order was cancelled, expired, or superseded — the use returned to the pool</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <h2 id="promotions-permissions">Promotions — Permissions</h2>
+
+  <table>
+    <tr><th>Permission</th><th>Grants</th></tr>
+    <tr><td><code>promotion.view-admin</code></td><td>Every admin promotion <strong>read</strong>: discount list/detail, coupon list/detail, campaign list/detail, and redemption history</td></tr>
+    <tr><td><code>promotion.create</code></td><td><code>POST /admin/promotions/discounts</code></td></tr>
+    <tr><td><code>promotion.update</code></td><td><code>PATCH|PUT /admin/promotions/discounts/{id}</code> — name, rule value, targets, dates, active state, priority</td></tr>
+    <tr><td><code>promotion.delete</code></td><td><code>DELETE /admin/promotions/discounts/{id}</code> (soft delete)</td></tr>
+    <tr><td><code>promotion.coupon.manage</code></td><td>All coupon mutations. Coupon <em>reads</em> need only <code>promotion.view-admin</code>.</td></tr>
+    <tr><td><code>promotion.campaign.manage</code></td><td>All campaign mutations, including discount membership. Campaign <em>reads</em> need only <code>promotion.view-admin</code>.</td></tr>
+  </table>
+
+  <div class="note">All six are seeded and granted to the <strong>admin</strong> role. Coupon and campaign management are split from discount CRUD deliberately, so a marketing operator can be given code and merchandising control without the ability to rewrite pricing rules.</div>
+
+  <div class="warn"><strong>Customers need no promotion permission at all.</strong> Browsing products with live pricing, listing campaigns, viewing campaign products, checking a coupon on your own order, and paying are protected by authentication and ownership — never by a <code>promotion.*</code> permission. The <code>customer</code> role is granted none of them.</div>
+
+
 </main>
 
 <script>
@@ -4135,6 +4606,7 @@ async function deleteWorkingPeriod(token, id) {
   headings.forEach(h => observer.observe(h));
 </script>
 <script>
+  // (promotions section rendered above)
   document.querySelectorAll('.endpoint-header').forEach(function(header) {
     var method = header.querySelector('.method');
     var path = header.querySelector('.endpoint-path');

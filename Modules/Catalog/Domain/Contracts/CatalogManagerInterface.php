@@ -95,6 +95,23 @@ interface CatalogManagerInterface
      */
     public function getProductsAdmin(array $filters = [], int $perPage = 15): LengthAwarePaginator;
 
+    /**
+     * Published products merchandised by a campaign, with live automatic pricing.
+     *
+     * Catalog resolves the product list itself from the target ids Promotion
+     * publishes — variant targets resolve to their owning product, category targets
+     * expand to descendants, and duplicates collapse. Returns null when the campaign
+     * does not exist or is not currently visible; an empty page when the campaign is
+     * live but none of its rules currently match anything.
+     *
+     * Note this decides only *membership*. Each product still displays whatever
+     * discount wins globally, which may be a stronger rule from outside the campaign.
+     *
+     * @param  array<string, mixed>  $filters  Same keys as getProducts().
+     * @return LengthAwarePaginator<ProductDTO>|null
+     */
+    public function getCampaignProducts(string $slug, array $filters = [], int $perPage = 15): ?LengthAwarePaginator;
+
     public function createProduct(array $data): ProductDTO;
 
     public function addProductImage(int $productId, int $mediaId, int $sortOrder = 0): ProductImageDTO;

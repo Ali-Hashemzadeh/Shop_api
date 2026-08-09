@@ -16,8 +16,9 @@ class ProductVariant extends Model
         'sku',
         'type',
         'is_default',
+        // The regular price, and the only price this module stores. Promotional
+        // pricing is evaluated live by the Promotion module on every read.
         'base_price',
-        'compare_at_price',
         'max_quantity_per_order',
         'media_id',
         'attributes',
@@ -28,7 +29,6 @@ class ProductVariant extends Model
         return [
             'is_default' => 'boolean',
             'base_price' => 'integer',
-            'compare_at_price' => 'integer',
             'max_quantity_per_order' => 'integer',
             'attributes' => 'array',
         ];

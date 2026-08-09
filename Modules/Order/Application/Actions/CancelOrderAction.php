@@ -13,6 +13,7 @@ use Modules\Order\Domain\Enums\OrderStatus;
 use Modules\Order\Domain\Events\OrderCancelledEvent;
 use Modules\Order\Domain\Models\Order;
 use Modules\Order\Domain\Models\OrderItem;
+use Modules\Promotion\Domain\Contracts\PromotionManagerInterface;
 use Modules\Shipment\Domain\Contracts\ShipmentManagerInterface;
 
 class CancelOrderAction
@@ -20,6 +21,7 @@ class CancelOrderAction
     public function __construct(
         private readonly InventoryManagerInterface $inventory,
         private readonly ShipmentManagerInterface $shipment,
+        private readonly PromotionManagerInterface $promotion,
     ) {}
 
     public function handle(int $orderId, int $userId): OrderDTO
@@ -70,6 +72,12 @@ class CancelOrderAction
         // Release any held/confirmed local-delivery slot for this order (no-op
         // for postal/pickup, and idempotent when repeated).
         $this->shipment->releasePendingOrder($order->id);
+
+        // Return any coupon reservation to the pool. This lives in the shared
+        // primitive precisely so customer cancel, admin cancel, TTL expiry, and
+        // pending-order replacement all release it — four call sites, one rule.
+        // Idempotent, and it deliberately never touches an already-redeemed claim.
+        $this->promotion->releaseCouponForOrder($order->id);
 
         $order->update(['status' => OrderStatus::CANCELLED->value]);
     }

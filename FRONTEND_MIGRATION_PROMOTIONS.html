@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Frontend Migration — Promotions, Coupons &amp; Campaigns</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #222537;
+      --border: #2e3147;
+      --text: #e2e4f0;
+      --muted: #8b8fa8;
+      --accent: #7c6af7;
+      --ok: #22c55e;
+      --info: #3b82f6;
+      --warnc: #f59e0b;
+      --bad: #ef4444;
+      --cyan: #22d3ee;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); display: flex; min-height: 100vh; }
+
+    nav { width: 275px; min-width: 275px; background: var(--surface); border-right: 1px solid var(--border); height: 100vh; overflow-y: auto; position: sticky; top: 0; padding: 24px 0; }
+    nav .logo { padding: 0 20px 24px; font-size: 15px; font-weight: 700; color: var(--accent); border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+    nav .logo span { color: var(--muted); font-weight: 400; font-size: 12px; display: block; margin-top: 3px; }
+    nav a { display: block; padding: 6px 20px; font-size: 13px; color: var(--muted); text-decoration: none; border-left: 2px solid transparent; transition: all .15s; }
+    nav a:hover { color: var(--text); background: var(--surface2); }
+    nav .section-label { padding: 16px 20px 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: #4a4d65; }
+
+    main { flex: 1; padding: 48px 56px; max-width: 1060px; }
+    h1 { font-size: 32px; font-weight: 700; margin-bottom: 8px; }
+    .subtitle { font-size: 15px; color: var(--muted); margin-bottom: 28px; }
+    h2 { font-size: 22px; font-weight: 700; margin: 56px 0 20px; padding-top: 56px; border-top: 1px solid var(--border); }
+    h2:first-of-type { border-top: none; padding-top: 0; margin-top: 32px; }
+    h3 { font-size: 15px; font-weight: 600; margin: 30px 0 10px; color: var(--text); }
+    h4 { font-size: 13px; margin: 20px 0 8px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+    p { font-size: 14px; line-height: 1.7; color: var(--muted); margin-bottom: 12px; }
+    p strong, li strong, td strong { color: var(--text); }
+    ul, ol { font-size: 14px; color: var(--muted); padding-left: 20px; line-height: 1.9; margin-bottom: 12px; }
+    a { color: var(--accent); }
+
+    code { font-family: 'SF Mono', Menlo, Consolas, monospace; font-size: 12.5px; background: var(--surface2); padding: 2px 6px; border-radius: 4px; color: var(--cyan); }
+    pre { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px 18px; overflow-x: auto; margin-bottom: 16px; }
+    pre code { background: none; padding: 0; color: var(--text); font-size: 12.5px; line-height: 1.65; white-space: pre; }
+    .del { color: #f87171; }
+    .add { color: #4ade80; }
+    .cmt { color: #5b5f7a; }
+
+    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 13px; display: block; overflow-x: auto; }
+    th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    th { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; font-weight: 700; white-space: nowrap; }
+    td { color: var(--muted); }
+    tbody tr:hover { background: var(--surface); }
+
+    .callout { border-left: 3px solid var(--accent); background: var(--surface); border-radius: 0 8px 8px 0; padding: 14px 18px; margin-bottom: 18px; font-size: 13.5px; line-height: 1.7; color: var(--muted); }
+    .callout.warn { border-left-color: var(--warnc); }
+    .callout.bad { border-left-color: var(--bad); }
+    .callout.ok { border-left-color: var(--ok); }
+    .callout strong { color: var(--text); }
+
+    .pill { display: inline-block; font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 20px; text-transform: uppercase; letter-spacing: .05em; }
+    .pill.get { background: rgba(59,130,246,.15); color: #60a5fa; }
+    .pill.post { background: rgba(34,197,94,.15); color: #4ade80; }
+    .pill.new { background: rgba(124,106,247,.18); color: #a78bfa; }
+    .pill.brk { background: rgba(239,68,68,.15); color: #f87171; }
+    .pill.safe { background: rgba(34,197,94,.15); color: #4ade80; }
+
+    .chk { list-style: none; padding-left: 0; }
+    .chk li { padding-left: 26px; position: relative; margin-bottom: 7px; }
+    .chk li::before { content: "\2610"; position: absolute; left: 4px; color: var(--accent); font-size: 14px; }
+
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; margin-bottom: 16px; }
+    @media (max-width: 1100px) { body { display: block; } nav { display: none; } main { padding: 32px 20px; } }
+  </style>
+</head>
+<body>
+<nav>
+  <div class="logo">Frontend Migration<span>Promotions · Coupons · Campaigns</span></div>
+  <div class="section-label">Start here</div>
+  <a href="#tldr">What changed &amp; impact</a>
+  <a href="#breaking">Breaking changes</a>
+  <a href="#rules">Rules to internalize</a>
+  <div class="section-label">Screen by screen</div>
+  <a href="#plp">Product list / grid</a>
+  <a href="#pdp">Product detail</a>
+  <a href="#cart">Cart</a>
+  <a href="#checkout">Checkout</a>
+  <a href="#payment">Payment &amp; coupon</a>
+  <a href="#orders">Order history / detail</a>
+  <a href="#campaigns">Campaign pages</a>
+  <div class="section-label">Admin panel</div>
+  <a href="#admin-discounts">Discounts CRUD</a>
+  <a href="#admin-coupons">Coupons CRUD</a>
+  <a href="#admin-campaigns">Campaigns CRUD</a>
+  <a href="#admin-products">Product/variant forms</a>
+  <div class="section-label">Reference</div>
+  <a href="#checklist">Full checklist</a>
+  <a href="#gotchas">Gotchas &amp; FAQ</a>
+</nav>
+
+<main>
+  <h1>Frontend Migration Guide</h1>
+  <p class="subtitle">Everything the frontend must change after the Promotion module landed — what to edit, where, and why.</p>
+
+  <div class="callout bad">
+    <strong>One field was removed and nothing replaced it in place.</strong> <code>compare_at_price</code> is gone from
+    every product, variant, and cart response. If your UI reads it to draw a strike-through price, that price will render
+    as <code>undefined</code>/<code>null</code> until you switch to the new fields. This is the only hard break — start here.
+  </div>
+
+  <h2 id="tldr">What changed &amp; impact</h2>
+
+  <table>
+    <thead><tr><th>Area</th><th>Change</th><th>Impact</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>Products / variants</strong></td>
+        <td><code>compare_at_price</code> removed → <code>effective_price</code> + <code>discount</code> added</td>
+        <td><span class="pill brk">Breaking</span></td>
+      </tr>
+      <tr>
+        <td><strong>Cart</strong></td>
+        <td><code>compare_at_price</code> removed → <code>effective_price</code>, <code>automatic_discount</code>, <code>regular_line_total</code>, <code>automatic_discount_amount</code> added; cart totals gain <code>regular_total_price</code>, <code>automatic_discount_total</code></td>
+        <td><span class="pill brk">Breaking</span></td>
+      </tr>
+      <tr>
+        <td><strong>Order items</strong></td>
+        <td><code>regular_price_per_unit</code>, <code>automatic_discount_amount_per_unit</code>, <code>automatic_discount</code> added. <code>compare_at_price</code> kept but now always <code>null</code> on new orders</td>
+        <td><span class="pill safe">Additive</span></td>
+      </tr>
+      <tr>
+        <td><strong>Orders</strong></td>
+        <td><code>coupon_code</code>, <code>coupon_discount_amount</code>, <code>coupon_snapshot</code>, <code>payment_pricing_finalized_at</code> added</td>
+        <td><span class="pill safe">Additive</span></td>
+      </tr>
+      <tr>
+        <td><strong>Coupons</strong></td>
+        <td>New <code>POST /orders/{order}/coupon/check</code>; <code>coupon_code</code> accepted on payment initialize</td>
+        <td><span class="pill new">New feature</span></td>
+      </tr>
+      <tr>
+        <td><strong>Campaigns</strong></td>
+        <td>New public campaign list + campaign products endpoints</td>
+        <td><span class="pill new">New feature</span></td>
+      </tr>
+      <tr>
+        <td><strong>Admin</strong></td>
+        <td>New <code>/admin/promotions/*</code> CRUD; <code>compare_at_price</code> removed from product/variant forms</td>
+        <td><span class="pill brk">Breaking</span> + <span class="pill new">New</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <strong>Nothing else moved.</strong> Auth, addresses, shipment methods, delivery slots, inventory, media, and
+    notifications are untouched. Product ids, SKUs, order public codes, and pagination envelopes are unchanged.
+  </div>
+
+  <h2 id="breaking">Breaking changes — do these first</h2>
+
+  <h3>1. Every variant object</h3>
+  <p>Appears in: product detail, product lists, category products, campaign products, admin product list, variant endpoints.</p>
+  <pre><code>{
+  "id": 201,
+  "sku": "bdv-K92XMQ",
+  "type": "color",
+  "is_default": true,
+<span class="del">- "compare_at_price": 95000000,          &lt;- REMOVED</span>
+  "base_price": 89000000,                <span class="cmt">// regular price (unchanged)</span>
+<span class="add">+ "effective_price": 71200000,           &lt;- what the customer pays NOW</span>
+<span class="add">+ "discount": {                          &lt;- null when nothing applies</span>
+<span class="add">+   "name": "Galaxy Launch Offer",</span>
+<span class="add">+   "type": "percentage",                 // or "fixed_amount"</span>
+<span class="add">+   "percentage_bps": 2000,               // 2000 = 20%  (null for fixed)</span>
+<span class="add">+   "fixed_amount": null,                 // rials       (null for percentage)</span>
+<span class="add">+   "amount": 17800000                    // actual rial reduction</span>
+<span class="add">+ },</span>
+  "max_quantity_per_order": 3,
+  "attributes": { "color": "Black" },
+  "image_url": null,
+  "stock": 42,
+  "effective_max_quantity": 3
+}</code></pre>
+
+  <h4>Migration</h4>
+  <pre><code><span class="cmt">// BEFORE</span>
+<span class="del">const price    = variant.compare_at_price ?? variant.base_price;</span>
+<span class="del">const wasPrice = variant.compare_at_price;</span>
+<span class="del">const onSale   = variant.compare_at_price &gt; variant.base_price;</span>
+
+<span class="cmt">// AFTER</span>
+<span class="add">const price    = variant.effective_price;   // always present, always correct</span>
+<span class="add">const wasPrice = variant.base_price;        // show struck through only when discounted</span>
+<span class="add">const onSale   = variant.discount !== null;</span>
+<span class="add">const saved    = variant.discount?.amount ?? 0;</span></code></pre>
+
+  <div class="callout warn">
+    <strong>The semantics flipped.</strong> Previously <code>base_price</code> was the selling price and
+    <code>compare_at_price</code> was the higher struck-through number. Now <code>base_price</code> is the
+    <em>higher</em> regular price and <code>effective_price</code> is the lower selling price. If you swap the field
+    names without swapping their roles you will show the discounted price struck through and display the full price as
+    what the customer pays.
+  </div>
+
+  <h3>2. Every cart item</h3>
+  <pre><code>{
+  "id": 55,
+  "sku": "bdv-K92XMQ",
+  "quantity": 2,
+  "product_name": "Galaxy S25",
+<span class="del">- "compare_at_price": 95000000,          &lt;- REMOVED</span>
+  "base_price": 89000000,
+<span class="add">+ "effective_price": 71200000,</span>
+<span class="add">+ "automatic_discount": { ... } | null,   &lt;- same shape as variant.discount</span>
+  "line_total": 142400000,                <span class="cmt">// effective_price x quantity - PAYABLE</span>
+<span class="add">+ "regular_line_total": 178000000,       &lt;- base_price x quantity (strike-through)</span>
+<span class="add">+ "automatic_discount_amount": 35600000, &lt;- the difference</span>
+  "image_url": "...", "primary_image_url": "...",
+  "available_stock": 42, "max_quantity_per_order": 3,
+  "effective_max_quantity": 3, "remaining_addable_quantity": 1,
+  "quantity_valid": true, "type": "color", "attributes": { ... }
+}</code></pre>
+
+  <div class="callout"><strong><code>line_total</code> kept its name and its meaning</strong> — it is still the amount to charge for that line. It is simply now computed from <code>effective_price</code>. If you only ever rendered <code>line_total</code> and <code>total_price</code>, your cart already shows correct money; you just cannot show savings until you read the new fields.</div>
+
+  <h3>3. Cart totals</h3>
+  <pre><code>{
+  "item_count": 2,
+  "total_quantity": 3,
+  "total_price": 157400000,               <span class="cmt">// payable merchandise (unchanged meaning)</span>
+<span class="add">+ "regular_total_price": 193000000,      &lt;- same basket at regular prices</span>
+<span class="add">+ "automatic_discount_total": 35600000,  &lt;- total saved by automatic discounts</span>
+  "items": [ ... ]
+}</code></pre>
+
+  <h2 id="rules">Rules to internalize</h2>
+
+  <div class="card">
+    <h4 style="margin-top:0">1 &middot; Never compute a price on the client</h4>
+    <p style="margin:0">The server sends <code>effective_price</code> already computed with integer arithmetic. If you recompute it from <code>percentage_bps</code> you <em>will</em> eventually be off by a rial and disagree with the amount charged. Use <code>percentage_bps</code> for the badge text only (<code>bps / 100</code> &rarr; <code>20%</code>).</p>
+  </div>
+
+  <div class="card">
+    <h4 style="margin-top:0">2 &middot; Discounts never stack — show one badge</h4>
+    <p style="margin:0">A variant has at most <strong>one</strong> <code>discount</code> object, never a list. Don't build UI that sums or lists multiple discounts per item.</p>
+  </div>
+
+  <div class="card">
+    <h4 style="margin-top:0">3 &middot; Prices are live until an order exists</h4>
+    <p style="margin:0">Product and cart prices are recomputed on every request. A promotion can start or end between two page loads. <strong>Never cache prices across navigation</strong>, and always re-read the order response after checkout rather than assuming it matches the cart.</p>
+  </div>
+
+  <div class="card">
+    <h4 style="margin-top:0">4 &middot; All money is integer rials</h4>
+    <p style="margin:0">Unchanged, but now applies to the new fields too. <code>percentage_bps</code> is <em>not</em> money — it is hundredths of a percent (<code>2000</code> = 20%, <code>1250</code> = 12.5%).</p>
+  </div>
+
+  <h2 id="plp">Product list / grid</h2>
+  <p><strong>Endpoints:</strong> <code>GET /api/v1/catalog/products</code>, <code>/categories/{id}/products</code>, <code>/catalog/campaigns/{slug}/products</code></p>
+
+  <h4>Edit</h4>
+  <ul>
+    <li>Product card price &rarr; read the default variant's <code>effective_price</code>.</li>
+    <li>Strike-through price &rarr; render <code>base_price</code> <strong>only when</strong> <code>discount !== null</code>.</li>
+    <li>Discount badge &rarr; <code>discount.percentage_bps / 100 + '%'</code> for percentage rules, or format <code>discount.amount</code> for fixed ones.</li>
+    <li>Remove any "is on sale" logic comparing <code>compare_at_price &gt; base_price</code>.</li>
+  </ul>
+
+  <h4>Filters — unchanged behaviour, one clarification</h4>
+  <table>
+    <thead><tr><th>Param</th><th>Behaviour</th></tr></thead>
+    <tbody>
+      <tr><td><code>has_discount=true|false</code></td><td>Still works. Now means "has an active automatic discount" instead of "has a compare-at price". Pagination is correct.</td></tr>
+      <tr><td><code>min_price</code>, <code>max_price</code></td><td><strong>Still filter on <code>base_price</code></strong>, not the discounted price.</td></tr>
+      <tr><td><code>sort=cheapest|most_expensive</code></td><td><strong>Still sort by <code>base_price</code>.</strong></td></tr>
+    </tbody>
+  </table>
+  <div class="callout warn"><strong>Set expectations in the UI.</strong> A product discounted to 10,000,000 still sorts and filters by its 100,000,000 regular price. If your price-range slider implies otherwise, label it "regular price" — this was a deliberate scope decision, not an oversight.</div>
+
+  <h2 id="pdp">Product detail</h2>
+  <p><strong>Endpoint:</strong> <code>GET /api/v1/catalog/products/{uuid}</code> — unchanged URL and shape apart from the variant fields.</p>
+  <ul>
+    <li>Switching the selected variant must re-read <code>effective_price</code> / <code>discount</code> from <em>that</em> variant — different variants of one product can carry different discounts, or none.</li>
+    <li>"You save X" &rarr; <code>discount.amount</code> (already per unit).</li>
+    <li>Do not assume the default variant's discount applies to the others.</li>
+  </ul>
+
+  <h2 id="cart">Cart</h2>
+  <p><strong>Endpoints:</strong> <code>GET /cart</code>, <code>POST /cart/items</code> (201), <code>PATCH</code>/<code>DELETE /cart/items/{id}</code>, <code>POST /cart/merge</code></p>
+  <ul>
+    <li>Line price &rarr; <code>effective_price</code>; line strike-through &rarr; <code>regular_line_total</code>.</li>
+    <li>Per-line savings &rarr; <code>automatic_discount_amount</code>; badge &rarr; <code>automatic_discount</code>.</li>
+    <li>Order summary "discount" row &rarr; <code>automatic_discount_total</code>; subtotal &rarr; <code>total_price</code>.</li>
+    <li>Guest and logged-in carts price identically — no user-specific automatic rules exist. No UI difference needed.</li>
+  </ul>
+
+  <div class="callout bad">
+    <strong>Do not add a coupon input to the cart.</strong> There is no coupon field on the cart and none will be added.
+    Coupons attach to an <em>order</em>, so the input belongs on the payment step (see <a href="#payment">below</a>).
+    A cart-level coupon box would have nothing to call.
+  </div>
+
+  <h2 id="checkout">Checkout</h2>
+  <p><strong>Endpoint:</strong> <code>POST /api/v1/orders</code> — request body unchanged.</p>
+  <div class="callout warn">
+    <strong>The order total can legitimately differ from the cart you just showed.</strong> Checkout re-reads live prices,
+    so if a promotion ended seconds earlier the order is created at the new price. Render the totals from the
+    <strong>order response</strong>, not from cart state you were holding. If you want to be friendly, diff them and warn
+    the user before confirming payment.
+  </div>
+  <p>New order fields at creation are always: <code>coupon_code: null</code>, <code>coupon_discount_amount: 0</code>, <code>coupon_snapshot: null</code>, <code>payment_pricing_finalized_at: null</code>.</p>
+
+  <h2 id="payment">Payment page &amp; coupon input</h2>
+
+  <h3>Step 1 — Preview the coupon (optional, recommended)</h3>
+  <pre><code><span class="pill post">POST</span> /api/v1/orders/{order_id}/coupon/check     <span class="cmt">// numeric order id</span>
+Authorization: Bearer &lt;token&gt;
+
+{ "code": "SUMMER10" }
+
+<span class="cmt">// 200 OK</span>
+{
+  "code": "SUMMER10",            <span class="cmt">// normalized (trimmed + uppercased)</span>
+  "discount_type": "percentage",
+  "percentage_bps": 1000,
+  "fixed_amount": null,
+  "discount_amount": 18000000,
+  "merchandise_subtotal": 180000000,
+  "shipping_cost": 850000,
+  "tax_amount": 0,
+  "total_before_coupon": 180850000,
+  "total_after_coupon": 162850000
+}</code></pre>
+
+  <ul>
+    <li>Reserves nothing, changes nothing — safe to call on a debounced keystroke or an "Apply" click.</li>
+    <li>Requires login and order ownership. <strong>No special permission.</strong></li>
+    <li>Errors are standard 422 validation on the <code>code</code> field — render <code>errors.code[0]</code>.</li>
+  </ul>
+
+  <div class="callout"><strong>Treat this as a preview, not a promise.</strong> Between check and pay the coupon can expire, be disabled, or have its last use taken by someone else. Always surface the result of step 2 as authoritative.</div>
+
+  <h3>Step 2 — Pay, sending the code</h3>
+  <pre><code><span class="pill post">POST</span> /api/v1/payments/initialize
+
+{
+  "order_id": 42,
+  "method_type": "online",        <span class="cmt">// or "in_person"</span>
+<span class="add">+ "coupon_code": "SUMMER10"       &lt;- optional, NEW</span>
+}</code></pre>
+
+  <div class="callout bad">
+    <strong>Only ever send the code.</strong> <code>coupon_discount_amount</code>, <code>final_total</code>, and
+    <code>percentage</code> are ignored if sent — the server computes everything. Never let the client propose an amount.
+  </div>
+
+  <h3>The freeze — the one behaviour that will bite you</h3>
+  <p>The <strong>first</strong> successful call to <code>/payments/initialize</code> locks this order's pricing, including the decision to use <em>no</em> coupon.</p>
+  <table>
+    <thead><tr><th>Frozen as</th><th>Later request sends</th><th>Result</th></tr></thead>
+    <tbody>
+      <tr><td>SUMMER10</td><td>nothing</td><td><span style="color:var(--ok)">OK</span> — reuses frozen pricing</td></tr>
+      <tr><td>SUMMER10</td><td><code>summer10</code></td><td><span style="color:var(--ok)">OK</span> — case-insensitive</td></tr>
+      <tr><td>SUMMER10</td><td><code>VIP20</code></td><td><span style="color:var(--bad)">422</span></td></tr>
+      <tr><td>no coupon</td><td>nothing</td><td><span style="color:var(--ok)">OK</span></td></tr>
+      <tr><td>no coupon</td><td>any code</td><td><span style="color:var(--bad)">422</span></td></tr>
+    </tbody>
+  </table>
+
+  <h4>What to build</h4>
+  <ul>
+    <li>Read <code>payment_pricing_finalized_at</code> on the order. If it is <strong>not null</strong>, <strong>disable the coupon input</strong> and show the frozen <code>coupon_code</code> as read-only.</li>
+    <li>Retrying a failed payment: just re-post <code>order_id</code> + <code>method_type</code>. Do <em>not</em> re-send the coupon — omitting it is always safe and avoids any chance of a 422.</li>
+    <li>A failed gateway attempt does <strong>not</strong> release the coupon. The retry charges the identical amount. Don't prompt the user to re-enter a code after a failure.</li>
+    <li>If the user wants a different coupon after finalization, the only path is to cancel the order and start a new one. Say so plainly in the UI.</li>
+  </ul>
+
+  <h2 id="orders">Order history &amp; detail</h2>
+  <p><strong>Endpoints:</strong> <code>GET /orders</code>, <code>GET /orders/{publicCode}</code>, <code>POST /orders/{id}/cancel</code>, admin equivalents.</p>
+
+  <h4>New order-level fields</h4>
+  <pre><code>{
+  "total_amount": 162850000,
+<span class="add">+ "coupon_code": "SUMMER10" | null,</span>
+<span class="add">+ "coupon_discount_amount": 18000000,</span>
+<span class="add">+ "coupon_snapshot": { ... } | null,        &lt;- immutable historical record</span>
+<span class="add">+ "payment_pricing_finalized_at": "2026-08-08T19:41:09.000000Z" | null,</span>
+  "items": [ ... ]
+}</code></pre>
+
+  <h4>New order-item fields</h4>
+  <pre><code>{
+  "quantity": 2,
+<span class="add">+ "regular_price_per_unit": 89000000,           &lt;- strike-through</span>
+<span class="add">+ "automatic_discount_amount_per_unit": 17800000,</span>
+<span class="add">+ "automatic_discount": { ... } | null,         &lt;- frozen snapshot</span>
+  "price_per_unit": 71200000,                     <span class="cmt">// charged (unchanged name)</span>
+  "compare_at_price": null,                       <span class="cmt">// LEGACY - see below</span>
+  "line_total": 142400000
+}</code></pre>
+
+  <div class="callout warn">
+    <strong><code>compare_at_price</code> on order items still exists — stop reading it anyway.</strong> It was kept so
+    orders placed <em>before</em> this release keep rendering their historical value. Every new order writes
+    <code>null</code>. Read <code>regular_price_per_unit</code> instead, which is populated for old and new orders alike
+    (old rows were backfilled to equal <code>price_per_unit</code>).
+  </div>
+
+  <h4>Order summary block to build</h4>
+  <pre><code>Merchandise           sum(line_total)
+Automatic savings     sum(automatic_discount_amount_per_unit x quantity)   <span class="cmt">// optional</span>
+Coupon (SUMMER10)    -coupon_discount_amount                              <span class="cmt">// when coupon_code !== null</span>
+Shipping             +shipping_cost
+Tax                  +tax_amount
+-----------------------------
+Total                 total_amount</code></pre>
+  <p>The coupon line is <strong>order-level only</strong> — it is deliberately never spread across items, so do not try to attribute it per line.</p>
+
+  <h2 id="campaigns">Campaign pages <span class="pill new">New</span></h2>
+
+  <table>
+    <thead><tr><th>Method</th><th>Endpoint</th><th>Returns</th></tr></thead>
+    <tbody>
+      <tr><td><span class="pill get">GET</span></td><td><code>/api/v1/catalog/campaigns</code></td><td>Visible campaigns. <code>?landing=true</code> &rarr; landing-page ones only</td></tr>
+      <tr><td><span class="pill get">GET</span></td><td><code>/api/v1/catalog/campaigns/{slug}</code></td><td>One campaign, or 404</td></tr>
+      <tr><td><span class="pill get">GET</span></td><td><code>/api/v1/catalog/campaigns/{slug}/products</code></td><td>Paginated <strong>normal product objects</strong></td></tr>
+    </tbody>
+  </table>
+
+  <pre><code><span class="cmt">// GET /catalog/campaigns</span>
+{ "data": [ {
+  "slug": "summer-sale",          <span class="cmt">// the public handle - use in routes</span>
+  "name": "Summer Sale",
+  "description": "...",
+  "starts_at": "2026-08-01T00:00:00.000000Z",
+  "ends_at": "2026-09-01T00:00:00.000000Z"
+} ] }</code></pre>
+
+  <h4>Build</h4>
+  <ul>
+    <li>Landing-page section: <code>GET /catalog/campaigns?landing=true</code>, then link each to <code>/campaigns/{slug}</code>.</li>
+    <li>Campaign page: reuse your existing product grid component untouched — <code>/campaigns/{slug}/products</code> returns the same product shape and pagination envelope as <code>/catalog/products</code>, and supports the same <code>page</code>, <code>per_page</code>, <code>sort</code>, <code>brand_id</code>, <code>category_id</code>, <code>min_price</code>, <code>max_price</code>, <code>search</code>, <code>available</code> params.</li>
+    <li>Countdown timers can use <code>ends_at</code> (may be <code>null</code> = open-ended).</li>
+  </ul>
+
+  <div class="callout warn">
+    <strong>Don't assume every product in a campaign shares one discount.</strong> That is the whole point of campaigns —
+    each product carries its own. Read each product's own <code>discount</code>. A product may even display a
+    <em>stronger</em> discount that has nothing to do with the campaign; that is correct and intentional.
+  </div>
+  <div class="callout"><strong>404 vs empty.</strong> An unknown/expired/inactive campaign &rarr; <strong>404</strong> (show a "campaign ended" page). A live campaign whose rules have all expired &rarr; <strong>200 with an empty list</strong> (show an empty state, not an error).</div>
+
+  <h2 id="admin-discounts">Admin — Discounts <span class="pill new">New</span></h2>
+  <p>Base: <code>/api/v1/admin/promotions/discounts</code> &middot; <code>GET</code> list/detail, <code>POST</code>, <code>PATCH</code>/<code>PUT</code>, <code>DELETE</code>.</p>
+
+  <div class="callout bad">
+    <strong>The form has two mutually exclusive modes.</strong> Pick the mode first, then show only its fields — a single
+    flat form will produce 422s constantly.
+    <table style="margin-top:10px">
+      <tr><th></th><th>trigger_type</th><th>scope</th><th>targets</th><th>min_subtotal</th></tr>
+      <tr><td><strong>Automatic</strong> (a sale)</td><td><code>automatic</code></td><td><code>targeted</code></td><td><strong>required</strong>, &ge;1</td><td><strong>must not be sent</strong></td></tr>
+      <tr><td><strong>Coupon rule</strong></td><td><code>coupon</code></td><td><code>all</code></td><td><strong>must be empty</strong></td><td>allowed</td></tr>
+    </table>
+  </div>
+
+  <pre><code><span class="pill post">POST</span> /api/v1/admin/promotions/discounts
+{
+  "name": "Summer Mobile Promotion",
+  "trigger_type": "automatic",
+  "scope": "targeted",
+  "discount_type": "percentage",        <span class="cmt">// or "fixed_amount"</span>
+  "percentage_bps": 2000,               <span class="cmt">// 20%. Required for percentage, forbidden for fixed</span>
+  "fixed_amount": null,                 <span class="cmt">// rials. Required for fixed, forbidden for percentage</span>
+  "max_discount_amount": 5000000,       <span class="cmt">// optional cap</span>
+  "starts_at": "2026-08-01 00:00:00",   <span class="cmt">// optional</span>
+  "ends_at":   "2026-09-01 00:00:00",   <span class="cmt">// optional, &gt;= starts_at</span>
+  "is_active": true,
+  "priority": 0,                        <span class="cmt">// tie-break only</span>
+  "targets": [
+    { "target_type": "product",  "target_id": 15 },
+    { "target_type": "variant",  "target_id": 91 },
+    { "target_type": "category", "target_id": 7  },
+    { "target_type": "brand",    "target_id": 4  }
+  ]
+}</code></pre>
+
+  <h4>UI notes</h4>
+  <ul>
+    <li><strong>Percentage input:</strong> let the operator type <code>20</code> or <code>12.5</code> and send <code>bps = value x 100</code>. Never send a float. Max <code>10000</code> (100%).</li>
+    <li><strong>Target pickers</strong> must call the existing <em>Catalog</em> admin APIs (products, variants, categories, brands) — the promotion API only stores raw ids and will happily accept an id that doesn't exist. Validate on your side; the backend deliberately won't.</li>
+    <li><strong>Update semantics:</strong> omit <code>targets</code> to leave the reach untouched. Sending <code>targets: []</code> on an automatic rule is a 422, not a "clear".</li>
+    <li><strong>Delete</strong> returns <code>204</code> and is a soft delete — the rule stops pricing but history is kept. Label the button "Deactivate / Delete", not "Permanently delete".</li>
+    <li>Explain in the form that <strong>only the single best discount applies</strong> per variant — operators will otherwise expect stacking.</li>
+  </ul>
+
+  <h2 id="admin-coupons">Admin — Coupons <span class="pill new">New</span></h2>
+  <p>Base: <code>/api/v1/admin/promotions/coupons</code></p>
+  <pre><code><span class="pill post">POST</span> /api/v1/admin/promotions/coupons
+{
+  "discount_id": 12,              <span class="cmt">// MUST be a trigger_type=coupon, scope=all rule</span>
+  "code": "SUMMER10",             <span class="cmt">// A-Z 0-9 - _ only, max 32; auto-uppercased</span>
+  "is_active": true,
+  "usage_limit": 500,             <span class="cmt">// null = unlimited</span>
+  "usage_limit_per_user": 1       <span class="cmt">// null = unlimited</span>
+}</code></pre>
+  <ul>
+    <li>The discount dropdown must be filtered to <strong>coupon-type rules only</strong> (<code>GET /discounts?trigger_type=coupon</code>) — picking an automatic rule is a 422.</li>
+    <li>Responses include <code>used_count</code> and <code>remaining_uses</code> — surface these in the list.</li>
+    <li>Renaming a code that already has redemptions is a 422. Disable the code field once <code>used_count &gt; 0</code>.</li>
+    <li>Creating a coupon is a two-step flow for operators: create the coupon-type <em>discount</em> first, then the <em>code</em>. Consider a combined wizard.</li>
+  </ul>
+
+  <h2 id="admin-campaigns">Admin — Campaigns <span class="pill new">New</span></h2>
+  <p>Base: <code>/api/v1/admin/promotions/campaigns</code></p>
+  <pre><code><span class="pill post">POST</span> /api/v1/admin/promotions/campaigns
+{
+  "name": "Summer Sale",
+  "slug": "summer-sale",          <span class="cmt">// optional; derived from name. Unique. Public handle.</span>
+  "description": "...",
+  "starts_at": null, "ends_at": null,
+  "is_active": true,
+  "show_on_landing": true,        <span class="cmt">// controls ?landing=true listing</span>
+  "sort_order": 1,
+  "discount_ids": [7, 9, 12]      <span class="cmt">// automatic rules ONLY; replaces the whole set</span>
+}</code></pre>
+  <ul>
+    <li>The discount multi-select must exclude coupon rules (<code>GET /discounts?trigger_type=automatic</code>) — linking one is a 422 on <code>discount_ids</code>.</li>
+    <li>Omit <code>discount_ids</code> on update to leave membership unchanged; send the full array to replace it.</li>
+    <li>Make clear in the UI that a campaign <strong>groups</strong> products — it does not set prices, and does not guarantee its own discount is the one shown.</li>
+  </ul>
+
+  <h4>Redemptions (read-only)</h4>
+  <p><code>GET /api/v1/admin/promotions/redemptions</code> — filters <code>coupon_id</code>, <code>order_id</code>, <code>user_id</code>, <code>status</code>. Statuses: <code>reserved</code> (claimed, awaiting payment), <code>redeemed</code> (paid), <code>released</code> (cancelled/expired, returned to the pool). Read-only — no edit/delete UI.</p>
+
+  <h4>Permissions to gate menus on</h4>
+  <table>
+    <thead><tr><th>Permission</th><th>Unlocks</th></tr></thead>
+    <tbody>
+      <tr><td><code>promotion.view-admin</code></td><td>All promotion read screens (discounts, coupons, campaigns, redemptions)</td></tr>
+      <tr><td><code>promotion.create</code></td><td>Create discount</td></tr>
+      <tr><td><code>promotion.update</code></td><td>Edit discount</td></tr>
+      <tr><td><code>promotion.delete</code></td><td>Delete discount</td></tr>
+      <tr><td><code>promotion.coupon.manage</code></td><td>Create / edit / delete coupons</td></tr>
+      <tr><td><code>promotion.campaign.manage</code></td><td>Create / edit / delete campaigns + membership</td></tr>
+    </tbody>
+  </table>
+  <div class="callout">Read and write are separate: a user may hold <code>promotion.view-admin</code> and still get <strong>403</strong> on every mutation. Gate buttons individually, not the whole section.</div>
+
+  <h2 id="admin-products">Admin — Product &amp; variant forms <span class="pill brk">Breaking</span></h2>
+  <ul>
+    <li><strong>Remove the <code>compare_at_price</code> input</strong> from: product create (nested <code>variants[]</code>), product update (nested <code>variants[]</code>), variant create, variant edit. The field is no longer accepted — sending it is silently ignored, so a leftover input looks like it saves and then vanishes.</li>
+    <li>Replace it with read-only text such as <em>"Promotional pricing is managed under Promotions &rarr; Discounts."</em> and a link.</li>
+    <li>The admin product list still supports <code>has_discount</code>; its meaning is now "has an active automatic discount".</li>
+    <li>Variant rows can show the live <code>effective_price</code> + <code>discount</code> so operators see the result of their rules without leaving the product screen.</li>
+  </ul>
+
+  <h2 id="checklist">Full checklist</h2>
+
+  <h4>Storefront — must do</h4>
+  <ul class="chk">
+    <li>Global search for <code>compare_at_price</code> and remove every read.</li>
+    <li>Product card / grid: price &rarr; <code>effective_price</code>, strike-through &rarr; <code>base_price</code> when <code>discount !== null</code>.</li>
+    <li>Product detail: same, re-read per selected variant.</li>
+    <li>Discount badge component: accepts one <code>discount</code> object (or null), never a list.</li>
+    <li>Cart line: <code>effective_price</code>, <code>regular_line_total</code>, <code>automatic_discount_amount</code>.</li>
+    <li>Cart summary: <code>total_price</code>, <code>regular_total_price</code>, <code>automatic_discount_total</code>.</li>
+    <li>Order summary: coupon row from <code>coupon_code</code> + <code>coupon_discount_amount</code>.</li>
+    <li>Order items: <code>regular_price_per_unit</code> instead of <code>compare_at_price</code>.</li>
+    <li>Checkout: render totals from the order response, not cached cart state.</li>
+  </ul>
+
+  <h4>Storefront — new features</h4>
+  <ul class="chk">
+    <li>Coupon input on the payment page + <code>POST /orders/{id}/coupon/check</code>.</li>
+    <li>Send <code>coupon_code</code> on <code>POST /payments/initialize</code>.</li>
+    <li>Disable the coupon input when <code>payment_pricing_finalized_at !== null</code>.</li>
+    <li>Payment retry omits <code>coupon_code</code>.</li>
+    <li>Landing campaign section (<code>?landing=true</code>).</li>
+    <li>Campaign page reusing the product grid.</li>
+  </ul>
+
+  <h4>Admin</h4>
+  <ul class="chk">
+    <li>Remove <code>compare_at_price</code> from all four product/variant forms.</li>
+    <li>Discounts CRUD with the two-mode form.</li>
+    <li>Coupons CRUD with a coupon-rules-only discount picker.</li>
+    <li>Campaigns CRUD with an automatic-rules-only multi-select.</li>
+    <li>Redemptions read-only list.</li>
+    <li>Menu + button gating on the six permissions.</li>
+  </ul>
+
+  <h2 id="gotchas">Gotchas &amp; FAQ</h2>
+
+  <div class="callout"><strong>"The price on the product page differs from my order."</strong> Expected if a promotion started or ended in between. Checkout re-reads live prices. Always show the order response's totals.</div>
+  <div class="callout"><strong>"Can I show two discounts on one product?"</strong> No. Only one automatic discount ever applies per variant. A coupon is separate and lives at order level only.</div>
+  <div class="callout"><strong>"Why is a 90%-off product not in my 0&ndash;20M price filter?"</strong> Price filters and sorts intentionally use the regular <code>base_price</code>. Label your filter accordingly.</div>
+  <div class="callout"><strong>"The coupon box returns 422 on retry."</strong> The order's pricing was already frozen with a different code (or none). Omit <code>coupon_code</code> on retries.</div>
+  <div class="callout"><strong>"A failed payment lost the customer's coupon."</strong> It didn't — a failed attempt keeps the reservation. Just retry; don't re-prompt.</div>
+  <div class="callout"><strong>"Are coupon codes case-sensitive?"</strong> No. They are trimmed and uppercased server-side; the response returns the normalized form, which is what you should display and store.</div>
+  <div class="callout"><strong>"Do customers need a promotion permission?"</strong> No. Browsing, campaigns, coupon check, and payment are protected by auth + ownership only. The six <code>promotion.*</code> permissions are admin-only.</div>
+  <div class="callout warn"><strong>Old orders.</strong> Orders placed before this release keep their historical <code>compare_at_price</code> value and have <code>automatic_discount: null</code>. Your order-detail UI must tolerate both shapes.</div>
+
+  <p style="margin-top:48px;font-size:12.5px;color:#4a4d65">
+    Companion docs: <code>API_DOCUMENTATION.html</code> (full endpoint reference, "Promotions" section) &middot;
+    <code>DISCOUNT_ARCHITECTURE.html</code> (why the rules are shaped this way) &middot; <code>CHANGELOG.md</code>.
+  </p>
+</main>
+</body>
+</html>

@@ -21,8 +21,12 @@ class CreateProductVariantAction
     /**
      * Create a purchasable variant for a product.
      *
-     * Cents Rule: base_price and compare_at_price MUST be integers. A non-integer
-     * value throws immediately rather than silently truncating.
+     * Cents Rule: base_price MUST be an integer. A non-integer value throws
+     * immediately rather than silently truncating.
+     *
+     * base_price is the *regular* price and the only price Catalog stores. Any
+     * promotional price is derived live by the Promotion module at read time, so
+     * there is no second price column to keep in sync.
      *
      * Default invariant: if is_default is true, any existing default variant for
      * this product is unset first, guaranteeing exactly one default per product.
@@ -30,10 +34,6 @@ class CreateProductVariantAction
     public function handle(int $productId, array $data, ?UploadedFile $variantImage = null): ProductVariantDTO
     {
         $this->assertCentsRule($data['base_price'], 'base_price');
-
-        if (isset($data['compare_at_price'])) {
-            $this->assertCentsRule($data['compare_at_price'], 'compare_at_price');
-        }
 
         return DB::transaction(function () use ($productId, $data, $variantImage): ProductVariantDTO {
             $mediaId = $this->resolveMediaId($variantImage, $data['media_id'] ?? null);
@@ -52,7 +52,6 @@ class CreateProductVariantAction
                 'type' => $data['type'],
                 'is_default' => $isDefault,
                 'base_price' => (int) $data['base_price'],
-                'compare_at_price' => isset($data['compare_at_price']) ? (int) $data['compare_at_price'] : null,
                 'max_quantity_per_order' => isset($data['max_quantity_per_order']) ? (int) $data['max_quantity_per_order'] : null,
                 'media_id' => $mediaId,
                 'attributes' => $data['attributes'] ?? null,

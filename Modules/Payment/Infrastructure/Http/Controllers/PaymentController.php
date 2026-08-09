@@ -30,6 +30,7 @@ class PaymentController extends Controller
             userId: $request->user()->id,
             methodType: $request->input('method_type'),
             gateway: $request->input('gateway'),
+            couponCode: $request->input('coupon_code'),
         );
 
         return response()->json($result);

@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Promotion — Discounts, Coupons &amp; Campaigns</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #222537;
+      --border: #2e3147;
+      --text: #e2e4f0;
+      --muted: #8b8fa8;
+      --accent: #7c6af7;
+      --ok: #22c55e;
+      --info: #3b82f6;
+      --warnc: #f59e0b;
+      --bad: #ef4444;
+      --cyan: #22d3ee;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); display: flex; min-height: 100vh; }
+
+    nav { width: 260px; min-width: 260px; background: var(--surface); border-right: 1px solid var(--border); height: 100vh; overflow-y: auto; position: sticky; top: 0; padding: 24px 0; }
+    nav .logo { padding: 0 20px 24px; font-size: 15px; font-weight: 700; color: var(--accent); border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+    nav .logo span { color: var(--muted); font-weight: 400; font-size: 12px; display: block; margin-top: 3px; }
+    nav a { display: block; padding: 6px 20px; font-size: 13px; color: var(--muted); text-decoration: none; border-left: 2px solid transparent; transition: all .15s; }
+    nav a:hover { color: var(--text); background: var(--surface2); }
+    nav .section-label { padding: 16px 20px 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: #4a4d65; }
+
+    main { flex: 1; padding: 48px 56px; max-width: 1040px; }
+    h1 { font-size: 32px; font-weight: 700; margin-bottom: 8px; }
+    .subtitle { font-size: 15px; color: var(--muted); margin-bottom: 28px; }
+    h2 { font-size: 22px; font-weight: 700; margin: 56px 0 20px; padding-top: 56px; border-top: 1px solid var(--border); }
+    h2:first-of-type { border-top: none; padding-top: 0; margin-top: 32px; }
+    h3 { font-size: 14px; font-weight: 600; margin: 32px 0 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+    h4 { font-size: 14px; margin-bottom: 8px; color: var(--text); }
+    p { font-size: 14px; line-height: 1.7; color: var(--muted); margin-bottom: 12px; }
+    p strong, li strong, td strong { color: var(--text); }
+    ul, ol { font-size: 14px; color: var(--muted); padding-left: 20px; line-height: 1.9; margin-bottom: 12px; }
+    a { color: var(--accent); }
+
+    code { font-family: 'SF Mono', Menlo, Consolas, monospace; font-size: 12.5px; background: var(--surface2); padding: 2px 6px; border-radius: 4px; color: var(--cyan); }
+    pre { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px 18px; overflow-x: auto; margin-bottom: 16px; }
+    pre code { background: none; padding: 0; color: var(--text); font-size: 12.5px; line-height: 1.65; white-space: pre; }
+
+    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 13px; display: block; overflow-x: auto; }
+    th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    th { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; font-weight: 700; white-space: nowrap; }
+    td { color: var(--muted); }
+    tbody tr:hover { background: var(--surface); }
+
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; margin-bottom: 16px; }
+    .callout { border-left: 3px solid var(--accent); background: var(--surface); border-radius: 0 8px 8px 0; padding: 14px 18px; margin-bottom: 18px; font-size: 13.5px; line-height: 1.7; color: var(--muted); }
+    .callout.warn { border-left-color: var(--warnc); }
+    .callout.bad { border-left-color: var(--bad); }
+    .callout.ok { border-left-color: var(--ok); }
+    .callout strong { color: var(--text); }
+
+    .pill { display: inline-block; font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 20px; text-transform: uppercase; letter-spacing: .05em; }
+    .pill.get { background: rgba(59,130,246,.15); color: #60a5fa; }
+    .pill.post { background: rgba(34,197,94,.15); color: #4ade80; }
+    .pill.patch { background: rgba(245,158,11,.15); color: #fbbf24; }
+    .pill.del { background: rgba(239,68,68,.15); color: #f87171; }
+
+    .win { color: var(--ok); font-weight: 700; }
+    .lose { color: var(--muted); }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 1100px) { body { display: block; } nav { display: none; } main { padding: 32px 20px; } .grid2 { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+<nav>
+  <div class="logo">Promotion Module<span>Discounts · Coupons · Campaigns</span></div>
+  <div class="section-label">Overview</div>
+  <a href="#what">What this replaces</a>
+  <a href="#layers">The two pricing layers</a>
+  <a href="#deps">Module dependencies</a>
+  <div class="section-label">Automatic discounts</div>
+  <a href="#winner">Best-discount-wins</a>
+  <a href="#ties">Tie-breaking</a>
+  <a href="#math">Integer basis points</a>
+  <a href="#targets">Targets &amp; ancestry</a>
+  <div class="section-label">Coupons</div>
+  <a href="#coupon-model">Model &amp; dormancy</a>
+  <a href="#stacking">Stacking on automatics</a>
+  <a href="#freeze">The pricing freeze</a>
+  <a href="#lifecycle">Reservation lifecycle</a>
+  <div class="section-label">Campaigns</div>
+  <a href="#campaigns">Merchandising</a>
+  <div class="section-label">Reference</div>
+  <a href="#schema">Database schema</a>
+  <a href="#api">API surface</a>
+  <a href="#permissions">Permissions</a>
+  <a href="#gotchas">Gotchas</a>
+</nav>
+
+<main>
+  <h1>Promotion</h1>
+  <p class="subtitle">How discounts, coupons, and campaigns price an order — and why the rules are shaped the way they are.</p>
+
+  <div class="callout">
+    <strong>One sentence:</strong> Catalog stores only a regular price; the Promotion module decides, live on every read,
+    which single automatic discount wins for each variant, and one coupon may stack on top of that once — but only after
+    an order exists, and only until the first payment attempt freezes the amount.
+  </div>
+
+  <h2 id="what">What this replaces</h2>
+  <p>
+    Promotional pricing used to be a second column on the variant: <code>product_variants.compare_at_price</code>, a
+    "was" price that implied a discount. That column has been dropped.
+  </p>
+  <p>A price column cannot express any of the things a real promotion needs:</p>
+  <table>
+    <thead><tr><th>Requirement</th><th>compare_at_price</th><th>Promotion module</th></tr></thead>
+    <tbody>
+      <tr><td>One sale spanning many products</td><td>Edit every variant by hand</td><td>One rule, many targets</td></tr>
+      <tr><td>Starts Friday, ends Sunday</td><td>Not expressible</td><td><code>starts_at</code> / <code>ends_at</code></td></tr>
+      <tr><td>Turn a sale off instantly</td><td>Rewrite every variant</td><td><code>is_active = false</code></td></tr>
+      <tr><td>"20% off, max 5,000,000"</td><td>Not expressible</td><td><code>max_discount_amount</code></td></tr>
+      <tr><td>Competing overlapping sales</td><td>Undefined</td><td>Deterministic winner</td></tr>
+      <tr><td>Order-level voucher codes</td><td>Not expressible</td><td>Coupons</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout warn">
+    <strong>Historical data is not rewritten.</strong> <code>order_items.compare_at_price</code> still exists and still
+    renders for orders placed before this change. New orders always write <code>null</code> to it. Past orders are
+    financial records — reconstructing them from today's rules would falsify them.
+  </div>
+
+  <h2 id="layers">The two pricing layers</h2>
+  <p>There are exactly two, and they compose in a fixed order:</p>
+  <pre><code>regular price          100,000,000     product_variants.base_price
+      │
+      ▼  layer 1 — ONE automatic discount (never two)
+effective price         80,000,000     20% off, evaluated live
+      │
+      ▼  layer 2 — ONE coupon per order, on the merchandise subtotal
+payable merchandise     72,000,000     10% off the 80,000,000
+      │
+      ▼  + shipping + tax
+order total</code></pre>
+
+  <div class="grid2">
+    <div class="card">
+      <h4>Layer 1 — Automatic</h4>
+      <p style="margin:0">
+        Always on, needs no code, and applies per variant. Many rules may match one variant; exactly one is applied.
+        Live everywhere it is displayed, frozen the instant an order is created.
+      </p>
+    </div>
+    <div class="card">
+      <h4>Layer 2 — Coupon</h4>
+      <p style="margin:0">
+        Completely dormant until a customer types a code, applies to the whole order rather than to items, and is
+        limited to one per order. Frozen when the first payment attempt is made.
+      </p>
+    </div>
+  </div>
+
+  <h2 id="deps">Module dependencies</h2>
+  <p>
+    Promotion sits at the bottom of the graph. It imports no Catalog, Cart, Order, or Payment model, contract, or DTO —
+    everything it needs arrives as primitives or its own DTOs.
+  </p>
+  <pre><code>Cart ──→ Catalog ──→ Promotion
+Order ─→ Catalog
+Order ─→ Promotion
+Payment → Order
+Promotion → (nothing in the business domain)</code></pre>
+
+  <div class="callout bad">
+    <strong>Why the arrow only points one way.</strong> Catalog asks Promotion for prices. If Promotion asked Catalog
+    anything back — "does product 15 exist?", "what products are in category 7?" — the two would be mutually dependent
+    and neither could be reasoned about or deployed alone. Two consequences follow directly, and both look like bugs
+    until you know the reason:
+    <ul style="margin:10px 0 0">
+      <li><strong>Discount targets are never validated against Catalog.</strong> You can target product 999999. The row
+      is stored and is simply inert.</li>
+      <li><strong>Category ancestry is resolved by Catalog, not Promotion.</strong> Catalog passes the full ancestor
+      chain in the pricing context; Promotion just matches ids.</li>
+    </ul>
+  </div>
+
+  <h2 id="winner">Best-discount-wins</h2>
+  <p>
+    A single variant can be hit by a variant rule, several product rules, several category rules (including ones aimed
+    at an ancestor category), and several brand rules — all at once. Every candidate is costed <em>in rials</em>, and the
+    one that saves the customer the most is applied. The rest do nothing.
+  </p>
+
+  <h3>Worked example — base price 100,000,000</h3>
+  <table>
+    <thead><tr><th>Rule</th><th>Target</th><th>Configured</th><th>Actual reduction</th><th>Outcome</th></tr></thead>
+    <tbody>
+      <tr><td>Phones Category Sale</td><td>category</td><td>10%</td><td>10,000,000</td><td class="lose">loses</td></tr>
+      <tr><td>Galaxy Launch Offer</td><td>product</td><td>20%</td><td class="win">20,000,000</td><td class="win">WINS</td></tr>
+      <tr><td>Base Model Rebate</td><td>variant</td><td>15,000,000 fixed</td><td>15,000,000</td><td class="lose">loses</td></tr>
+    </tbody>
+  </table>
+  <p><strong>Effective price = 80,000,000.</strong></p>
+
+  <div class="callout bad">
+    <strong>Automatic discounts never stack.</strong> The three rules above do not add up to 45,000,000 off. Stacking is
+    how a storefront accidentally sells at 55% off during an overlapping campaign — the winner-takes-all rule makes the
+    worst case knowable: the deepest single rule you configured.
+  </div>
+
+  <div class="callout warn">
+    <strong>Specificity does not override savings.</strong> A 30% <em>product</em> rule beats a 20% <em>variant</em>
+    rule. It is tempting to assume the more specific rule wins, but the customer would then pay more because you wrote a
+    broader sale — which is never the intent.
+  </div>
+
+  <h2 id="ties">Deterministic tie-breaking</h2>
+  <p>
+    When two rules produce the <em>exact</em> same rial reduction the customer pays the same either way, so the price is
+    not at stake — but the recorded winner is. An order stores a snapshot of the rule that applied, so the choice must be
+    reproducible forever. Applied in order until one candidate remains:
+  </p>
+  <ol>
+    <li><strong>Largest actual rial reduction</strong> — the only rule that affects price.</li>
+    <li><strong>Most specific matched target</strong> — variant → product → category → brand.</li>
+    <li><strong>Highest explicit <code>priority</code></strong> — the operator's manual override.</li>
+    <li><strong>Lowest discount id</strong> — the oldest rule, so the answer never drifts.</li>
+  </ol>
+  <p>
+    If one discount reaches a variant through two of its own targets (say product 15 <em>and</em> category 7), it counts
+    once, credited with the more specific of the two.
+  </p>
+
+  <h2 id="math">Integer basis points</h2>
+  <p>
+    Percentages are stored as <strong>basis points</strong> — hundredths of a percent — in an integer column. No float
+    ever touches a price.
+  </p>
+  <table>
+    <thead><tr><th>Percentage</th><th>Stored <code>percentage_bps</code></th></tr></thead>
+    <tbody>
+      <tr><td>10%</td><td><code>1000</code></td></tr>
+      <tr><td>20%</td><td><code>2000</code></td></tr>
+      <tr><td>12.5%</td><td><code>1250</code></td></tr>
+      <tr><td>100%</td><td><code>10000</code></td></tr>
+    </tbody>
+  </table>
+
+  <pre><code>// DiscountCalculator::percentageOf()
+return intdiv($amount * $bps, 10000);</code></pre>
+
+  <p>Three deliberate properties:</p>
+  <ul>
+    <li><strong>Multiply before dividing.</strong> Dividing first truncates small amounts to zero.</li>
+    <li><strong>Floor, always.</strong> One documented rounding direction, so a cart total and an order total can never
+    disagree by a rial.</li>
+    <li><strong>Clamped to <code>[0, amount]</code>.</strong> A 100% rule or an oversized fixed amount lands the price on
+    zero; it can never go negative.</li>
+  </ul>
+
+  <h2 id="targets">Targets and category ancestry</h2>
+  <p>One rule may name any number of products, variants, categories, and brands:</p>
+  <pre><code>Discount: "Summer Mobile Promotion" — 20%
+  targets:
+    product  15, 18, 27
+    variant  91, 103
+    category 7, 12
+    brand    4</code></pre>
+
+  <p>Category targets reach downwards through the tree:</p>
+  <pre><code>Electronics          ← a rule here…
+└── Phones           ← …or here…
+    └── Android      ← …discounts a product filed here</code></pre>
+
+  <p>The traversal runs in <em>both</em> directions, for two different questions, and both are Catalog's job:</p>
+  <table>
+    <thead><tr><th>Direction</th><th>Question</th><th>Used by</th></tr></thead>
+    <tbody>
+      <tr><td>Upwards (ancestors)</td><td>Which category rules can reach this product?</td><td>Pricing context</td></tr>
+      <tr><td>Downwards (descendants)</td><td>Which products does this category rule reach?</td><td><code>has_discount</code>, campaign products</td></tr>
+    </tbody>
+  </table>
+  <p>
+    <code>CategoryHierarchy</code> loads <code>id → parent_id</code> for the whole tree in one query and memoizes it for
+    the request, so neither direction ever becomes a query per level per product.
+  </p>
+
+  <h3>has_discount</h3>
+  <p>
+    The filter now means "at least one variant currently has an applicable active automatic discount". It is compiled
+    into a <strong>SQL constraint</strong> on Catalog's own tables, built from the target ids Promotion publishes.
+  </p>
+  <div class="callout warn">
+    Filtering a fetched page in PHP would corrupt <code>total</code>, <code>last_page</code>, and every page after the
+    first. The constraint has to be part of the query that counts.
+    <br><br>
+    One subtlety worth knowing: <code>category_id</code> and <code>brand_id</code> are nullable, and in SQL
+    <code>NULL IN (…)</code> is <code>NULL</code>, not <code>false</code>. Under the <code>NOT()</code> used by
+    <code>has_discount=false</code> that would silently drop every uncategorized, brandless product — so the constraint
+    carries explicit <code>IS NOT NULL</code> guards.
+  </div>
+
+  <div class="callout">
+    <strong>Price filters and sorts keep their old meaning.</strong> <code>min_price</code>, <code>max_price</code>,
+    <code>sort=cheapest</code>, and <code>sort=most_expensive</code> still operate on <strong>base_price</strong>.
+    Sorting by a computed promotional price is an indexing problem, not a pricing one, and is deliberately out of scope.
+  </div>
+
+  <h2 id="coupon-model">Coupons — model and dormancy</h2>
+  <p>A coupon is a marketing <em>code</em> that activates a dormant pricing <em>rule</em>:</p>
+  <pre><code>Coupon "SUMMER10"  ──→  Discount (trigger_type=coupon, scope=all)</code></pre>
+
+  <div class="callout bad">
+    <strong><code>scope = all</code> does not mean a store-wide sale.</strong> This is the single most misreadable part
+    of the schema. It means "once activated, this applies to the entire post-automatic merchandise subtotal". Without a
+    valid code being supplied on an order, the rule affects nothing at all.
+  </div>
+
+  <p>Two shapes are legal, and nothing else is:</p>
+  <table>
+    <thead><tr><th></th><th>trigger_type</th><th>scope</th><th>targets</th><th>min_subtotal</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Automatic</strong></td><td><code>automatic</code></td><td><code>targeted</code></td><td>at least one</td><td>rejected</td></tr>
+      <tr><td><strong>Coupon</strong></td><td><code>coupon</code></td><td><code>all</code></td><td>exactly zero</td><td>allowed</td></tr>
+    </tbody>
+  </table>
+  <p>
+    Store-wide <em>automatic</em> discounts are not supported: an always-on rule with no target is an unbounded sale
+    with no obvious off switch. Coupon rules may not carry product targets, because a targeted voucher is a different
+    product with different allocation semantics.
+  </p>
+
+  <h3>Codes</h3>
+  <p>
+    Coupon codes are marketing identifiers customers type — <code>SUMMER10</code>, <code>NOWRUZ</code> — so they are
+    deliberately <em>not</em> generated by <code>PublicCodeGenerator</code>. They are trimmed and uppercased on the way
+    in and on every lookup, restricted to <code>A–Z 0–9 - _</code>, max 32 characters, and uniquely indexed. A code with
+    redemptions can never be renamed or reissued against different terms.
+  </p>
+
+  <h2 id="stacking">Stacking on automatics</h2>
+  <p>One automatic discount per variant, plus one coupon per order. The coupon applies to the <em>post-automatic</em> merchandise subtotal:</p>
+  <pre><code>regular            100
+20% automatic  →    80
+10% coupon     →    72        ✅ 10% of 80
+
+NOT: 20% + 10% = 30% off 100 → 70    ❌</code></pre>
+
+  <div class="callout warn">
+    <strong>Shipping and tax are never coupon-eligible.</strong> Both the <code>min_subtotal</code> threshold and the
+    percentage are measured against merchandise alone, so a coupon can never discount delivery.
+  </div>
+
+  <div class="callout">
+    <strong>A coupon is never allocated across items.</strong> A 100,000 coupon on a ten-item order does not put 10,000
+    on each line. It is stored once, at order level. Spreading it would invent per-item prices no rule produced — and
+    refunds would then have to un-invent them.
+  </div>
+
+  <h2 id="freeze">The pricing freeze</h2>
+  <p>
+    An order can have many payment attempts — a failed card, a retry, a switch to cash. Every one of them must charge
+    the same amount. So the <strong>first</strong> attempt to reach pricing finalization locks the decision and stamps
+    <code>payment_pricing_finalized_at</code>.
+  </p>
+  <p>Crucially, the <em>absence</em> of a coupon is frozen too — otherwise a code could be bolted on after a payment page had already quoted a total.</p>
+
+  <table>
+    <thead><tr><th>Frozen state</th><th>Later request</th><th>Result</th></tr></thead>
+    <tbody>
+      <tr><td>SUMMER10</td><td><code>coupon_code</code> omitted</td><td class="win">allowed — uses frozen pricing</td></tr>
+      <tr><td>SUMMER10</td><td><code>summer10</code></td><td class="win">allowed — normalizes to the same code</td></tr>
+      <tr><td>SUMMER10</td><td><code>VIP20</code></td><td style="color:var(--bad)">422</td></tr>
+      <tr><td>no coupon</td><td><code>coupon_code</code> omitted</td><td class="win">allowed</td></tr>
+      <tr><td>no coupon</td><td>any code</td><td style="color:var(--bad)">422</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <strong>Order owns this, not Payment.</strong> Payment calls
+    <code>OrderManagerInterface::finalizeForPayment()</code> and then charges <code>order.total_amount</code>. It runs no
+    pricing logic of its own. Only the <em>code</em> is accepted from the client — never an amount, a total, or a
+    percentage.
+  </div>
+
+  <div class="callout warn">
+    <strong>A gateway failure does not unfreeze the order.</strong> Pricing is finalized before the amount is sent to an
+    external gateway, and a network error afterwards leaves the freeze and the coupon reservation intact, so the retry
+    charges the identical figure. The pending-order TTL is what eventually cleans up.
+  </div>
+
+  <h2 id="lifecycle">Reservation lifecycle</h2>
+  <pre><code>POST /orders/{id}/coupon/check      →  nothing persisted (advisory preview)
+first payment initialization       →  RESERVED   + pricing frozen
+payment attempt fails              →  RESERVED   (unchanged — order is still payable)
+payment retried                    →  RESERVED   (same reservation, same amount)
+order paid                         →  REDEEMED
+order cancelled / expired / replaced → RELEASED</code></pre>
+
+  <p><strong>Usage limits count <code>reserved + redeemed</code>, never <code>released</code></strong>, so an abandoned checkout returns its use to the pool.</p>
+
+  <h3>Concurrency</h3>
+  <p>Reservation locks the coupon row <code>FOR UPDATE</code> <em>before</em> counting:</p>
+  <pre><code>lock coupon row FOR UPDATE
+  ↓  re-check active / dates / rules
+  ↓  count reserved + redeemed
+  ↓  check global limit, then per-user limit
+  ↓  write the reservation</code></pre>
+  <p>
+    Counting and then inserting without the lock is the classic oversell race — two checkouts both read "1 use left" and
+    both write. A unique index on <code>coupon_redemptions.order_id</code> is the final backstop, and also enforces
+    one-coupon-per-order.
+  </p>
+
+  <div class="callout">
+    <strong>Release and redeem live in shared primitives, not in four places each.</strong> Release hangs off
+    <code>CancelOrderAction::releaseAndCancel()</code>, already shared by customer cancel, admin cancel, TTL expiry, and
+    pending-order replacement. Redemption hangs off <code>EloquentOrderManager::markAsPaid()</code>, so an online
+    capture and an in-person cash payment behave identically. Both operations are idempotent — a repeated gateway
+    callback cannot double-redeem, and a release can never undo a realized sale.
+  </div>
+
+  <div class="callout bad">
+    <strong>A failed payment does <em>not</em> release the coupon.</strong> The order is still pending and still payable;
+    dropping the claim would let someone else take the last use out from under a customer who is mid-retry.
+  </div>
+
+  <h2 id="campaigns">Campaigns — merchandising</h2>
+  <p>
+    A campaign is a <em>grouping</em>, not a pricing rule. It answers "why is this product shown here?" — never "what
+    does it cost?".
+  </p>
+  <pre><code>Summer Sale
+├─ 20% Discount    → products 1, 2, 3
+├─ 10% Discount    → Samsung brand
+├─ 5,000,000 fixed → variant 91
+└─ 15% Discount    → Accessories category</code></pre>
+  <p>
+    That is the point: each product in the section can carry a different discount, instead of every "sale" product being
+    forced to share one rule.
+  </p>
+
+  <div class="callout warn">
+    <strong>A campaign does not force its own discount to win.</strong> If a Summer Sale product also matches a stronger
+    unrelated 20% rule, the product page and the campaign page both show 20%. Membership and pricing are answered
+    independently — opening a campaign page must never change what something costs.
+  </div>
+
+  <p>
+    Campaigns may link <strong>automatic discounts only</strong>. A coupon rule is store-wide and has no product identity
+    at all, so it could never answer the membership question; linking one is rejected.
+  </p>
+  <p>
+    The storefront endpoints live in <strong>Catalog</strong>, not Promotion: resolving a campaign's products needs the
+    product tables, the category tree, and Catalog's visibility rules. Promotion publishes campaign metadata plus raw
+    target ids; Catalog does the resolution with its own SQL. Variant targets resolve to their owning product, category
+    targets expand to descendants, and duplicates collapse.
+  </p>
+
+  <h2 id="schema">Database schema</h2>
+  <table>
+    <thead><tr><th>Table</th><th>Holds</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td><code>discounts</code></td><td>the pricing rules</td><td>soft-deleted; integer rials + bps</td></tr>
+      <tr><td><code>discount_targets</code></td><td>product / variant / category / brand ids</td><td><strong>no FK into Catalog</strong></td></tr>
+      <tr><td><code>coupons</code></td><td>marketing codes</td><td>unique code; soft-deleted</td></tr>
+      <tr><td><code>coupon_redemptions</code></td><td>reserved / redeemed / released</td><td>unique <code>order_id</code></td></tr>
+      <tr><td><code>campaigns</code></td><td>merchandising groups</td><td>unique slug; soft-deleted</td></tr>
+      <tr><td><code>campaign_discount</code></td><td>membership pivot</td><td>unique pair</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Columns added elsewhere</h3>
+  <table>
+    <thead><tr><th>Table</th><th>Column</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td><code>order_items</code></td><td><code>regular_price_per_unit</code></td><td>base_price at checkout</td></tr>
+      <tr><td><code>order_items</code></td><td><code>automatic_discount_amount_per_unit</code></td><td>winning reduction</td></tr>
+      <tr><td><code>order_items</code></td><td><code>automatic_discount_snapshot</code></td><td>self-contained explanation</td></tr>
+      <tr><td><code>orders</code></td><td><code>coupon_code</code>, <code>coupon_discount_amount</code>, <code>coupon_snapshot</code></td><td>order-level coupon</td></tr>
+      <tr><td><code>orders</code></td><td><code>payment_pricing_finalized_at</code></td><td>the freeze marker</td></tr>
+    </tbody>
+  </table>
+  <p><strong>Dropped:</strong> <code>product_variants.compare_at_price</code>.</p>
+
+  <h2 id="api">API surface</h2>
+  <h3>Storefront (public)</h3>
+  <table>
+    <tbody>
+      <tr><td><span class="pill get">GET</span></td><td><code>/api/v1/catalog/products</code></td><td>variants carry <code>base_price</code>, <code>effective_price</code>, <code>discount</code></td></tr>
+      <tr><td><span class="pill get">GET</span></td><td><code>/api/v1/catalog/campaigns</code></td><td><code>?landing=true</code> narrows to landing sections</td></tr>
+      <tr><td><span class="pill get">GET</span></td><td><code>/api/v1/catalog/campaigns/{slug}</code></td><td></td></tr>
+      <tr><td><span class="pill get">GET</span></td><td><code>/api/v1/catalog/campaigns/{slug}/products</code></td><td>normal ProductResource, live pricing</td></tr>
+    </tbody>
+  </table>
+
+  <pre><code>"variants": [{
+  "base_price":      100000000,
+  "effective_price":  80000000,
+  "discount": {
+    "name":           "Galaxy Launch Offer",
+    "type":           "percentage",
+    "percentage_bps": 2000,
+    "fixed_amount":   null,
+    "amount":         20000000
+  }
+}]</code></pre>
+  <p>With no discount, <code>effective_price === base_price</code> and <code>discount</code> is <code>null</code>. The server response is authoritative — clients never compute a promotional price.</p>
+
+  <h3>Customer</h3>
+  <table>
+    <tbody>
+      <tr><td><span class="pill post">POST</span></td><td><code>/api/v1/orders/{order}/coupon/check</code></td><td>advisory preview; reserves nothing</td></tr>
+      <tr><td><span class="pill post">POST</span></td><td><code>/api/v1/payments/initialize</code></td><td>optional <code>coupon_code</code></td></tr>
+    </tbody>
+  </table>
+
+  <h3>Admin — <code>/api/v1/admin/promotions</code></h3>
+  <table>
+    <tbody>
+      <tr><td><code>/discounts</code></td><td>GET · POST · PATCH · PUT · DELETE</td></tr>
+      <tr><td><code>/coupons</code></td><td>GET · POST · PATCH · PUT · DELETE</td></tr>
+      <tr><td><code>/campaigns</code></td><td>GET · POST · PATCH · PUT · DELETE</td></tr>
+      <tr><td><code>/redemptions</code></td><td>GET (read-only usage history)</td></tr>
+    </tbody>
+  </table>
+
+  <h2 id="permissions">Permissions</h2>
+  <table>
+    <thead><tr><th>Permission</th><th>Guards</th></tr></thead>
+    <tbody>
+      <tr><td><code>promotion.view-admin</code></td><td>every admin GET — discounts, coupons, campaigns, redemptions</td></tr>
+      <tr><td><code>promotion.create</code></td><td><code>POST /discounts</code></td></tr>
+      <tr><td><code>promotion.update</code></td><td><code>PATCH|PUT /discounts/{id}</code></td></tr>
+      <tr><td><code>promotion.delete</code></td><td><code>DELETE /discounts/{id}</code> (soft-delete)</td></tr>
+      <tr><td><code>promotion.coupon.manage</code></td><td>all coupon mutations</td></tr>
+      <tr><td><code>promotion.campaign.manage</code></td><td>all campaign mutations, incl. membership</td></tr>
+    </tbody>
+  </table>
+  <p>
+    All six are seeded and granted to <strong>admin</strong>. The <strong>customer</strong> role receives none of them —
+    and needs none: browsing products, viewing campaigns, checking a coupon on your own order, and paying are all
+    protected by authentication and ownership, never by a promotion permission.
+  </p>
+  <p>
+    Coupon and campaign mutations are split from discount CRUD deliberately, so a marketing operator can be given code
+    and merchandising control without the ability to rewrite pricing rules.
+  </p>
+
+  <h2 id="gotchas">Gotchas</h2>
+  <div class="callout"><strong>Live before the order, frozen after.</strong> Product, cart, and campaign prices are recomputed on every read. Disable a discount and the next cart refresh reflects it. Once an order exists its item pricing never moves again — not even when payment is initialized.</div>
+  <div class="callout"><strong>Checkout re-reads prices.</strong> The cart is a preview. If a promotion ends between the cart page and checkout, the order is created at the new price.</div>
+  <div class="callout"><strong>Nothing promotional is stored on a cart.</strong> No coupon column, no cached discount. Coupons only exist once there is an order to attach one to.</div>
+  <div class="callout"><strong>Deleting a discount is a soft-delete.</strong> It stops pricing immediately, and every redemption, order snapshot, and payment amount is left untouched.</div>
+  <div class="callout"><strong>Zero-value orders are rejected.</strong> A coupon that would take the payable total to zero or below returns 422 rather than inventing a free-order payment flow. The rejection rolls back the reservation, so the coupon is not silently consumed.</div>
+  <div class="callout"><strong>Batch, never per item.</strong> Product listings, cart reads, and checkout each evaluate promotions in one call. A ten-product page costs the same two Promotion queries as a one-product page; a regression test asserts this.</div>
+
+  <p style="margin-top:48px;font-size:12.5px;color:#4a4d65">
+    Source of truth: <code>Modules/Promotion/</code> · contract <code>PromotionManagerInterface</code> ·
+    algorithm <code>Domain/Services/AutomaticDiscountResolver.php</code> ·
+    arithmetic <code>Domain/Services/DiscountCalculator.php</code>
+  </p>
+</main>
+</body>
+</html>

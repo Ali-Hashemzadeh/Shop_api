@@ -184,7 +184,7 @@ Match the surrounding code. Concrete patterns used throughout:
 
 Order customer detail is available at `GET /api/v1/orders/{publicCode}`: authenticated ownership is enforced in the exact Order query, and the endpoint-specific aggregate returns the existing Order/items plus all customer-safe Payment attempts and the full live Shipment/history without changing existing endpoints.
 
-Order items snapshot both Catalog display prices and images at checkout: `price_per_unit` is the selling/base price, nullable `compare_at_price` is display-only and excluded from every total, `product_snapshot.image_url` is the variant image, and `product_snapshot.primary_image_url` is the parent product primary image. These come from `CartItemDTO` and are never refreshed or backfilled from Catalog.
+Order items snapshot prices and images at checkout and are never refreshed or backfilled from Catalog: `regular_price_per_unit` is Catalog's `base_price`, `automatic_discount_amount_per_unit` + `automatic_discount_snapshot` record the winning Promotion rule, `price_per_unit` is the effective price actually charged (before any order-level coupon) and `line_total` follows it. `product_snapshot.image_url` is the variant image and `product_snapshot.primary_image_url` the parent product primary image. Legacy `compare_at_price` is retained for pre-Promotion orders and is always `null` on new ones.
 
 | Module | Status | Notes |
 |---|---|---|
@@ -197,10 +197,11 @@ Order items snapshot both Catalog display prices and images at checkout: `price_
 | **Payment** | ✅ Implemented | `Modules/Payment/`. Provider registered. `POST /api/v1/payments/initialize` (online → Zarinpal `redirect_url`; in_person → `pending_cash` + marks order paid; **403 unless the order belongs to the caller**) and public `GET /api/v1/payments/zarinpal/callback` (verify/capture — stays on the backend domain; after verification it **renders the Blade page `payment::result`** instead of JSON, with buttons pointing at `config('frontend.url')`). Tests under `tests/Feature/Payment/`. |
 | **Shipment** | ✅ Implemented | `Modules/Shipment/`. Provider registered. Four **config-backed** methods (`config/shipment.php`; no `shipment_methods` table): `post_standard`/`post_express`/`local_delivery`/`in_person_pickup`. Checkout uses `shipment_method_code` (Order stores an immutable `shipment_snapshot`; legacy `shipment_method_id` kept nullable for BC). Local-delivery cinema-session slots (`shipment:generate-delivery-slots`, scheduled daily) with capacity/reservations; held on pending order, confirmed on paid, released on cancel/expire. Operational `shipments` record created **only when the order becomes paid** (idempotent by `order_id`, at the shared `markAsPaid` path, which also commits inventory once). Method-specific status workflows (postal ends at `handed_to_post` → order `shipped`; local `delivered`/pickup `picked_up` → order `completed`). Customer read + admin/operator action endpoints under `/api/v1/shipment*`, `/api/v1/shipments/*`, `/api/v1/admin/shipments*`. Tests under `tests/Feature/Shipment/` + `tests/Unit/Shipment/`. |
 
+| **Promotion** | ✅ Implemented | `Modules/Promotion/`. Provider registered **before Catalog** (Catalog resolves it for live pricing). Owns discounts, discount targets, coupons, coupon redemptions, campaigns. Automatic discounts (one winner per variant, never stacked) + order-level coupons (one per order, stacked after automatics). Admin API under `/api/v1/admin/promotions/*`; **no customer-facing routes of its own**. Tests under `tests/Feature/Promotion/` + `tests/Unit/Promotion/`. Full explainer: `DISCOUNT_ARCHITECTURE.html`. |
 | **Notification** | ✅ Infrastructure | `Modules/Notification/`. Provider registered. In-app notification storage (`notifications`) + external-delivery audit (`notification_deliveries`), `NotificationManagerInterface` (`send`/`getUserNotifications`/`markAsRead`/`unreadCount`), channel abstraction (`DatabaseChannel`, `SmsChannel` — no email/push). **SMS is optional:** internal template names are the `NotificationTemplate` enum; when the active provider has no template id configured for one, the send is *skipped* (info log + `skipped` delivery row), never thrown and never failed — `DeliveryStatus` is pending/sent/failed/skipped. Customer API: `GET /api/v1/notifications`, `POST /api/v1/notifications/{id}/read` (owner-only, 403 otherwise). **Business flows are wired via published integration events** (primitives only, `Domain/Events/`): `OrderPaidEvent` (from `markAsPaid`, real transition only → customer db+sms + admin db), `PaymentFailedEvent` (verification-failure branch → customer db), `OrderCancelledEvent` (customer/admin cancel actions → db+sms), `Shipment{PreparingStarted,Sent,Delivered}Event` (from `ShipmentTransitionService`). Listeners live in `Notification/Application/Listeners`, are registered in `NotificationServiceProvider::boot()`, and all implement `ShouldHandleEventsAfterCommit`. Never call `NotificationManagerInterface` from a controller, callback, or resource. Tests under `tests/Feature/Notification/`. |
 | **Sms** | ✅ Infrastructure | `Modules/Sms/`. Provider registered. `SmsManagerInterface` → `SmsProviderFactory` → `SmsProviderInterface` (`smsir`/`log`/`fake`), config-backed via `config/sms.php` + `SMS_*` env. Stable internal `SmsMessageDTO` (receiver/template/parameters); providers own all API-shape translation. `SmsResultDTO` has three outcomes — success / **skipped** (provider not configured for that template; expected) / failure (a real attempt that failed). **Separate from Identity's `OtpSenderInterface`** — never reuse it. Tests under `tests/Feature/Sms/`. |
 
-**Test suite baseline: 294 tests + 55 Shipment tests + 47 Notification/Sms tests, all green (5 unrelated pre-existing ProfileTest/ProductsTest failures aside).**
+**Test suite baseline: 641 tests green (120 of them Promotion), with one unrelated pre-existing `ProfileTest::authenticated_user_can_update_profile` failure that also fails on a clean tree.**
 
 ### Shipment — key facts
 - **Four fixed methods are configuration, never a DB table.** `ShipmentMethodRegistry` reads `config('shipment.methods')`; methods are keyed by stable **code**, prices are integer rials, pickup is free/address-less. Adapt via config/env only.
@@ -210,6 +211,51 @@ Order items snapshot both Catalog display prices and images at checkout: `price_
 - **Slots are the source of truth for capacity** (no `reserved_count`). remaining = capacity − admin_reserved − active(held+confirmed). Generate with `shipment:generate-delivery-slots` (idempotent; never overwrites operator edits / reopens closed slots).
 - **Customer Shipment discovery is explicit.** `GET /shipment/methods` without `address_id` returns only canonical configured methods with `requires_address:false` (currently pickup); valid owned addresses run normal eligibility, while explicit invalid/foreign ids remain 422 and checkout validation stays strict. `GET /shipment/delivery-slots` whitelists `date`/`starts_at`/`remaining_capacity`/`capacity`/`created_at` with `asc`/`desc`, defaulting to `date ASC, starts_at ASC`; remaining-capacity sorting reuses the reservation-aware calculation.
 - **Contracts only across the wall.** Shipment imports no Order/Identity/Media models; Order/Payment reach Shipment solely through `ShipmentManagerInterface` + DTOs. `LocalDeliveryEligibilityInterface` isolates the supported-region rule.
+
+### Promotion — key facts
+- **Promotion is a leaf.** It imports no Catalog/Cart/Order/Payment model, contract, or DTO. Everything arrives as
+  primitives or Promotion DTOs. The arrow is `Cart → Catalog → Promotion`, `Order → Catalog`, `Order → Promotion`,
+  `Payment → Order`. Two consequences that look like bugs but are deliberate: **discount targets are never validated
+  against Catalog** (a target naming a deleted product is simply inert), and **category ancestry is resolved by
+  Catalog**, which passes the full ancestor chain in the pricing context.
+- **Catalog owns only `base_price`.** `product_variants.compare_at_price` is dropped; sending it is ignored.
+  `order_items.compare_at_price` is legacy historical data — kept, still rendered, always `null` on new orders, never
+  backfilled.
+- **Automatic discounts never stack.** Every matching rule is costed in rials; the largest reduction wins. Specificity
+  does **not** override savings (30% product beats 20% variant). Exact ties break by: most specific matched target
+  (variant → product → category → brand) → higher `priority` → lowest discount id.
+- **Integer basis points only** (`2000` = 20%, `1250` = 12.5%, `10000` = 100%). `DiscountCalculator` multiplies before
+  dividing, floors consistently, and clamps to `[0, amount]`. No float touches a price.
+- **Two legal discount shapes.** `automatic` ⇒ `scope=targeted` + ≥1 target + no `min_subtotal`; `coupon` ⇒ `scope=all`
+  + zero targets. `scope=all` is **not** a store-wide sale — the rule is dormant until a code activates it on an order.
+  Store-wide *automatic* discounts are not supported.
+- **Batch or nothing.** `evaluateAutomaticDiscounts()` is batch-only. `EloquentCatalogManager` prices a whole page in one
+  call beside the existing media/stock batching; a test asserts a 10-product page costs no more queries than a 1-product page.
+- **`has_discount` is a SQL constraint**, built from `getActiveAutomaticTargetDefinitions()` and Catalog's own tables, so
+  pagination counts stay correct. It carries explicit `IS NOT NULL` guards (`NULL IN (…)` is `NULL`, which would drop
+  uncategorized/brandless products from a `has_discount=false` page). `min_price`/`max_price`/`sort=cheapest`/
+  `sort=most_expensive` keep their **base_price** semantics.
+- **Cart never calls Promotion** — it reads Catalog, which already applied the winner. Cart stores nothing promotional
+  and **no coupon state**; coupons attach to an order, not a cart.
+- **One coupon per order, stacked after automatics**, calculated on the post-automatic merchandise subtotal only —
+  shipping and tax are excluded from both `min_subtotal` and the amount. **Never allocated across items.**
+- **Order, not Payment, owns coupon money.** `OrderManagerInterface::finalizeForPayment()` validates, reserves, recomputes
+  the total, and stamps `payment_pricing_finalized_at`. The **first** attempt freezes the coupon/no-coupon decision;
+  retrying with the same code (any case) or omitting it is allowed, a different code is 422. Payment charges the frozen
+  `order.total_amount` and accepts only `coupon_code` — never an amount or percentage. A gateway failure leaves the
+  freeze and reservation intact.
+- **Reservation is row-locked before counting** (`lockForUpdate()` on the coupon), with unique `coupon_redemptions.order_id`
+  as backstop and one-coupon-per-order enforcement. Limits count `reserved + redeemed`, never `released`.
+- **Lifecycle reuses the shared primitives:** release in `CancelOrderAction::releaseAndCancel()` (customer cancel, admin
+  cancel, TTL expiry, pending-order replacement), redemption in `EloquentOrderManager::markAsPaid()` (online capture and
+  in-person cash). Both idempotent. A **failed payment does not release** — the order is still payable.
+- **Campaigns are merchandising, not pricing.** One campaign links many different automatic rules, so its products can
+  each carry a different discount; it never forces its own rule to win. Only automatic rules may be linked. Storefront
+  endpoints live in **Catalog** (`GET /catalog/campaigns`, `/{slug}`, `/{slug}/products`) because resolving products
+  needs Catalog's tables — Promotion publishes only metadata and raw target ids.
+- Permissions: `promotion.{view-admin,create,update,delete}`, `promotion.coupon.manage`, `promotion.campaign.manage` —
+  all seeded to `admin`, none to `customer`. Customer-facing promotion surfaces need **no** promotion permission.
+- Deletes are soft-deletes; redemption history and order snapshots are never destroyed.
 
 ### Identity — key facts
 - **OTP + password split-auth, phone-based, unified register+login** (sign-up == login).
@@ -268,7 +314,8 @@ Order items snapshot both Catalog display prices and images at checkout: `price_
   (auto-generated `sku` format `bdv-XXXXXX`, minted **only** by
   `EloquentCatalogManager::createProductVariant()`, which discards any inbound `sku` — **never accepted from
   client input and never regenerated on update**, integer
-  `base_price`/`compare_at_price`, JSON `attributes`, per-variant
+  `base_price` (the regular price, and the **only** price Catalog stores — promotional pricing is computed live by
+  the Promotion module and read responses add `effective_price` + `discount`), JSON `attributes`, per-variant
   `type` (`image` or `color`, required), `media_id`, `is_default` **single-true invariant enforced at the application layer**).
 - **Contract:** `CatalogManagerInterface` — full read/write surface for higher modules.
 - **Atomic nested create:** `POST /api/v1/catalog/products` accepts an optional `variants`

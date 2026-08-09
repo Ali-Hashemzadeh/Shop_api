@@ -19,6 +19,14 @@ class OrderDTO
         public readonly int $totalAmount,
         public readonly int $shippingCost,
         public readonly int $taxAmount,
+        /** Normalized coupon code frozen onto this order, or null. */
+        public readonly ?string $couponCode,
+        /** Order-level coupon reduction; never allocated across items. */
+        public readonly int $couponDiscountAmount,
+        /** Immutable coupon record, readable without the live coupon row. */
+        public readonly ?array $couponSnapshot,
+        /** Set by the first payment attempt; after this the coupon decision is locked. */
+        public readonly ?Carbon $paymentPricingFinalizedAt,
         public readonly ?int $shipmentMethodId,
         public readonly ?string $shipmentMethodCode,
         public readonly array $shippingAddress,
@@ -41,6 +49,10 @@ class OrderDTO
             totalAmount: $order->total_amount,
             shippingCost: $order->shipping_cost,
             taxAmount: $order->tax_amount,
+            couponCode: $order->coupon_code,
+            couponDiscountAmount: (int) $order->coupon_discount_amount,
+            couponSnapshot: $order->coupon_snapshot,
+            paymentPricingFinalizedAt: $order->payment_pricing_finalized_at,
             shipmentMethodId: $order->shipment_method_id,
             shipmentMethodCode: $order->shipment_method_code,
             shippingAddress: $order->shipping_address ?? [],

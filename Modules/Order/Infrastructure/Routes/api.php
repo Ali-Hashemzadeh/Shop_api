@@ -14,6 +14,10 @@ Route::middleware(['api', 'auth:sanctum', 'throttle:api'])
         Route::get('/{publicCode}', [OrderController::class, 'show'])
             ->where('publicCode', PublicCodeGenerator::routePattern(PublicCodeEntity::Order));
         Route::post('/{order}/cancel', [OrderController::class, 'cancel'])->whereNumber('order');
+        // Advisory coupon preview on the payment page. Numeric {order}, matching the
+        // internal Payment/cancel flow rather than the public-code read routes.
+        // Customer self-service: ownership is checked, no promotion.* permission.
+        Route::post('/{order}/coupon/check', [OrderController::class, 'checkCoupon'])->whereNumber('order');
     });
 
 // ── Admin / operator: view, search, cancel only (no status/create/edit) ──────────

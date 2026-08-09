@@ -21,10 +21,6 @@ class UpdateProductVariantAction
             throw new InvalidArgumentException('base_price must be an integer representing cents.');
         }
 
-        if (isset($data['compare_at_price']) && $data['compare_at_price'] !== null && ! is_int($data['compare_at_price'])) {
-            throw new InvalidArgumentException('compare_at_price must be an integer representing cents.');
-        }
-
         if ($image) {
             $mediaDto = $this->media->upload($image, 'variants');
             $data['media_id'] = $mediaDto->id;

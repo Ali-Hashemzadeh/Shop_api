@@ -18,7 +18,7 @@ class InitializePaymentAction
         private readonly PaymentGatewayFactory $gatewayFactory,
     ) {}
 
-    public function handle(int $orderId, int $userId, string $methodType, ?string $gateway = null): array
+    public function handle(int $orderId, int $userId, string $methodType, ?string $gateway = null, ?string $couponCode = null): array
     {
         $order = $this->orderManager->findOrder($orderId);
 
@@ -29,6 +29,12 @@ class InitializePaymentAction
         if ($order->userId !== $userId) {
             abort(403, 'This order does not belong to you.');
         }
+
+        // Payment owns no pricing logic. Order validates and reserves the coupon,
+        // recomputes the payable total, and freezes it — and on every retry returns
+        // that same frozen total, so all attempts against one order charge alike.
+        // Throws 422 for an unusable code or an attempt to change frozen pricing.
+        $order = $this->orderManager->finalizeForPayment($orderId, $userId, $couponCode);
 
         $method = PaymentMethodType::from($methodType);
 

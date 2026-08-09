@@ -11,9 +11,9 @@ use Modules\Payment\Domain\Models\Payment;
 
 class EloquentPaymentManager implements PaymentManagerInterface
 {
-    public function initializePayment(int $orderId, int $userId, string $methodType, ?string $gateway = null): array
+    public function initializePayment(int $orderId, int $userId, string $methodType, ?string $gateway = null, ?string $couponCode = null): array
     {
-        return app(InitializePaymentAction::class)->handle($orderId, $userId, $methodType, $gateway);
+        return app(InitializePaymentAction::class)->handle($orderId, $userId, $methodType, $gateway, $couponCode);
     }
 
     public function getForOrder(int $orderId): array

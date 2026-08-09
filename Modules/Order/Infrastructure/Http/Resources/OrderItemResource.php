@@ -24,7 +24,14 @@ class OrderItemResource extends JsonResource
             'product_snapshot' => $dto->productSnapshot,
             'quantity' => $dto->quantity,
             'max_quantity_per_order_snapshot' => $dto->maxQuantityPerOrderSnapshot,
+            // Frozen at checkout: the regular price, the automatic reduction that
+            // won, and the price actually charged. Never recomputed from the live
+            // Promotion rules, which may since have changed.
+            'regular_price_per_unit' => $dto->regularPricePerUnit,
+            'automatic_discount_amount_per_unit' => $dto->automaticDiscountAmountPerUnit,
+            'automatic_discount' => $dto->automaticDiscountSnapshot,
             'price_per_unit' => $dto->pricePerUnit,
+            // Legacy field, retained for historical orders only.
             'compare_at_price' => $dto->compareAtPrice,
             'line_total' => $dto->lineTotal,
         ];
