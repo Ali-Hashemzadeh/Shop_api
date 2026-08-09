@@ -16,7 +16,7 @@ use Modules\Promotion\Domain\Models\Discount;
 /**
  * Demo promotions, deliberately overlapping so winner selection is visible.
  *
- * The centrepiece is the Galaxy S25: its default variant is hit by a category
+ * The centrepiece is the مداد رنگی ۱۲ رنگ فابر کاستل: its default variant is hit by a category
  * rule, a product rule, and a variant rule at once, and the storefront must show
  * exactly one of them — the largest actual rial reduction. See the table in run().
  *
@@ -33,84 +33,84 @@ class PromotionSampleDataSeeder extends Seeder
             return;
         }
 
-        $galaxy = Product::query()->where('slug', 'galaxy-s25')->with('variants')->first();
-        $iphone = Product::query()->where('slug', 'iphone-16')->first();
-        $macbook = Product::query()->where('slug', 'macbook-pro-14')->first();
-        $phones = Category::query()->where('slug', 'phones')->first();
-        $accessories = Category::query()->where('slug', 'accessories')->first();
+        $coloredPencils = Product::query()->where('slug', 'faber-castell-12-color-pencils')->with('variants')->first();
+        $pen = Product::query()->where('slug', 'panter-sp-101-pen')->first();
+        $drawingPencil = Product::query()->where('slug', 'faber-castell-9000-drawing-pencil')->first();
+        $stationeryColoredPencil = Category::query()->where('slug', 'stationery-colored-pencil')->first();
+        $engineering = Category::query()->where('slug', 'engineering-and-architecture')->first();
 
-        if ($galaxy === null || $phones === null) {
+        if ($coloredPencils === null || $stationeryColoredPencil === null) {
             $this->command?->warn('Promotion sample data skipped: catalog demo products not found.');
 
             return;
         }
 
-        $galaxyDefaultVariant = $galaxy->variants->firstWhere('is_default', true) ?? $galaxy->variants->first();
+        $coloredPencilsDefaultVariant = $coloredPencils->variants->firstWhere('is_default', true) ?? $coloredPencils->variants->first();
 
-        // ── The overlap demo, on the Galaxy S25 default variant (45,000,000) ──
+        // ── The overlap demo, on the مداد رنگی ۱۲ رنگ فابر کاستل default variant (45,000,000) ──
         //
-        //   category "Phones"   10%  → 4,500,000
-        //   product  Galaxy S25 20%  → 9,000,000   ← winner (largest reduction)
+        //   category "مداد رنگی تحریر" 10%  → 4,500,000
+        //   product  مداد رنگی ۱۲ رنگ فابر کاستل 20%  → 9,000,000   ← winner (largest reduction)
         //   variant  default     6,000,000 fixed   → 6,000,000
         //
         // Effective price becomes 36,000,000. The other two rules do nothing for
         // this variant — automatic discounts never stack.
         $categoryRule = $this->discount([
-            'name' => 'Phones Category Sale',
-            'description' => '10% off everything filed under Phones, including sub-categories.',
+            'name' => 'تخفیف دسته مداد رنگی تحریر',
+            'description' => '۱۰٪ تخفیف برای محصولات دسته مداد رنگی تحریر و زیرمجموعه‌های آن.',
             'discount_type' => DiscountType::PERCENTAGE->value,
             'percentage_bps' => 1000,
         ], [
-            [DiscountTargetType::CATEGORY, $phones->id],
+            [DiscountTargetType::CATEGORY, $stationeryColoredPencil->id],
         ]);
 
         $productRule = $this->discount([
-            'name' => 'Galaxy S25 Launch Offer',
-            'description' => '20% off every Galaxy S25 variant.',
+            'name' => 'تخفیف ویژه مداد رنگی فابر کاستل',
+            'description' => '۲۰٪ تخفیف برای تمام تنوع‌های مداد رنگی فابر کاستل.',
             'discount_type' => DiscountType::PERCENTAGE->value,
             'percentage_bps' => 2000,
         ], [
-            [DiscountTargetType::PRODUCT, $galaxy->id],
+            [DiscountTargetType::PRODUCT, $coloredPencils->id],
         ]);
 
         $this->discount([
-            'name' => 'Galaxy S25 Base Model Rebate',
-            'description' => 'Flat 6,000,000 rial rebate — loses to the 20% product rule.',
+            'name' => 'تخفیف ثابت مداد رنگی فابر کاستل',
+            'description' => 'تخفیف ثابت ۶,۰۰۰,۰۰۰ ریال که در برابر تخفیف ۲۰٪ محصول انتخاب نمی‌شود.',
             'discount_type' => DiscountType::FIXED_AMOUNT->value,
             'fixed_amount' => 6_000_000,
-        ], $galaxyDefaultVariant === null ? [] : [
-            [DiscountTargetType::VARIANT, $galaxyDefaultVariant->id],
+        ], $coloredPencilsDefaultVariant === null ? [] : [
+            [DiscountTargetType::VARIANT, $coloredPencilsDefaultVariant->id],
         ]);
 
         // ── A rule spanning several products at once ──────────────────────────
         $multiTargetRule = $this->discount([
-            'name' => 'Flagship Bundle Promo',
-            'description' => 'One rule targeting several products and a category.',
+            'name' => 'تخفیف منتخب لوازم تحریر و مهندسی',
+            'description' => 'یک قانون تخفیف برای چند محصول منتخب و یک دسته مرتبط.',
             'discount_type' => DiscountType::PERCENTAGE->value,
             'percentage_bps' => 1500,
             'max_discount_amount' => 20_000_000,
             'priority' => 5,
         ], array_values(array_filter([
-            $iphone ? [DiscountTargetType::PRODUCT, $iphone->id] : null,
-            $macbook ? [DiscountTargetType::PRODUCT, $macbook->id] : null,
-            $accessories ? [DiscountTargetType::CATEGORY, $accessories->id] : null,
+            $pen ? [DiscountTargetType::PRODUCT, $pen->id] : null,
+            $drawingPencil ? [DiscountTargetType::PRODUCT, $drawingPencil->id] : null,
+            $engineering ? [DiscountTargetType::CATEGORY, $engineering->id] : null,
         ])));
 
         // ── A scheduled rule that is not live yet ─────────────────────────────
         $this->discount([
-            'name' => 'Nowruz Preview (starts next month)',
+            'name' => 'پیش‌نمایش تخفیف نوروز (شروع ماه آینده)',
             'discount_type' => DiscountType::PERCENTAGE->value,
             'percentage_bps' => 2500,
             'starts_at' => now()->addMonth(),
             'ends_at' => now()->addMonth()->addWeeks(2),
         ], [
-            [DiscountTargetType::CATEGORY, $phones->id],
+            [DiscountTargetType::CATEGORY, $stationeryColoredPencil->id],
         ]);
 
         // ── Coupon-backed rules: dormant until a code is supplied ─────────────
         $couponRule = Discount::query()->create([
-            'name' => 'Welcome 10%',
-            'description' => 'Order-level 10% coupon, capped at 10,000,000 rials.',
+            'name' => 'تخفیف خوش‌آمدگویی ۱۰٪',
+            'description' => 'کد تخفیف ۱۰٪ برای کل سفارش با سقف ۱۰,۰۰۰,۰۰۰ ریال.',
             'trigger_type' => DiscountTriggerType::COUPON->value,
             // scope=all does NOT mean a store-wide sale: this rule affects nothing
             // until a valid code activates it on an order.
@@ -123,7 +123,7 @@ class PromotionSampleDataSeeder extends Seeder
         ]);
 
         $vipRule = Discount::query()->create([
-            'name' => 'VIP 5,000,000 Off',
+            'name' => 'تخفیف ویژه VIP به مبلغ ۵,۰۰۰,۰۰۰ ریال',
             'trigger_type' => DiscountTriggerType::COUPON->value,
             'scope' => DiscountScope::ALL->value,
             'discount_type' => DiscountType::FIXED_AMOUNT->value,
@@ -152,9 +152,9 @@ class PromotionSampleDataSeeder extends Seeder
         // This is the point of campaigns: every product in the section can carry a
         // different discount, instead of being forced to share one.
         $campaign = Campaign::query()->create([
-            'name' => 'Summer Sale',
+            'name' => 'فروش ویژه تابستانه',
             'slug' => 'summer-sale',
-            'description' => 'Hand-picked deals across phones, laptops, and accessories.',
+            'description' => 'تخفیف‌های منتخب روی محصولات لوازم تحریر، هنری و مهندسی.',
             'starts_at' => now()->subDay(),
             'ends_at' => now()->addMonth(),
             'is_active' => true,
@@ -166,9 +166,9 @@ class PromotionSampleDataSeeder extends Seeder
 
         // An inactive campaign, so the public listing has something to exclude.
         Campaign::query()->create([
-            'name' => 'Black Friday (draft)',
+            'name' => 'بلک فرایدی (پیش‌نویس)',
             'slug' => 'black-friday',
-            'description' => 'Not yet live.',
+            'description' => 'هنوز فعال نشده است.',
             'is_active' => false,
             'show_on_landing' => false,
             'sort_order' => 2,
