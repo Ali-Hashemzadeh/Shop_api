@@ -7,6 +7,7 @@ namespace Tests\Feature\Shipment;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Modules\Cart\Domain\Models\Cart;
 use Modules\Cart\Domain\Models\CartItem;
 use Modules\Catalog\Domain\Models\Product;
@@ -14,6 +15,11 @@ use Modules\Catalog\Domain\Models\ProductVariant;
 use Modules\Identity\Domain\Models\User;
 use Modules\Inventory\Domain\Models\InventoryStock;
 use Modules\Order\Domain\Contracts\OrderManagerInterface;
+use Modules\Shipment\Application\Actions\AssignShipmentDeliveryAction;
+use Modules\Shipment\Application\Actions\MarkLocalShipmentReadyAction;
+use Modules\Shipment\Application\Actions\MarkShipmentOutForDeliveryAction;
+use Modules\Shipment\Application\Actions\StartPreparingShipmentAction;
+use Modules\Shipment\Domain\Events\ShipmentOutForDeliveryEvent;
 use Modules\Shipment\Domain\Models\DeliverySlot;
 use Modules\Shipment\Domain\Models\DeliveryWorkingPeriod;
 use Tests\TestCase;
@@ -41,6 +47,11 @@ abstract class ShipmentTestCase extends TestCase
             'city_id' => $cityId,
             'postal_code' => '1234512345',
             'address' => '123 Test Street',
+            // Map coordinates are part of a real checkout address and travel into
+            // the shipment snapshot for the courier to navigate by.
+            'latitude' => '35.7000000',
+            'longitude' => '51.4000000',
+            'map_address' => 'Pinned at 123 Test Street',
             'is_default_shipping' => true,
             'created_at' => now(),
             'updated_at' => now(),
@@ -142,5 +153,65 @@ abstract class ShipmentTestCase extends TestCase
     {
         // Admin role receives all shipment permissions via the seeder.
         return $this->actingAsAdmin();
+    }
+
+    /**
+     * A delivery worker: a shopper who also delivers, so both roles, plus the
+     * phone number the assignment SMS needs.
+     */
+    protected function createDeliveryUser(?string $phone = null): User
+    {
+        $user = User::factory()->create();
+        // Derived from the id unless the test cares about the exact number, so two
+        // couriers in one test never collide on the unique phone column.
+        $user->forceFill(['phone' => $phone ?? '0913'.str_pad((string) $user->id, 7, '0', STR_PAD_LEFT)])->save();
+        $user->assignRole('customer');
+        $user->assignRole('delivery');
+
+        return $user->fresh();
+    }
+
+    /** Assign a driver through the real action, exactly as the admin endpoint does. */
+    protected function assignDriver(int $shipmentId, User $driver, ?int $assignedBy = null): void
+    {
+        app(AssignShipmentDeliveryAction::class)->handle(
+            $shipmentId,
+            $driver->id,
+            $assignedBy ?? $driver->id,
+        );
+    }
+
+    /**
+     * Stand in for the customer's SMS inbox.
+     *
+     * The handoff code is never persisted, so a test can only learn it the way the
+     * customer does — by catching it in flight on the dispatch event. Any test that
+     * digs it out of the database instead would be testing a leak.
+     */
+    protected function captureDeliveryCode(callable $dispatch): string
+    {
+        $captured = null;
+
+        Event::listen(ShipmentOutForDeliveryEvent::class, function (ShipmentOutForDeliveryEvent $event) use (&$captured): void {
+            $captured = $event->deliveryCode ?? $captured;
+        });
+
+        $dispatch();
+
+        $this->assertNotNull($captured, 'Dispatching a local delivery must issue a handoff code.');
+
+        return $captured;
+    }
+
+    /** Drive a local-delivery shipment to `out_for_delivery` and return its fresh code. */
+    protected function dispatchLocalDelivery(int $shipmentId, User $driver, int $operatorId): string
+    {
+        app(StartPreparingShipmentAction::class)->handle($shipmentId, $operatorId);
+        app(MarkLocalShipmentReadyAction::class)->handle($shipmentId, $operatorId);
+        $this->assignDriver($shipmentId, $driver, $operatorId);
+
+        return $this->captureDeliveryCode(
+            fn () => app(MarkShipmentOutForDeliveryAction::class)->handle($shipmentId, $operatorId),
+        );
     }
 }

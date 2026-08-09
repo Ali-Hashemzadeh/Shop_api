@@ -18,7 +18,13 @@ class NotificationPermissionsSeeder extends Seeder
             'notification.mark-read-own',
         ];
 
-        foreach ($permissions as $permission) {
+        // Configuring who receives operational admin SMS is an admin-only power,
+        // and a focused one: it is not implied by reading your own notifications.
+        $adminOnlyPermissions = [
+            'notification.admin-sms-recipients.manage',
+        ];
+
+        foreach ([...$permissions, ...$adminOnlyPermissions] as $permission) {
             Permission::firstOrCreate([
                 'name' => $permission,
                 'guard_name' => 'web',
@@ -28,7 +34,7 @@ class NotificationPermissionsSeeder extends Seeder
         $adminRole = Role::where('name', 'admin')->where('guard_name', 'web')->first();
 
         if ($adminRole) {
-            $adminRole->givePermissionTo($permissions);
+            $adminRole->givePermissionTo([...$permissions, ...$adminOnlyPermissions]);
         }
 
         // Notifications are self-service — every customer reads and marks their own.

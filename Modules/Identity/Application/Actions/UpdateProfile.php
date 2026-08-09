@@ -27,7 +27,6 @@ class UpdateProfile
             $attributes['email'] = $data['email'];
         }
 
-
         if (! empty($attributes)) {
             $this->users->update($user, $attributes);
         }

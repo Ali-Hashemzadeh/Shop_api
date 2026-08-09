@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Frontend Handoff — Notification &amp; SMS Changes</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #222537;
+      --border: #2e3147;
+      --text: #e2e4f0;
+      --muted: #8b8fa8;
+      --accent: #7c6af7;
+      --ok: #22c55e;
+      --info: #3b82f6;
+      --warnc: #f59e0b;
+      --bad: #ef4444;
+      --cyan: #22d3ee;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); display: flex; min-height: 100vh; }
+
+    nav { width: 275px; min-width: 275px; background: var(--surface); border-right: 1px solid var(--border); height: 100vh; overflow-y: auto; position: sticky; top: 0; padding: 24px 0; }
+    nav .logo { padding: 0 20px 24px; font-size: 15px; font-weight: 700; color: var(--accent); border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+    nav .logo span { color: var(--muted); font-weight: 400; font-size: 12px; display: block; margin-top: 3px; }
+    nav a { display: block; padding: 6px 20px; font-size: 13px; color: var(--muted); text-decoration: none; border-left: 2px solid transparent; transition: all .15s; }
+    nav a:hover { color: var(--text); background: var(--surface2); }
+    nav .section-label { padding: 16px 20px 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: #4a4d65; }
+
+    main { flex: 1; padding: 48px 56px; max-width: 1060px; }
+    h1 { font-size: 32px; font-weight: 700; margin-bottom: 8px; }
+    .subtitle { font-size: 15px; color: var(--muted); margin-bottom: 28px; }
+    h2 { font-size: 22px; font-weight: 700; margin: 56px 0 20px; padding-top: 56px; border-top: 1px solid var(--border); }
+    h2:first-of-type { border-top: none; padding-top: 0; margin-top: 32px; }
+    h3 { font-size: 15px; font-weight: 600; margin: 30px 0 10px; color: var(--text); }
+    h4 { font-size: 13px; margin: 20px 0 8px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+    p { font-size: 14px; line-height: 1.7; color: var(--muted); margin-bottom: 12px; }
+    p strong, li strong, td strong { color: var(--text); }
+    ul, ol { font-size: 14px; color: var(--muted); padding-left: 20px; line-height: 1.9; margin-bottom: 12px; }
+    a { color: var(--accent); }
+
+    code { font-family: 'SF Mono', Menlo, Consolas, monospace; font-size: 12.5px; background: var(--surface2); padding: 2px 6px; border-radius: 4px; color: var(--cyan); }
+    pre { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px 18px; overflow-x: auto; margin-bottom: 16px; }
+    pre code { background: none; padding: 0; color: var(--text); font-size: 12.5px; line-height: 1.65; white-space: pre; }
+    .del { color: #f87171; }
+    .add { color: #4ade80; }
+    .cmt { color: #5b5f7a; }
+
+    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 13px; display: block; overflow-x: auto; }
+    th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    th { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; font-weight: 700; white-space: nowrap; }
+    td { color: var(--muted); }
+    tbody tr:hover { background: var(--surface); }
+
+    .callout { border-left: 3px solid var(--accent); background: var(--surface); border-radius: 0 8px 8px 0; padding: 14px 18px; margin-bottom: 18px; font-size: 13.5px; line-height: 1.7; color: var(--muted); }
+    .callout.warn { border-left-color: var(--warnc); }
+    .callout.bad { border-left-color: var(--bad); }
+    .callout.ok { border-left-color: var(--ok); }
+    .callout strong { color: var(--text); }
+
+    .pill { display: inline-block; font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 20px; text-transform: uppercase; letter-spacing: .05em; }
+    .pill.get { background: rgba(59,130,246,.15); color: #60a5fa; }
+    .pill.put { background: rgba(245,158,11,.15); color: #fbbf24; }
+    .pill.new { background: rgba(124,106,247,.18); color: #a78bfa; }
+    .pill.brk { background: rgba(239,68,68,.15); color: #f87171; }
+    .pill.safe { background: rgba(34,197,94,.15); color: #4ade80; }
+    .pill.legacy { background: rgba(139,143,168,.16); color: #a5a9c0; }
+
+    .chk { list-style: none; padding-left: 0; }
+    .chk li { padding-left: 26px; position: relative; margin-bottom: 7px; }
+    .chk li::before { content: "\2610"; position: absolute; left: 4px; color: var(--accent); font-size: 14px; }
+
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; margin-bottom: 16px; }
+    .flow { font-family: 'SF Mono', Menlo, Consolas, monospace; font-size: 12.5px; line-height: 1.9; color: var(--text); }
+    .flow .arrow { color: var(--accent); }
+    @media (max-width: 1100px) { body { display: block; } nav { display: none; } main { padding: 32px 20px; } }
+  </style>
+</head>
+<body>
+<nav>
+  <div class="logo">Notification &amp; SMS Changes<span>Frontend handoff · backend is already deployed-ready</span></div>
+  <div class="section-label">Start here</div>
+  <a href="#tldr">What changed (TL;DR)</a>
+  <a href="#migration">Migration notes</a>
+  <div class="section-label">Admin UI</div>
+  <a href="#recipients">Paid-order SMS recipients</a>
+  <a href="#recipients-get">GET the list</a>
+  <a href="#recipients-put">PUT the selection</a>
+  <a href="#recipients-errors">Errors &amp; auth</a>
+  <a href="#recipients-ui">Rendering the picker</a>
+  <div class="section-label">Customer UI</div>
+  <a href="#types">Notification types</a>
+  <a href="#pickup">Pickup flow</a>
+  <a href="#postal">Postal flow</a>
+  <a href="#local">Local delivery flow</a>
+  <a href="#code-rules">Delivery code rules</a>
+  <div class="section-label">Reference</div>
+  <a href="#checklist">Checklist</a>
+</nav>
+
+<main>
+  <h1>Notification &amp; SMS Changes</h1>
+  <p class="subtitle">Everything a frontend developer needs after the notification refinement release. Two areas are affected: a new admin settings screen, and the notification types your customer UI switches on.</p>
+
+  <div class="callout">
+    <strong>Nothing you already call has changed shape.</strong> <code>GET /api/v1/notifications</code> and
+    <code>POST /api/v1/notifications/{id}/read</code> keep the same request, response, pagination and fields.
+    What changed is <em>which <code>type</code> values arrive</em>, plus two brand-new admin endpoints.
+  </div>
+
+  <h2 id="tldr">What changed (TL;DR)</h2>
+
+  <h3>1. One notification type became three</h3>
+  <p>The shipment lifecycle used to produce a single generic <code>shipment_sent</code> notification for two completely different situations. It is now split, and pickup — which previously produced no notification at all — has one of its own.</p>
+
+  <pre><code><span class="cmt">// Old — one type covered postal handoff AND local dispatch</span>
+<span class="del">shipment_sent</span>
+
+<span class="cmt">// New — one type per real-world moment</span>
+<span class="add">shipment_ready_for_pickup</span>   <span class="cmt">// pickup order is waiting at the counter (NEW moment — nothing existed before)</span>
+<span class="add">shipment_handed_to_post</span>     <span class="cmt">// postal parcel given to the carrier, has a tracking code</span>
+<span class="add">shipment_out_for_delivery</span>   <span class="cmt">// courier is on the road with the order</span></code></pre>
+
+  <div class="callout warn">
+    <strong>Do not delete your <code>shipment_sent</code> branch.</strong> Historical notification rows were never
+    rewritten, so a customer who ordered before this release still has <code>shipment_sent</code> notifications in
+    their list and will see them forever. The backend no longer <em>creates</em> them — but your UI must still
+    render them. Treat it as a legacy alias meaning "your order shipped".
+  </div>
+
+  <h3>2. The admin paid-order SMS became configurable</h3>
+  <p>Every admin still receives the in-app <code>admin_order_paid</code> notification exactly as before — that is not configurable and you should not build a switch for it. What is new is that only <em>selected</em> admins additionally get an SMS, and there is now an admin screen to pick them.</p>
+
+  <div class="card">
+    <div class="flow">
+      Order paid<br>
+      &nbsp;&nbsp;<span class="arrow">├─</span> customer &nbsp;&nbsp;&nbsp;&rarr; in-app + SMS &nbsp;<span class="cmt">(unchanged)</span><br>
+      &nbsp;&nbsp;<span class="arrow">├─</span> all admins &nbsp;&rarr; in-app &nbsp;<span class="cmt">(unchanged)</span><br>
+      &nbsp;&nbsp;<span class="arrow">└─</span> selected admins &rarr; SMS &nbsp;<span class="pill new">new</span>
+    </div>
+  </div>
+
+  <h2 id="migration">Frontend migration notes</h2>
+
+  <table>
+    <thead><tr><th>Area</th><th>Before</th><th>After</th><th>Action</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Notification list icon / label</td>
+        <td><code>shipment_sent</code></td>
+        <td><code>shipment_handed_to_post</code> or <code>shipment_out_for_delivery</code></td>
+        <td>Add two branches. Keep the old one for history.</td>
+      </tr>
+      <tr>
+        <td>Pickup orders</td>
+        <td>No notification at all</td>
+        <td><code>shipment_ready_for_pickup</code></td>
+        <td>Add a branch. This is a new, important customer moment.</td>
+      </tr>
+      <tr>
+        <td>Tracking-code display</td>
+        <td>Read <code>data.tracking_code</code> off <code>shipment_sent</code></td>
+        <td>Read <code>data.tracking_code</code> off <code>shipment_handed_to_post</code></td>
+        <td>Move the tracking-code UI to the postal type only.</td>
+      </tr>
+      <tr>
+        <td>Delivery verification code</td>
+        <td>Never in the API</td>
+        <td>Still never in the API</td>
+        <td>Nothing to do — and nothing to add. See <a href="#code-rules">the rules</a>.</td>
+      </tr>
+      <tr>
+        <td>Admin settings</td>
+        <td>—</td>
+        <td>Paid-order SMS recipient picker</td>
+        <td>Build the new screen from the two endpoints below.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p><strong>Suggested branching shape.</strong> Group the new shipment types with the legacy one so a single UI concept ("your order is on its way") does not fragment:</p>
+
+  <pre><code>switch (notification.type) {
+  case 'shipment_ready_for_pickup':
+    <span class="cmt">// "Ready for collection" — show the store/pickup instructions</span>
+    break;
+
+  case 'shipment_handed_to_post':
+    <span class="cmt">// "Handed to the postal service" — show data.tracking_code if present</span>
+    break;
+
+  case 'shipment_out_for_delivery':
+    <span class="cmt">// "Out for delivery" — remind the customer they will be asked</span>
+    <span class="cmt">// for the code they received by SMS. Never try to read the code here.</span>
+    break;
+
+  <span class="del">case 'shipment_sent':</span>
+    <span class="cmt">// LEGACY: pre-split rows only. Generic "your order shipped" copy.</span>
+    <span class="cmt">// May carry data.tracking_code. Keep this branch indefinitely.</span>
+    break;
+
+  default:
+    <span class="cmt">// Always keep a fallback: historical rows may carry types you do</span>
+    <span class="cmt">// not know about, and new ones can be added server-side.</span>
+}</code></pre>
+
+  <h2 id="recipients">Admin UI — paid-order SMS recipients</h2>
+
+  <p>A settings screen that answers one question: <em>which administrators should get a text message when an order is paid?</em> It does not control the in-app notification, which every admin always receives.</p>
+
+  <h4>Authentication &amp; permission</h4>
+  <ul>
+    <li>Sanctum bearer token, same as every other admin endpoint (<code>Authorization: Bearer &lt;token&gt;</code>).</li>
+    <li>Permission required on <strong>both</strong> endpoints: <code>notification.admin-sms-recipients.manage</code>.</li>
+    <li>Seeded to the <code>admin</code> role only. The <code>customer</code> role does not have it.</li>
+    <li><code>GET /api/v1/me</code> exposes the caller's <code>permissions</code> — use it to decide whether to render the menu entry at all, rather than letting the user walk into a 403.</li>
+  </ul>
+
+  <h3 id="recipients-get"><span class="pill get">GET</span> <code>/api/v1/admin/notifications/admin-order-paid-sms-recipients</code></h3>
+
+  <p>Returns <strong>every administrator</strong>, each flagged with whether they are currently selected. There is no separate "list all admins" call to make — this one response is the whole picker.</p>
+
+  <h4>Response · 200</h4>
+  <pre><code>{
+  "data": [
+    {
+      "user_id": 4,
+      "name": "Ali",
+      "last_name": "Rezaei",
+      "phone": "09121234567",
+      "enabled": true
+    },
+    {
+      "user_id": 7,
+      "name": "Sara",
+      "last_name": null,
+      "phone": "09351112233",
+      "enabled": false
+    },
+    {
+      "user_id": 12,
+      "name": "Reza",
+      "last_name": "Karimi",
+      "phone": null,
+      "enabled": false
+    }
+  ]
+}</code></pre>
+
+  <table>
+    <thead><tr><th>Field</th><th>Type</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td><code>user_id</code></td><td>integer</td><td>The value you send back in <code>user_ids</code>.</td></tr>
+      <tr><td><code>name</code></td><td>string | null</td><td>May be null — accounts can exist with only a phone number.</td></tr>
+      <tr><td><code>last_name</code></td><td>string | null</td><td>Often null. Render <code>name last_name</code> and fall back to the phone.</td></tr>
+      <tr><td><code>phone</code></td><td>string | null</td><td><strong>Null means this admin cannot receive SMS.</strong> See the warning below.</td></tr>
+      <tr><td><code>enabled</code></td><td>boolean</td><td>Currently selected to receive the paid-order SMS.</td></tr>
+    </tbody>
+  </table>
+
+  <p>The list is not paginated — there is no <code>meta</code>/<code>links</code> envelope, just <code>data</code>. Rows are ordered by <code>user_id</code> ascending, which is stable across calls.</p>
+
+  <div class="callout warn">
+    <strong>An admin with <code>phone: null</code> can still be selected.</strong> The backend accepts it and simply
+    skips the SMS at send time — nothing errors and the order still completes normally. Show a warning next to
+    such a row (for example "no phone number — will not receive SMS") rather than disabling the checkbox, so the
+    operator understands why nothing arrives.
+  </div>
+
+  <h3 id="recipients-put"><span class="pill put">PUT</span> <code>/api/v1/admin/notifications/admin-order-paid-sms-recipients</code></h3>
+
+  <p>Replaces the entire selection. This is a <em>set</em> operation, not a toggle: whatever you send becomes the complete list of selected admins, and anyone omitted is deselected.</p>
+
+  <h4>Request body</h4>
+  <pre><code>{
+  "user_ids": [4, 12, 19]
+}</code></pre>
+
+  <ul>
+    <li><code>user_ids</code> is <strong>required as a key</strong> but may be an empty array.</li>
+    <li><code>[]</code> is valid and meaningful: it deselects everybody. Do not special-case it into "skip the request".</li>
+    <li>Values must be integers ≥ 1 and distinct.</li>
+    <li>Every id must belong to an <strong>administrator</strong>. A customer id is rejected even though the user exists.</li>
+    <li>Sending the same list twice is a no-op — safe to retry, and safe to fire on every checkbox change if you prefer that to an explicit Save button.</li>
+  </ul>
+
+  <h4>Response · 200</h4>
+  <p>Identical shape to <code>GET</code> — the full refreshed roster. Use it to re-render directly; there is no need for a follow-up <code>GET</code>.</p>
+
+  <pre><code>{
+  "data": [
+    { "user_id": 4,  "name": "Ali",  "last_name": "Rezaei", "phone": "09121234567", "enabled": true  },
+    { "user_id": 7,  "name": "Sara", "last_name": null,     "phone": "09351112233", "enabled": false },
+    { "user_id": 12, "name": "Reza", "last_name": "Karimi", "phone": null,          "enabled": true  }
+  ]
+}</code></pre>
+
+  <h3 id="recipients-errors">Error responses</h3>
+
+  <table>
+    <thead><tr><th>Status</th><th>When</th><th>How to handle</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>401</strong></td>
+        <td>No token, or an expired one. Applies to both endpoints.</td>
+        <td>Normal re-authentication flow.</td>
+      </tr>
+      <tr>
+        <td><strong>403</strong></td>
+        <td>Authenticated but lacking <code>notification.admin-sms-recipients.manage</code>.</td>
+        <td>Hide the screen for these users. Note that <code>PUT</code> returns <strong>403 before validating the body</strong>, so a malformed body from an unauthorized caller is still a 403, never a 422.</td>
+      </tr>
+      <tr>
+        <td><strong>422</strong></td>
+        <td>Missing <code>user_ids</code>, a non-array, non-integer entries, duplicates, or an id that is not an admin.</td>
+        <td>Standard Laravel validation envelope. <strong>Nothing was saved</strong> — the whole request is rejected, not the valid half.</td>
+      </tr>
+      <tr>
+        <td><strong>429</strong></td>
+        <td>Rate limit (<code>api</code> limiter, 60/min per user).</td>
+        <td>Respect <code>Retry-After</code>. Debounce if you save on every checkbox change.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h4>422 — a non-admin id</h4>
+  <p>The error key is indexed by <em>position in the array you sent</em>, so you can highlight the exact row:</p>
+  <pre><code>{
+  "message": "User [7] is not an administrator.",
+  "errors": {
+    "user_ids.1": ["User [7] is not an administrator."]
+  }
+}</code></pre>
+
+  <h4>422 — a missing key</h4>
+  <pre><code>{
+  "message": "The user ids field must be present.",
+  "errors": {
+    "user_ids": ["The user ids field must be present."]
+  }
+}</code></pre>
+
+  <h3 id="recipients-ui">Rendering the picker</h3>
+
+  <ol>
+    <li><code>GET</code> the endpoint once when the screen opens. You now have every admin and their state.</li>
+    <li>Render one row per admin: display name (<code>name</code> + <code>last_name</code>, falling back to <code>phone</code>, falling back to <code>#user_id</code>), the phone, and a checkbox bound to <code>enabled</code>.</li>
+    <li>On save, collect the <code>user_id</code> of every checked row into <code>user_ids</code> and <code>PUT</code> it.</li>
+    <li>Re-render from the <code>PUT</code> response. If it returns 422, keep the operator's local selection and surface the field error — nothing was persisted.</li>
+  </ol>
+
+  <p>Copy worth putting on the screen, because it is the part operators get wrong: <em>"All administrators receive the in-app notification for every paid order. The administrators selected here also receive an SMS."</em></p>
+
+  <h2 id="types">Notification types</h2>
+
+  <p>Returned by <code>GET /api/v1/notifications</code> in the unchanged envelope:</p>
+
+  <pre><code>{
+  "data": [
+    {
+      "id": 812,
+      "type": "shipment_handed_to_post",
+      "title": "تحویل به پست",
+      "message": "سفارش شما به شرکت پست تحویل داده شد.",
+      "data": {
+        "order_id": 3391,
+        "order_public_code": "bdo-Q8M2XC",
+        "tracking_code": "1234567890"
+      },
+      "read_at": null,
+      "created_at": "2026-08-09T11:04:22.000000Z"
+    }
+  ],
+  "links": { "...": "unchanged" },
+  "meta":  { "...": "unchanged" }
+}</code></pre>
+
+  <table>
+    <thead><tr><th>Type</th><th>Meaning</th><th><code>data</code> fields</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>shipment_ready_for_pickup</code></td>
+        <td>An in-person-pickup order is packed and waiting at the counter. The customer should come and collect it.</td>
+        <td><code>order_id</code>, <code>order_public_code</code></td>
+        <td><span class="pill new">new</span></td>
+      </tr>
+      <tr>
+        <td><code>shipment_handed_to_post</code></td>
+        <td>A postal parcel was handed to the carrier. This is the last state the shop knows about — there are no later postal updates.</td>
+        <td><code>order_id</code>, <code>order_public_code</code>, <code>tracking_code</code> <em>(present when a tracking number was recorded)</em></td>
+        <td><span class="pill new">new</span></td>
+      </tr>
+      <tr>
+        <td><code>shipment_out_for_delivery</code></td>
+        <td>A local delivery is on the road with an assigned courier. The customer has also received an SMS containing a verification code.</td>
+        <td><code>order_id</code>, <code>order_public_code</code> — <strong>never a code of any kind</strong></td>
+        <td><span class="pill new">new</span></td>
+      </tr>
+      <tr>
+        <td><code>shipment_sent</code></td>
+        <td>Generic "your order shipped", produced before the split above. May carry <code>tracking_code</code>.</td>
+        <td><code>order_id</code>, <code>order_public_code</code>?, <code>tracking_code</code>?</td>
+        <td><span class="pill legacy">legacy · read-only</span></td>
+      </tr>
+      <tr>
+        <td><code>shipment_delivered</code></td>
+        <td>Delivered. Unchanged.</td>
+        <td><code>order_id</code>, <code>order_public_code</code></td>
+        <td><span class="pill safe">unchanged</span></td>
+      </tr>
+      <tr>
+        <td><code>admin_order_paid</code></td>
+        <td>Admin-facing: a new paid order. Every admin gets this in-app row regardless of the SMS settings.</td>
+        <td><code>order_id</code>, <code>order_public_code</code></td>
+        <td><span class="pill safe">unchanged</span></td>
+      </tr>
+      <tr>
+        <td><code>payment_success</code>, <code>payment_failed</code>, <code>order_cancelled</code>, <code>shipment_assigned_delivery</code></td>
+        <td>Unchanged in every respect.</td>
+        <td>unchanged</td>
+        <td><span class="pill safe">unchanged</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <strong>Two defensive rules for the notification list.</strong>
+    (1) Always keep a <code>default</code> branch — historical rows carry types that are no longer produced, and new
+    types can be added server-side without a frontend release. Falling back to <code>title</code> + <code>message</code>,
+    which every row always has, is a perfectly good default renderer.
+    (2) Treat every <code>data</code> field as optional. <code>tracking_code</code> is omitted when no tracking number
+    was recorded, and older rows may lack <code>order_public_code</code>.
+  </div>
+
+  <p><strong>Which identifier to show the customer:</strong> always <code>order_public_code</code> (for example <code>bdo-Q8M2XC</code>) — it is what support asks for. <code>order_id</code> is the internal numeric id and is there for deep-linking to your own order route.</p>
+
+  <h2 id="pickup">Pickup flow</h2>
+
+  <div class="card">
+    <div class="flow">
+      pending <span class="arrow">→</span> preparing <span class="arrow">→</span> <strong>ready_for_pickup</strong> <span class="arrow">→</span> picked_up
+    </div>
+  </div>
+
+  <p>Entering <code>ready_for_pickup</code> now notifies the customer <strong>in-app and by SMS</strong>. Before this release, a pickup customer was told nothing and had to guess when to come.</p>
+
+  <ul>
+    <li><strong>Notification type:</strong> <code>shipment_ready_for_pickup</code>.</li>
+    <li><strong>SMS:</strong> contains the order public code.</li>
+    <li><strong>What to show:</strong> a clear "ready for collection" state on the order, with the store's pickup instructions and opening hours if you have them.</li>
+    <li><strong><code>picked_up</code> sends nothing.</strong> The customer is standing at the counter when it happens — do not expect a second notification, and do not build a UI that waits for one. Reflect collection from the order/shipment status instead.</li>
+  </ul>
+
+  <h2 id="postal">Postal flow</h2>
+
+  <div class="card">
+    <div class="flow">
+      pending <span class="arrow">→</span> preparing <span class="arrow">→</span> ready_for_post <span class="arrow">→</span> <strong>handed_to_post</strong>
+    </div>
+  </div>
+
+  <ul>
+    <li><strong>Notification type:</strong> <code>shipment_handed_to_post</code>, carrying <code>data.tracking_code</code>.</li>
+    <li><strong>SMS:</strong> contains the order public code <em>and</em> the tracking code.</li>
+    <li><strong>What to show:</strong> the tracking number, ideally copyable, plus a link to the carrier's tracking page if you have one.</li>
+  </ul>
+
+  <div class="callout">
+    <strong><code>handed_to_post</code> is the end of the road for postal tracking.</strong> The shop does not track the
+    carrier's own lifecycle, so there is no <code>in_transit</code>, no postal <code>out_for_delivery</code>, and no
+    postal <code>delivered</code> notification. Do not build a progress bar that promises those steps — after handoff,
+    the tracking number is the customer's only source of further updates.
+  </div>
+
+  <h2 id="local">Local delivery flow</h2>
+
+  <p>The delivery-person feature is unchanged in behaviour. Only the notification wrapping around it changed.</p>
+
+  <div class="card">
+    <div class="flow">
+      admin assigns a driver <span class="arrow">→</span> admin dispatches<br>
+      <span class="arrow">→</span> <strong>out_for_delivery</strong> &nbsp;<span class="cmt">(customer gets ONE SMS: order code + verification code)</span><br>
+      <span class="arrow">→</span> customer reads the code to the driver on arrival<br>
+      <span class="arrow">→</span> driver (or an admin) submits that code<br>
+      <span class="arrow">→</span> delivered
+    </div>
+  </div>
+
+  <ul>
+    <li><strong>Notification type:</strong> <code>shipment_out_for_delivery</code> — one in-app row.</li>
+    <li><strong>SMS:</strong> exactly one message, containing the order public code and the verification code. There is no separate "your order shipped" SMS followed by a second code SMS; that would have been two texts about one event.</li>
+    <li><strong>What to show:</strong> an "out for delivery" state, plus a reminder that the customer will be asked for the code they received by SMS, and that they should only give it to the person actually handing over the order.</li>
+  </ul>
+
+  <h3 id="code-rules">Delivery verification code — the rules</h3>
+
+  <div class="callout bad">
+    <strong>The verification code is SMS-only and is never returned by any API.</strong>
+    <ul style="margin-top: 8px; margin-bottom: 0;">
+      <li>It is <strong>not</strong> in the notification <code>data</code> payload.</li>
+      <li>It is <strong>not</strong> in the order, shipment, admin, or driver responses.</li>
+      <li>Only a hash is stored server-side, so there is nothing to read back even in principle.</li>
+      <li>Never build a screen that displays the code to the customer, and never write code that expects to find it in a notification response — that field will never exist.</li>
+    </ul>
+  </div>
+
+  <p><strong>Retries mint a new code.</strong> If a delivery attempt fails and the order is dispatched again, or an operator resends the code, the customer receives a <em>new</em> code by SMS and the previous one immediately stops working. Two consequences for the UI:</p>
+
+  <ul>
+    <li>Tell the customer to use <strong>the most recent SMS</strong>, not the first one. This is the single most common source of a failed handoff at the door.</li>
+    <li>A resend produces an SMS only — <strong>no new in-app notification</strong>. Do not poll the notification list to detect one; there will not be a second <code>shipment_out_for_delivery</code> row for the same dispatch.</li>
+  </ul>
+
+  <p>Submitting a wrong code returns a generic <strong>422</strong> on the <code>code</code> field, with no hint about whether it was stale, mistyped or never valid. Repeated attempts are rate-limited per caller <em>and</em> per shipment, returning <strong>429</strong> — surface that as "too many attempts, wait a moment" rather than as a code error.</p>
+
+  <h2 id="checklist">Implementation checklist</h2>
+
+  <ul class="chk">
+    <li>Add UI branches for <code>shipment_ready_for_pickup</code>, <code>shipment_handed_to_post</code> and <code>shipment_out_for_delivery</code>.</li>
+    <li>Keep the <code>shipment_sent</code> branch for historical rows; do not remove it.</li>
+    <li>Add a <code>default</code> branch that renders <code>title</code> + <code>message</code> for unknown types.</li>
+    <li>Move tracking-code display onto <code>shipment_handed_to_post</code> and read <code>data.tracking_code</code> defensively.</li>
+    <li>Show <code>order_public_code</code> to the customer, not <code>order_id</code>.</li>
+    <li>Build the admin recipient screen from <code>GET</code> / <code>PUT /api/v1/admin/notifications/admin-order-paid-sms-recipients</code>.</li>
+    <li>Gate that screen on the <code>notification.admin-sms-recipients.manage</code> permission from <code>GET /api/v1/me</code>.</li>
+    <li>Handle <code>PUT</code> 422 by keeping local state and highlighting <code>errors["user_ids.{index}"]</code>.</li>
+    <li>Send <code>{"user_ids": []}</code> — not a skipped request — when the operator deselects everybody.</li>
+    <li>Flag admins with <code>phone: null</code> in the picker instead of silently letting them be selected.</li>
+    <li>Confirm nowhere in the codebase tries to read a delivery verification code from an API response.</li>
+    <li>Remove any UI that waits for a notification on <code>picked_up</code> — there is none.</li>
+  </ul>
+</main>
+</body>
+</html>

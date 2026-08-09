@@ -33,5 +33,22 @@ class DefaultUsersSeeder extends Seeder
         );
 
         $customer->syncRoles(['customer']);
+
+        // A demo courier. Note the *pair* of roles: a delivery worker is a shopper
+        // who also delivers, so they keep every customer capability and simply gain
+        // the two assigned-shipment permissions on top.
+        $delivery = User::updateOrCreate(
+            ['email' => 'delivery@melmedas.test'],
+            [
+                'name' => 'MELMEDAS_Delivery',
+                'last_name' => 'Courier',
+                // Outside the 0912000000x block the Order demo customers use.
+                'phone' => '09120009001',
+                'password' => Hash::make('Qaz@18410'),
+                'email_verified_at' => now(),
+            ]
+        );
+
+        $delivery->syncRoles(['customer', 'delivery']);
     }
 }

@@ -44,6 +44,16 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('uploads', fn (Request $r) => Limit::perMinute(20)->by($r->user()?->id ?? $r->ip())
         );
 
+        // Delivery confirmation — a short numeric code is only secret while
+        // guessing stays expensive, so this is far stricter than `api`. Keyed by
+        // caller *and* shipment: exhausting one delivery's budget must not lock a
+        // driver out of the rest of their round, and one driver's guessing must
+        // not spend another's allowance on the same shipment.
+        RateLimiter::for('delivery-confirm', fn (Request $r) => Limit::perMinute(
+            max((int) config('shipment.delivery.confirmation_max_attempts', 5), 1)
+        )->by(($r->user()?->id ?? $r->ip()).'|'.$r->route('publicCode'))
+        );
+
         // General authenticated API; guest cart falls back to per-IP
         RateLimiter::for('api', fn (Request $r) => $r->user()
                 ? Limit::perMinute(60)->by($r->user()->id)

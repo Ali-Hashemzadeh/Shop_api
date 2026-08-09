@@ -4152,10 +4152,10 @@ async function deleteWorkingPeriod(token, id) {
     },
     {
       <span class="key">"id"</span>:         <span class="num">127</span>,
-      <span class="key">"type"</span>:       <span class="str">"shipment_sent"</span>,
-      <span class="key">"title"</span>:      <span class="str">"ارسال سفارش"</span>,
-      <span class="key">"message"</span>:    <span class="str">"سفارش شما ارسال شد."</span>,
-      <span class="key">"data"</span>:       { <span class="key">"order_id"</span>: <span class="num">41</span>, <span class="key">"tracking_code"</span>: <span class="str">"TRACK-123"</span> },
+      <span class="key">"type"</span>:       <span class="str">"shipment_handed_to_post"</span>,
+      <span class="key">"title"</span>:      <span class="str">"تحویل به پست"</span>,
+      <span class="key">"message"</span>:    <span class="str">"سفارش شما به شرکت پست تحویل داده شد."</span>,
+      <span class="key">"data"</span>:       { <span class="key">"order_id"</span>: <span class="num">41</span>, <span class="key">"order_public_code"</span>: <span class="str">"bdo-Q8M2XC"</span>, <span class="key">"tracking_code"</span>: <span class="str">"TRACK-123"</span> },
       <span class="key">"read_at"</span>:    <span class="str">"2026-07-19T18:40:02.000000Z"</span>,
       <span class="key">"created_at"</span>: <span class="str">"2026-07-19T18:02:10.000000Z"</span>
     }
@@ -4170,7 +4170,7 @@ async function deleteWorkingPeriod(token, id) {
         <tr><td>type</td><td>string</td><td>Stable machine key — switch on it for icons, grouping, and deep links. See the table below.</td></tr>
         <tr><td>title</td><td>string</td><td>Short Persian headline, ready to render.</td></tr>
         <tr><td>message</td><td>string</td><td>Body text, ready to render.</td></tr>
-        <tr><td>data</td><td>object | null</td><td>Structured payload for deep-linking. Always contains <code>order_id</code> for the current types; <code>shipment_sent</code> may also carry <code>tracking_code</code>.</td></tr>
+        <tr><td>data</td><td>object | null</td><td>Structured payload for deep-linking. Always contains <code>order_id</code> for the current types, and <code>order_public_code</code> for anything raised since the notification split; <code>shipment_handed_to_post</code> (and legacy <code>shipment_sent</code>) may also carry <code>tracking_code</code>. Treat every field as optional and keep a fallback for unknown types.</td></tr>
         <tr><td>read_at</td><td>string | null</td><td>ISO-8601 timestamp, or <code>null</code> when unread. Count the nulls for an unread badge.</td></tr>
         <tr><td>created_at</td><td>string</td><td>ISO-8601 creation time.</td></tr>
       </table>
@@ -4220,14 +4220,19 @@ async function deleteWorkingPeriod(token, id) {
   <table>
     <tr><th><code>type</code></th><th>Raised when</th><th>Audience</th><th>Also sends SMS</th><th><code>data</code></th></tr>
     <tr><td><code>payment_success</code></td><td>An order transitions to <code>paid</code> — online capture or in-person payment</td><td>customer</td><td>yes</td><td><code>order_id</code></td></tr>
-    <tr><td><code>admin_order_paid</code></td><td>Same moment, delivered to every admin account</td><td>admin</td><td>no</td><td><code>order_id</code></td></tr>
+    <tr><td><code>admin_order_paid</code></td><td>Same moment, delivered in-app to <em>every</em> admin account</td><td>admin</td><td>only to the admins selected under <code>PUT /api/v1/admin/notifications/admin-order-paid-sms-recipients</code></td><td><code>order_id</code>, <code>order_public_code</code></td></tr>
     <tr><td><code>payment_failed</code></td><td>Gateway verification rejects the payment</td><td>customer</td><td>no</td><td><code>order_id</code></td></tr>
     <tr><td><code>order_cancelled</code></td><td>The customer or an operator cancels a pending order</td><td>customer</td><td>yes</td><td><code>order_id</code></td></tr>
     <tr><td><code>shipment_preparing</code></td><td>Shipment enters <code>preparing</code></td><td>customer</td><td>SMS only — <em>no in-app row</em></td><td>—</td></tr>
-    <tr><td><code>shipment_sent</code></td><td>Shipment reaches <code>handed_to_post</code> or <code>out_for_delivery</code></td><td>customer</td><td>yes</td><td><code>order_id</code>, <code>tracking_code</code>?</td></tr>
+    <tr><td><code>shipment_ready_for_pickup</code></td><td>Pickup shipment reaches <code>ready_for_pickup</code> — waiting at the counter</td><td>customer</td><td>yes</td><td><code>order_id</code>, <code>order_public_code</code></td></tr>
+    <tr><td><code>shipment_handed_to_post</code></td><td>Postal shipment reaches <code>handed_to_post</code></td><td>customer</td><td>yes — order code + tracking code</td><td><code>order_id</code>, <code>order_public_code</code>, <code>tracking_code</code>?</td></tr>
+    <tr><td><code>shipment_out_for_delivery</code></td><td>Local delivery reaches <code>out_for_delivery</code> (first dispatch or a retry)</td><td>customer</td><td>yes — <strong>one</strong> SMS carrying the order code + the delivery verification code</td><td><code>order_id</code>, <code>order_public_code</code> — <strong>never any code</strong></td></tr>
+    <tr><td><code>shipment_sent</code> <em>(legacy)</em></td><td>Not raised any more. Rows written before postal handoff and local dispatch were split still carry it; history is never rewritten, so clients must keep rendering it.</td><td>customer</td><td>—</td><td><code>order_id</code>, <code>tracking_code</code>?</td></tr>
     <tr><td><code>shipment_delivered</code></td><td>Shipment reaches <code>delivered</code></td><td>customer</td><td>yes</td><td><code>order_id</code></td></tr>
   </table>
   <div class="warn"><strong><code>shipment_preparing</code> is SMS-only.</strong> It never appears in <code>GET /notifications</code>. Do not build UI that waits for it — use the shipment status endpoints for live fulfillment state.</div>
+  <div class="warn"><strong>The delivery verification code is SMS-only and never appears in any API response</strong> — not in <code>data</code>, not in an order/shipment/driver payload. Only a hash is stored. A retry or a resend mints a <em>new</em> code by SMS and invalidates the previous one, without raising a second in-app notification.</div>
+  <div class="note"><strong>Admin paid-order SMS recipients.</strong> <code>GET</code> / <code>PUT /api/v1/admin/notifications/admin-order-paid-sms-recipients</code> (<code>auth:sanctum</code>, permission <code>notification.admin-sms-recipients.manage</code>). <code>GET</code> returns <code>{"data":[{"user_id":4,"name":"Ali","last_name":"Rezaei","phone":"09121234567","enabled":true}, …]}</code> — every admin, with a selected flag, unpaginated. <code>PUT</code> takes <code>{"user_ids":[4,12]}</code> and replaces the whole selection (<code>[]</code> means nobody); a non-admin id is <strong>422</strong> on <code>user_ids.{index}</code> and nothing is saved. Full frontend guide: <code>FRONTEND_NOTIFICATION_SMS_CHANGES.html</code>.</div>
   <div class="note"><strong>A repeated gateway callback will not duplicate anything.</strong> Payment notifications fire only on the real pending → paid transition, so retried callbacks are silent.</div>
   <p>Deep-linking: every payload carries <code>order_id</code>, so a notification row can link straight to <code>GET /orders</code> detail or the order tracking page. Unread badge = count of items with <code>read_at === null</code> on page 1 (or track it client-side after each mark-as-read).</p>
 

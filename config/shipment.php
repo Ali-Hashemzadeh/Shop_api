@@ -123,6 +123,23 @@ return [
         'booking_horizon_days' => (int) env('SHIPMENT_BOOKING_HORIZON_DAYS', 14),
         'minimum_lead_minutes' => (int) env('SHIPMENT_MINIMUM_LEAD_MINUTES', 60),
         'minimum_final_slot_minutes' => (int) env('SHIPMENT_MINIMUM_FINAL_SLOT_MINUTES', 60),
+
+        /*
+        | Customer handoff code
+        |
+        | Length of the numeric code SMSed to the customer when a local delivery
+        | goes out, and which the courier must quote back to close the delivery.
+        | Clamped to 4–10 digits by DeliveryVerificationCodeService: shorter is
+        | guessable even under the confirmation throttle, longer is unreadable
+        | over a doorstep. Only a hash of the code is ever stored.
+        |
+        | `confirmation_max_attempts` is the per-driver, per-shipment guess budget
+        | enforced by the `delivery-confirm` rate limiter — deliberately far
+        | stricter than the generic `api` limiter, because six digits are only
+        | secret while guessing stays expensive.
+        */
+        'verification_code_length' => (int) env('SHIPMENT_DELIVERY_CODE_LENGTH', 6),
+        'confirmation_max_attempts' => (int) env('SHIPMENT_DELIVERY_CONFIRM_MAX_ATTEMPTS', 5),
     ],
 
     /*

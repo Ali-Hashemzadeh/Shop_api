@@ -15,6 +15,8 @@ class ListProfileRequest extends FormRequest
     {
         return [
             'per_page' => ['sometimes', 'integer', 'min:1', 'max:100'],
+            // Role filter — how an admin picks a driver to assign a delivery to.
+            'role' => ['sometimes', 'string', 'in:admin,customer,delivery'],
         ];
     }
 }

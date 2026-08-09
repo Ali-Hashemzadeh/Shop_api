@@ -57,9 +57,11 @@ class EloquentUserRepository implements UserRepositoryInterface
         return $user->fresh();
     }
 
-    public function paginate(int $perPage = 15): LengthAwarePaginator
+    public function paginate(int $perPage = 15, ?string $role = null): LengthAwarePaginator
     {
         return User::query()
+            ->with('roles')
+            ->when($role !== null && $role !== '', fn ($query) => $query->role($role))
             ->latest('id')
             ->paginate($perPage);
     }

@@ -216,7 +216,7 @@ class CategoriesTest extends TestCase
     public function it_includes_the_full_parent_chain_in_the_show_response(): void
     {
         $root = Category::create(['name' => 'Root', 'slug' => 'root', 'is_active' => true]);
-        $mid  = Category::create(['name' => 'Mid', 'slug' => 'mid', 'is_active' => true, 'parent_id' => $root->id]);
+        $mid = Category::create(['name' => 'Mid', 'slug' => 'mid', 'is_active' => true, 'parent_id' => $root->id]);
         $leaf = Category::create(['name' => 'Leaf', 'slug' => 'leaf', 'is_active' => true, 'parent_id' => $mid->id]);
 
         $this->getJson("/api/v1/catalog/categories/{$leaf->id}")
@@ -231,7 +231,7 @@ class CategoriesTest extends TestCase
     public function it_includes_nested_children_in_the_show_response(): void
     {
         $root = Category::create(['name' => 'Root', 'slug' => 'root', 'is_active' => true]);
-        $mid  = Category::create(['name' => 'Mid', 'slug' => 'mid', 'is_active' => true, 'parent_id' => $root->id]);
+        $mid = Category::create(['name' => 'Mid', 'slug' => 'mid', 'is_active' => true, 'parent_id' => $root->id]);
         $leaf = Category::create(['name' => 'Leaf', 'slug' => 'leaf', 'is_active' => true, 'parent_id' => $mid->id]);
 
         $this->getJson("/api/v1/catalog/categories/{$root->id}")

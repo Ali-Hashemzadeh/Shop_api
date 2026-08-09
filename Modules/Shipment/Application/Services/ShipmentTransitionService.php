@@ -6,17 +6,22 @@ namespace Modules\Shipment\Application\Services;
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Validation\ValidationException;
 use Modules\Order\Domain\Contracts\OrderManagerInterface;
 use Modules\Shipment\Domain\DTOs\ShipmentDTO;
 use Modules\Shipment\Domain\DTOs\ShipmentStatusHistoryDTO;
 use Modules\Shipment\Domain\Enums\ReservationStatus;
+use Modules\Shipment\Domain\Enums\ShipmentMethodType;
 use Modules\Shipment\Domain\Enums\ShipmentStatus;
 use Modules\Shipment\Domain\Events\ShipmentDeliveredEvent;
+use Modules\Shipment\Domain\Events\ShipmentHandedToPostEvent;
+use Modules\Shipment\Domain\Events\ShipmentOutForDeliveryEvent;
 use Modules\Shipment\Domain\Events\ShipmentPreparingStartedEvent;
-use Modules\Shipment\Domain\Events\ShipmentSentEvent;
+use Modules\Shipment\Domain\Events\ShipmentReadyForPickupEvent;
 use Modules\Shipment\Domain\Models\DeliverySlotReservation;
 use Modules\Shipment\Domain\Models\Shipment;
 use Modules\Shipment\Domain\Models\ShipmentStatusHistory;
+use Modules\Shipment\Domain\Services\DeliveryVerificationCodeService;
 use Modules\Shipment\Domain\Workflows\ShipmentWorkflowResolver;
 
 /**
@@ -41,6 +46,7 @@ class ShipmentTransitionService
     public function __construct(
         private readonly ShipmentWorkflowResolver $workflows,
         private readonly OrderManagerInterface $orders,
+        private readonly DeliveryVerificationCodeService $verificationCodes,
     ) {}
 
     /**
@@ -63,6 +69,31 @@ class ShipmentTransitionService
             $from = ShipmentStatus::from($shipment->status);
             $workflow = $this->workflows->forType($shipment->method_type);
             $workflow->assertCanTransition($from, $to);
+
+            $this->assertDriverAssignedForDispatch($shipment, $to);
+
+            // The handoff code is minted here, inside the same lock and the same
+            // transaction as the status change, so a code can never exist for an
+            // attempt that was rolled back — and an attempt can never go out
+            // without one. The plaintext lives only in this local variable and
+            // the SMS it is handed to; only the hash reaches the update below.
+            $deliveryCode = null;
+
+            if ($this->issuesVerificationCode($shipment, $to)) {
+                ['code' => $deliveryCode, 'attributes' => $codeAttributes] = $this->verificationCodes->issue();
+                $attributes = array_merge($attributes, $codeAttributes);
+            }
+
+            // A failed attempt retires its code immediately: whatever the customer
+            // is still holding stops working, and the next dispatch mints a fresh one.
+            if ($to === ShipmentStatus::DeliveryFailed) {
+                $attributes = array_merge($attributes, $this->verificationCodes->invalidatedAttributes());
+            }
+
+            if ($to === ShipmentStatus::Delivered && $shipment->delivery_verification_code_hash !== null) {
+                $attributes['delivery_verification_verified_at'] = now();
+                $attributes['delivery_verification_code_hash'] = null;
+            }
 
             $update = array_merge($attributes, ['status' => $to->value]);
 
@@ -91,27 +122,69 @@ class ShipmentTransitionService
 
             $this->syncReservation($shipment, $to);
 
-            $this->announce($shipment, $to);
+            $this->announce($shipment, $to, $deliveryCode);
 
             return $this->toDTO($shipment->fresh());
         });
     }
 
     /**
-     * Publish the customer-facing milestones of an existing transition. No new
-     * status is introduced: `handed_to_post` and `out_for_delivery` are exactly
-     * the two the module already maps to the order status `shipped`.
+     * A local delivery may not leave the store without somebody carrying it.
      *
-     * `picked_up` is intentionally silent — the customer is at the counter.
-     * Listeners run after commit, so a rolled-back transition notifies nobody.
+     * Enforced here rather than in the controller because both routes into
+     * `out_for_delivery` — the first dispatch from `ready_for_dispatch` and the
+     * retry from `delivery_failed` — funnel through this method, and because the
+     * check must hold under the same row lock that performs the transition.
      */
-    private function announce(Shipment $shipment, ShipmentStatus $to): void
+    private function assertDriverAssignedForDispatch(Shipment $shipment, ShipmentStatus $to): void
+    {
+        if ($to !== ShipmentStatus::OutForDelivery) {
+            return;
+        }
+
+        if ($shipment->method_type !== ShipmentMethodType::LocalDelivery->value) {
+            return;
+        }
+
+        if ($shipment->assigned_delivery_user_id === null) {
+            throw ValidationException::withMessages([
+                'assigned_delivery_user_id' => ['Assign a delivery worker before dispatching this shipment.'],
+            ]);
+        }
+    }
+
+    /** Every local-delivery attempt gets its own code; postal and pickup get none. */
+    private function issuesVerificationCode(Shipment $shipment, ShipmentStatus $to): bool
+    {
+        return $to === ShipmentStatus::OutForDelivery
+            && $shipment->method_type === ShipmentMethodType::LocalDelivery->value;
+    }
+
+    /**
+     * Publish the customer-facing milestones of an existing transition. No new
+     * status is introduced — each event names a status the workflows already own.
+     *
+     * One event per business moment rather than one generic "sent" event for
+     * both fulfillment shapes: handing a parcel to the post office and putting a
+     * courier on the road are different things to say, and only one of them has a
+     * tracking number to say it with.
+     *
+     * `picked_up` is intentionally silent — the customer is at the counter, and
+     * `ready_for_pickup` already told them to come. Listeners run after commit,
+     * so a rolled-back transition notifies nobody.
+     *
+     * `$deliveryCode` is the freshly minted local-delivery handoff code. It rides
+     * along on the dispatch event so a dispatched local delivery still produces
+     * exactly one customer SMS, and it is never stored anywhere.
+     */
+    private function announce(Shipment $shipment, ShipmentStatus $to, ?string $deliveryCode = null): void
     {
         // Resolved only for the statuses that actually notify, and only through the
         // Order contract — Shipment never touches the Order model. The customer's
         // message quotes this code rather than the internal order id.
         $orderPublicCode = match ($to) {
             ShipmentStatus::Preparing,
+            ShipmentStatus::ReadyForPickup,
             ShipmentStatus::HandedToPost,
             ShipmentStatus::OutForDelivery,
             ShipmentStatus::Delivered => $this->orders->findOrder($shipment->order_id)?->publicCode,
@@ -124,11 +197,22 @@ class ShipmentTransitionService
                 userId: $shipment->user_id,
                 orderPublicCode: $orderPublicCode,
             ),
-            ShipmentStatus::HandedToPost, ShipmentStatus::OutForDelivery => new ShipmentSentEvent(
+            ShipmentStatus::ReadyForPickup => new ShipmentReadyForPickupEvent(
                 orderId: $shipment->order_id,
                 userId: $shipment->user_id,
-                trackingCode: $shipment->tracking_number,
                 orderPublicCode: $orderPublicCode,
+            ),
+            ShipmentStatus::HandedToPost => new ShipmentHandedToPostEvent(
+                orderId: $shipment->order_id,
+                userId: $shipment->user_id,
+                orderPublicCode: $orderPublicCode,
+                trackingCode: $shipment->tracking_number,
+            ),
+            ShipmentStatus::OutForDelivery => new ShipmentOutForDeliveryEvent(
+                orderId: $shipment->order_id,
+                userId: $shipment->user_id,
+                orderPublicCode: $orderPublicCode,
+                deliveryCode: $deliveryCode,
             ),
             ShipmentStatus::Delivered => new ShipmentDeliveredEvent(
                 orderId: $shipment->order_id,

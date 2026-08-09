@@ -21,5 +21,5 @@ interface UserRepositoryInterface
 
     public function refresh(User $user): User;
 
-    public function paginate(int $perPage = 15): LengthAwarePaginator;
+    public function paginate(int $perPage = 15, ?string $role = null): LengthAwarePaginator;
 }

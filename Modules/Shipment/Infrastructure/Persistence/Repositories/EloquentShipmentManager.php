@@ -9,6 +9,7 @@ use DateTimeInterface;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use Modules\Identity\Domain\Contracts\IdentityManagerInterface;
 use Modules\Shipment\Application\Services\DeliverySlotAvailabilityService;
 use Modules\Shipment\Application\Services\ShipmentTransitionService;
 use Modules\Shipment\Domain\Contracts\LocalDeliveryEligibilityInterface;
@@ -32,6 +33,7 @@ class EloquentShipmentManager implements ShipmentManagerInterface
         private readonly LocalDeliveryEligibilityInterface $eligibility,
         private readonly DeliverySlotAvailabilityService $availability,
         private readonly ShipmentTransitionService $transitions,
+        private readonly IdentityManagerInterface $identity,
     ) {}
 
     public function getAvailableMethods(int $userId, ?int $addressId): array
@@ -309,36 +311,28 @@ class EloquentShipmentManager implements ShipmentManagerInterface
     }
 
     /**
-     * Load an address owned by the user and return an immutable snapshot with
-     * resolved province/city names. Throws ValidationException when not owned.
+     * Load an address owned by the user and return the immutable snapshot that
+     * gets frozen onto the shipment. Throws ValidationException when the address
+     * does not exist or belongs to somebody else — one message for both, so an
+     * id cannot be probed for existence.
+     *
+     * The lookup goes through Identity's contract rather than a query against its
+     * tables, which is also what lets the snapshot carry the map coordinates: the
+     * courier navigates to the pin the customer dropped at checkout, and later
+     * edits to that address never move an already-placed delivery.
      *
      * @return array<string, mixed>
      */
     private function findOwnedAddress(int $userId, int $addressId): array
     {
-        $address = DB::table('addresses')->where('id', $addressId)->first();
+        $snapshot = $this->identity->getOwnedAddressSnapshot($userId, $addressId);
 
-        if ($address === null || (int) $address->user_id !== $userId) {
+        if ($snapshot === null) {
             throw ValidationException::withMessages([
                 'address_id' => ['The selected address is invalid.'],
             ]);
         }
 
-        $provinceName = $address->province_id
-            ? optional(DB::table('provinces')->where('id', $address->province_id)->first())->name
-            : null;
-        $cityName = $address->city_id
-            ? optional(DB::table('cities')->where('id', $address->city_id)->first())->name
-            : null;
-
-        return [
-            'address_id' => $address->id,
-            'province_id' => $address->province_id,
-            'province_name' => $provinceName,
-            'city_id' => $address->city_id,
-            'city_name' => $cityName,
-            'postal_code' => $address->postal_code,
-            'address' => $address->address,
-        ];
+        return $snapshot->toArray();
     }
 }

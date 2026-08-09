@@ -5,10 +5,16 @@ declare(strict_types=1);
 namespace Modules\Shipment\Infrastructure\Persistence\Seeders;
 
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Event;
+use Modules\Identity\Domain\Contracts\IdentityManagerInterface;
 use Modules\Order\Domain\Models\Order;
+use Modules\Shipment\Application\Actions\AssignShipmentDeliveryAction;
+use Modules\Shipment\Application\Actions\MarkShipmentDeliveredAction;
 use Modules\Shipment\Application\Services\ShipmentTransitionService;
 use Modules\Shipment\Domain\Contracts\ShipmentManagerInterface;
+use Modules\Shipment\Domain\Enums\ShipmentMethodType;
 use Modules\Shipment\Domain\Enums\ShipmentStatus;
+use Modules\Shipment\Domain\Events\ShipmentOutForDeliveryEvent;
 use Modules\Shipment\Domain\Models\Shipment;
 use Modules\Shipment\Domain\Workflows\ShipmentWorkflowResolver;
 
@@ -41,10 +47,27 @@ class ShipmentSampleDataSeeder extends Seeder
         private readonly ShipmentManagerInterface $shipments,
         private readonly ShipmentTransitionService $transitions,
         private readonly ShipmentWorkflowResolver $workflows,
+        private readonly IdentityManagerInterface $identity,
+        private readonly AssignShipmentDeliveryAction $assignDelivery,
+        private readonly MarkShipmentDeliveredAction $markDelivered,
     ) {}
+
+    /**
+     * Handoff codes overheard from the dispatch event, keyed by order id.
+     *
+     * This seeder stands in for the customer's inbox: the plaintext code exists
+     * only on ShipmentOutForDeliveryEvent and in the SMS, never in the database, so listening
+     * for it is the *only* way a demo delivery can be completed — exactly as a real
+     * courier can only be let in by a customer reading their text message out.
+     *
+     * @var array<int, string>
+     */
+    private array $capturedCodes = [];
 
     public function run(): void
     {
+        $this->listenForDeliveryCodes();
+
         $orders = Order::where('notes', 'like', '[demo]%(shipment: %')->get();
 
         if ($orders->isEmpty()) {
@@ -91,13 +114,40 @@ class ShipmentSampleDataSeeder extends Seeder
      * The route is discovered from the workflow itself (breadth-first over its own
      * transition map), so a workflow change reshapes the demo data instead of breaking it.
      *
+     * The two local-delivery rules are honoured rather than worked around: a driver
+     * is assigned through the real assignment action before dispatch, and delivery
+     * is closed through the real completion action with the real handoff code —
+     * captured from the dispatch event exactly as the customer captures it from
+     * their SMS. Demo data that skipped either would be demo data that cannot
+     * happen in production.
+     *
      * @return int transitions applied
      */
     private function driveTo(int $shipmentId, string $methodType, ShipmentStatus $target): int
     {
         $path = $this->shortestPath($methodType, ShipmentStatus::Pending, $target);
+        $isLocal = $methodType === ShipmentMethodType::LocalDelivery->value;
+
+        if ($isLocal && $this->pathReaches($path, ShipmentStatus::OutForDelivery)) {
+            $this->assignDemoDriver($shipmentId);
+        }
 
         foreach ($path as $step) {
+            if ($isLocal && $step === ShipmentStatus::Delivered) {
+                $shipment = Shipment::findOrFail($shipmentId);
+
+                $this->markDelivered->handle(
+                    shipmentId: $shipmentId,
+                    operatorId: (int) $shipment->assigned_delivery_user_id,
+                    receiverName: self::ATTRIBUTES['delivered']['receiver_name'] ?? null,
+                    note: 'Seeded demo transition.',
+                    code: $this->capturedCodes[$shipment->order_id] ?? null,
+                    mustBeAssignedTo: (int) $shipment->assigned_delivery_user_id,
+                );
+
+                continue;
+            }
+
             $this->transitions->transition(
                 shipmentId: $shipmentId,
                 to: $step,
@@ -108,6 +158,45 @@ class ShipmentSampleDataSeeder extends Seeder
         }
 
         return count($path);
+    }
+
+    /**
+     * Added once for the whole run and never removed — removing it would take the
+     * real notification listeners for the same event down with it.
+     */
+    private function listenForDeliveryCodes(): void
+    {
+        Event::listen(ShipmentOutForDeliveryEvent::class, function (ShipmentOutForDeliveryEvent $event): void {
+            if ($event->deliveryCode !== null) {
+                $this->capturedCodes[$event->orderId] = $event->deliveryCode;
+            }
+        });
+    }
+
+    /** @param ShipmentStatus[] $path */
+    private function pathReaches(array $path, ShipmentStatus $status): bool
+    {
+        return in_array($status, $path, true);
+    }
+
+    /**
+     * Assign the first configured delivery worker through the production action,
+     * so the demo shipment carries a real assignment history row and produces the
+     * same courier notification a real assignment would.
+     */
+    private function assignDemoDriver(int $shipmentId): void
+    {
+        $driverId = $this->identity->getDeliveryUserIds()[0] ?? null;
+
+        if ($driverId === null) {
+            $this->command->warn('No delivery worker exists — run the Identity seeders first.');
+
+            return;
+        }
+
+        $assignedBy = $this->identity->getAdminUserIds()[0] ?? $driverId;
+
+        $this->assignDelivery->handle($shipmentId, $driverId, $assignedBy);
     }
 
     /**

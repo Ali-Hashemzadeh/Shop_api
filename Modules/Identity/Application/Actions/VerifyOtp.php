@@ -49,7 +49,7 @@ class VerifyOtp
             'message' => 'Logged in successfully.',
             'user' => $user,
             'token' => $token,
-            'has_password' => (!empty($user->password)) ? true : false,
+            'has_password' => (! empty($user->password)) ? true : false,
         ];
     }
 }

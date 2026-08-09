@@ -28,6 +28,12 @@ class ShipmentResource extends JsonResource
             'address' => $dto->addressSnapshot,
             'delivery_slot' => $dto->deliverySlotSnapshot,
             'pickup_location' => $dto->pickupLocationSnapshot,
+            // Assignment state, so an operator screen can show who is carrying this
+            // and whether a handoff code is outstanding. The code itself and its
+            // hash are never exposed on any surface.
+            'assigned_delivery_user_id' => $dto->assignedDeliveryUserId,
+            'delivery_assigned_at' => $dto->deliveryAssignedAt?->toISOString(),
+            'has_active_delivery_code' => $dto->hasActiveDeliveryCode,
             'carrier_name' => $dto->carrierName,
             'tracking_number' => $dto->trackingNumber,
             'receiver_name' => $dto->receiverName,

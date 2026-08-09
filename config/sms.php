@@ -35,9 +35,20 @@ return [
             'templates' => [
                 'payment_success' => env('SMS_SMSIR_PAYMENT_SUCCESS_TEMPLATE_ID'),
                 'order_cancelled' => env('SMS_SMSIR_ORDER_CANCELLED_TEMPLATE_ID'),
+                'admin_order_paid' => env('SMS_SMSIR_ADMIN_ORDER_PAID_TEMPLATE_ID'),
                 'shipment_preparing' => env('SMS_SMSIR_SHIPMENT_PREPARING_TEMPLATE_ID'),
-                'shipment_sent' => env('SMS_SMSIR_SHIPMENT_SENT_TEMPLATE_ID'),
+                'shipment_ready_for_pickup' => env('SMS_SMSIR_SHIPMENT_READY_FOR_PICKUP_TEMPLATE_ID'),
+                'shipment_handed_to_post' => env('SMS_SMSIR_SHIPMENT_HANDED_TO_POST_TEMPLATE_ID'),
+                'shipment_out_for_delivery' => env('SMS_SMSIR_SHIPMENT_OUT_FOR_DELIVERY_TEMPLATE_ID'),
                 'shipment_delivered' => env('SMS_SMSIR_SHIPMENT_DELIVERED_TEMPLATE_ID'),
+                'shipment_assigned_delivery' => env('SMS_SMSIR_SHIPMENT_ASSIGNED_DELIVERY_TEMPLATE_ID'),
+
+                // Legacy, no longer sent: `shipment_sent` covered both postal handoff
+                // and local dispatch before they were split. Kept mapped so an
+                // existing .env stays valid during the changeover; safe to delete
+                // once no deployment references them.
+                'shipment_sent' => env('SMS_SMSIR_SHIPMENT_SENT_TEMPLATE_ID'),
+                'shipment_sent_delivery_code' => env('SMS_SMSIR_SHIPMENT_SENT_DELIVERY_CODE_TEMPLATE_ID'),
             ],
         ],
 

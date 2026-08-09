@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use Modules\Shipment\Infrastructure\Http\Controllers\AdminDeliverySlotController;
 use Modules\Shipment\Infrastructure\Http\Controllers\AdminDeliveryWorkingPeriodController;
 use Modules\Shipment\Infrastructure\Http\Controllers\AdminShipmentController;
+use Modules\Shipment\Infrastructure\Http\Controllers\DeliveryShipmentController;
 use Modules\Shipment\Infrastructure\Http\Controllers\ShipmentController;
 use Modules\Shipment\Infrastructure\Http\Controllers\ShipmentMethodController;
 
@@ -24,6 +25,23 @@ Route::middleware(['api', 'auth:sanctum', 'throttle:api'])
             ->whereNumber('order');
     });
 
+// ── Delivery worker ─────────────────────────────────────────────────────────────
+// A separate surface from /admin/shipments on purpose: couriers are scoped to
+// their own assignments and must never inherit the admin shipment resource.
+Route::middleware(['api', 'auth:sanctum', 'throttle:api'])
+    ->prefix('api/v1/delivery')
+    ->group(function () {
+        Route::get('shipments', [DeliveryShipmentController::class, 'index']);
+        Route::get('shipments/{publicCode}', [DeliveryShipmentController::class, 'show'])
+            ->where('publicCode', '[A-Za-z0-9\-]+');
+
+        // The confirmation endpoint carries a second, far stricter limiter on top
+        // of `api`: a six-digit code only stays secret while guessing is expensive.
+        Route::post('shipments/{publicCode}/mark-delivered', [DeliveryShipmentController::class, 'markDelivered'])
+            ->where('publicCode', '[A-Za-z0-9\-]+')
+            ->middleware('throttle:delivery-confirm');
+    });
+
 // ── Admin / operator ────────────────────────────────────────────────────────────
 Route::middleware(['api', 'auth:sanctum', 'throttle:api'])
     ->prefix('api/v1/admin')
@@ -37,7 +55,10 @@ Route::middleware(['api', 'auth:sanctum', 'throttle:api'])
             Route::post('hand-to-post', [AdminShipmentController::class, 'handToPost']);
             Route::post('mark-ready-for-dispatch', [AdminShipmentController::class, 'markReadyForDispatch']);
             Route::post('mark-out-for-delivery', [AdminShipmentController::class, 'markOutForDelivery']);
-            Route::post('mark-delivered', [AdminShipmentController::class, 'markDelivered']);
+            Route::post('assign-delivery', [AdminShipmentController::class, 'assignDelivery']);
+            Route::post('resend-delivery-code', [AdminShipmentController::class, 'resendDeliveryCode']);
+            Route::post('mark-delivered', [AdminShipmentController::class, 'markDelivered'])
+                ->middleware('throttle:delivery-confirm');
             Route::post('mark-delivery-failed', [AdminShipmentController::class, 'markDeliveryFailed']);
             Route::post('reschedule', [AdminShipmentController::class, 'reschedule']);
             Route::post('mark-ready-for-pickup', [AdminShipmentController::class, 'markReadyForPickup']);

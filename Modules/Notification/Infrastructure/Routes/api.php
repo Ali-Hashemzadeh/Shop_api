@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Modules\Notification\Infrastructure\Http\Controllers\AdminNotificationRecipientController;
 use Modules\Notification\Infrastructure\Http\Controllers\NotificationController;
 
 Route::middleware(['api', 'auth:sanctum', 'throttle:api'])
@@ -9,4 +10,12 @@ Route::middleware(['api', 'auth:sanctum', 'throttle:api'])
         Route::get('/', [NotificationController::class, 'index']);
         Route::post('/{notification}/read', [NotificationController::class, 'markAsRead'])
             ->whereNumber('notification');
+    });
+
+// ── Admin / operator ────────────────────────────────────────────────────────────
+Route::middleware(['api', 'auth:sanctum', 'throttle:api'])
+    ->prefix('api/v1/admin/notifications')
+    ->group(function () {
+        Route::get('admin-order-paid-sms-recipients', [AdminNotificationRecipientController::class, 'indexOrderPaid']);
+        Route::put('admin-order-paid-sms-recipients', [AdminNotificationRecipientController::class, 'updateOrderPaid']);
     });

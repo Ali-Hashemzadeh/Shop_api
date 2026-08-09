@@ -18,6 +18,8 @@ class RolesAndPermissionsSeeder extends Seeder
             'profile.update-own',
             'profile.view-any',
             'profile.update-any',
+            'profile.create-any',
+            'profile.assign-delivery',
             'address.view-own',
             'address.create-own',
             'address.update-own',
@@ -42,6 +44,16 @@ class RolesAndPermissionsSeeder extends Seeder
 
         $adminRole = Role::firstOrCreate([
             'name' => 'admin',
+            'guard_name' => 'web',
+        ]);
+
+        // A delivery worker is a shopper who *also* delivers, so the role is created
+        // empty here and only ever carries the extra fulfillment permissions granted
+        // by ShipmentPermissionsSeeder. Customer permissions are never duplicated
+        // into it — every delivery worker keeps the `customer` role alongside this
+        // one, and syncing permissions here would wipe Shipment's grants on reseed.
+        Role::firstOrCreate([
+            'name' => 'delivery',
             'guard_name' => 'web',
         ]);
 

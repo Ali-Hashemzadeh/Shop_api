@@ -14,7 +14,9 @@ Route::prefix('profile')->group(function () {
 Route::prefix('admin')->group(function () {
     Route::prefix('users')->group(function () {
         Route::get('/', [AdminUserController::class, 'index']);
+        Route::post('/', [AdminUserController::class, 'store']);
         Route::get('/show/{user}', [AdminUserController::class, 'show']);
+        Route::post('/{user}/delivery-role', [AdminUserController::class, 'grantDeliveryRole']);
         Route::get('/{user}/addresses', [AdminAddressController::class, 'indexForUser']);
         Route::patch('/{user}', [AdminUserController::class, 'update']);
         Route::delete('/{user}', [AdminUserController::class, 'destroy']);

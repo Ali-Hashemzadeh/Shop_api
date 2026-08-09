@@ -23,6 +23,14 @@ class ShipmentDTO
         public readonly ?array $addressSnapshot,
         public readonly ?array $deliverySlotSnapshot,
         public readonly ?array $pickupLocationSnapshot,
+        public readonly ?int $assignedDeliveryUserId,
+        public readonly ?Carbon $deliveryAssignedAt,
+        /**
+         * Whether a handoff code is currently outstanding — never the code, never
+         * the hash. It is the only thing an operator screen needs in order to know
+         * that "resend" is meaningful, and the most that can be said safely.
+         */
+        public readonly bool $hasActiveDeliveryCode,
         public readonly ?string $carrierName,
         public readonly ?string $trackingNumber,
         public readonly ?string $receiverName,
@@ -54,6 +62,9 @@ class ShipmentDTO
             addressSnapshot: $shipment->address_snapshot,
             deliverySlotSnapshot: $shipment->delivery_slot_snapshot,
             pickupLocationSnapshot: $shipment->pickup_location_snapshot,
+            assignedDeliveryUserId: $shipment->assigned_delivery_user_id !== null ? (int) $shipment->assigned_delivery_user_id : null,
+            deliveryAssignedAt: $shipment->delivery_assigned_at,
+            hasActiveDeliveryCode: $shipment->delivery_verification_code_hash !== null,
             carrierName: $shipment->carrier_name,
             trackingNumber: $shipment->tracking_number,
             receiverName: $shipment->receiver_name,

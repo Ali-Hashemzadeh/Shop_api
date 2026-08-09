@@ -7,6 +7,7 @@ namespace Modules\Shipment\Infrastructure\Http\Controllers;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Modules\Shipment\Application\Actions\AssignShipmentDeliveryAction;
 use Modules\Shipment\Application\Actions\ConfirmPickupAction;
 use Modules\Shipment\Application\Actions\HandShipmentToPostAction;
 use Modules\Shipment\Application\Actions\MarkDeliveryFailedAction;
@@ -16,10 +17,12 @@ use Modules\Shipment\Application\Actions\MarkPostalShipmentReadyAction;
 use Modules\Shipment\Application\Actions\MarkShipmentDeliveredAction;
 use Modules\Shipment\Application\Actions\MarkShipmentOutForDeliveryAction;
 use Modules\Shipment\Application\Actions\RescheduleLocalDeliveryAction;
+use Modules\Shipment\Application\Actions\ResendDeliveryVerificationCodeAction;
 use Modules\Shipment\Application\Actions\StartPreparingShipmentAction;
 use Modules\Shipment\Application\Services\ShipmentTransitionService;
 use Modules\Shipment\Domain\DTOs\ShipmentDTO;
 use Modules\Shipment\Domain\Models\Shipment;
+use Modules\Shipment\Infrastructure\Http\Requests\AssignDeliveryRequest;
 use Modules\Shipment\Infrastructure\Http\Requests\HandToPostRequest;
 use Modules\Shipment\Infrastructure\Http\Requests\IndexAdminShipmentsRequest;
 use Modules\Shipment\Infrastructure\Http\Requests\MarkDeliveredRequest;
@@ -110,6 +113,11 @@ class AdminShipmentController extends Controller
         return $this->respond($dto);
     }
 
+    /**
+     * An admin may complete any shipment without being its assignee, but for a
+     * local delivery the customer's code is still required — the action enforces
+     * that, so there is no admin-shaped hole in the confirmation guarantee.
+     */
     public function markDelivered(MarkDeliveredRequest $request, string $publicCode, MarkShipmentDeliveredAction $action): JsonResponse
     {
         $dto = $action->handle(
@@ -118,9 +126,33 @@ class AdminShipmentController extends Controller
             receiverName: $request->input('receiver_name'),
             note: $request->input('note'),
             proofMediaId: $request->filled('proof_media_id') ? (int) $request->input('proof_media_id') : null,
+            code: $request->input('code'),
+            mustBeAssignedTo: null,
         );
 
         return $this->respond($dto);
+    }
+
+    public function assignDelivery(AssignDeliveryRequest $request, string $publicCode, AssignShipmentDeliveryAction $action): JsonResponse
+    {
+        $dto = $action->handle(
+            shipmentId: $this->resolve($publicCode)->id,
+            deliveryUserId: (int) $request->validated('delivery_user_id'),
+            assignedByUserId: (int) $request->user()->id,
+        );
+
+        return $this->respond($dto);
+    }
+
+    /**
+     * Reissue the customer's handoff code. The old code is retired in the same
+     * breath — the stored value is a hash, so there is no old plaintext to recover.
+     */
+    public function resendDeliveryCode(Request $request, string $publicCode, ResendDeliveryVerificationCodeAction $action): JsonResponse
+    {
+        $this->guard($request, 'shipment.delivery.resend-code');
+
+        return $this->respond($action->handle($this->resolve($publicCode)->id));
     }
 
     public function markDeliveryFailed(MarkDeliveryFailedRequest $request, string $publicCode, MarkDeliveryFailedAction $action): JsonResponse

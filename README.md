@@ -80,7 +80,9 @@ and address search is always scoped to the authenticated user. See `AGENT_CONTEX
 Handles OTP + password authentication, user profiles, multi-role RBAC, shipping provinces/cities, and user delivery addresses.
 
 - **Key entities:** `User`, `Address` (province/city/postal code plus a map pin — `latitude`/`longitude`, required on create, and an optional `map_address` line), `Province`, `City`
-- **Public contract:** `IdentityManagerInterface::isAdmin(int $userId): bool` — the only authorized way for other modules to check user privilege without importing Identity's models.
+- **Public contract:** `IdentityManagerInterface` — `isAdmin()`, `isDeliveryUser()`, `getUserSummary()`, `getAdminUserIds()`, `getDeliveryUserIds()`, `getOwnedAddressSnapshot()`. The only authorized way for other modules to ask about a user or freeze one of their addresses without importing Identity's models.
+- **Roles:** `admin`, `customer`, and `delivery`. **A delivery worker holds `customer` *and* `delivery`** — a courier is a shopper who also delivers, so the `delivery` role carries only the two extra fulfillment permissions and never duplicates the customer bundle. Granting it is additive and idempotent; it never removes an existing role.
+- **Admin user management:** `POST /api/v1/admin/users` creates a `customer` or `delivery` account (`admin` is not creatable). No password or temporary secret is issued — the phone number is the credential, and the new account signs in through the existing OTP flow, optionally adding a password later. `POST /api/v1/admin/users/{user}/delivery-role` turns an existing account into a delivery worker (a phone number is required), and `GET /api/v1/admin/users?role=delivery` lists drivers. Permissions: `profile.create-any`, `profile.assign-delivery` — and creating somebody directly as `delivery` needs both, so the create endpoint is not a way around the grant endpoint.
 - **Auth pattern:** Split-auth onboarding over Sanctum tokens + Spatie roles (`admin`, `customer`). `POST /api/v1/auth/check-user` (`phone_number`) returns `is_new_user` + `allowed_methods`: unknown phones get `["otp"]` (must verify ownership first), known phones get `["password", "otp"]`. `POST /api/v1/otp/request` (phone `09xxxxxxxxx`, optional `name`) finds-or-creates the user and sends a hashed, short-TTL code; `POST /api/v1/otp/verify` (phone, code, device_name, optional `name`/`password`) consumes the single-use code, optionally sets a hashed password, and mints a token. Sign-up and login are the same flow.
 - **Password login:** `POST /api/v1/auth/login-password` (`phone_number`, `password`, optional `device_name`) verifies via `Hash::check()` and mints a Sanctum token. Bad phone / wrong password / password-less account all return a generic **401 `Invalid credentials.`** Passwords are stored hashed (`Hash::make()`); accounts may remain OTP-only (`password` is nullable).
 - **OTP delivery:** swappable `OtpSenderInterface`, bound to a log-only `LogOtpSender` placeholder until the SMS gateway is connected. Tunables in `config/identity.php` → `otp.length`, `otp.ttl_minutes`.
@@ -145,8 +147,11 @@ Fulfillment lifecycle from checkout through payment to delivery, postal handoff,
 - **Slots:** `shipment:generate-delivery-slots` generates dated cinema-session slots from recurring working periods (idempotent, scheduled daily). `POST /admin/shipment/delivery-slots/generate` triggers the identical run on demand — useful in local development, where no cron is running. Remaining capacity = capacity − admin-reserved − active reservations; overbooking prevented with row locks.
 - **Default working hours** are seeded (Sat–Thu, 09:00–13:00 and 16:00–21:00, Friday closed) as *starting values only* — the admin owns the schedule from there via `/admin/shipment/delivery-working-periods`, and re-seeding never overwrites those edits.
 - **Working-period admin API:** GET/POST /api/v1/admin/shipment/delivery-working-periods and PATCH/DELETE /api/v1/admin/shipment/delivery-working-periods/{id} manage recurring weekday templates through existing shipment.slot.view-admin / shipment.slot.manage permissions. Same-day periods cannot overlap; changes affect future generation and do not rewrite existing dated slots.
-- **Endpoints:** customer `GET /shipment/methods`, `/shipment/delivery-slots`, `/shipments/{publicCode}`, `/orders/{order}/shipment`; admin `/admin/shipments*` (business-action POSTs) and `/admin/shipment/delivery-slots*`.
-- **Authorization:** permission-based (`shipment.*`); customer gets `shipment.view-own`, admin gets all.
+- **Delivery workers (local delivery only):** an admin assigns a driver with `POST /admin/shipments/{publicCode}/assign-delivery` (`shipment.delivery.assign`). Postal and pickup shipments cannot be assigned, nor can finished ones; the target must hold the `delivery` role and have a phone. Reassignment is allowed and audited in `shipment_delivery_assignments` (the open row is the current assignment); re-assigning the current driver is a silent no-op. The driver is notified in-app **and** by SMS. **A local delivery cannot be dispatched without an assigned driver** (422) — on the first dispatch and on the retry after a failed attempt alike. Admin still owns dispatch.
+- **Customer handoff code:** when a local delivery goes out, the customer is SMSed a random numeric code (6 digits by default, `SHIPMENT_DELIVERY_CODE_LENGTH`). **Only a hash is stored** — the code appears in no API response, no stored notification, no history row, and no log. The courier must quote it back to close the delivery, and so must an admin: there is no code-free override. A failed attempt invalidates the code and the next attempt issues a new one, so a code is only ever good for the attempt it belongs to. Lost codes are *reissued*, never recovered: `POST /admin/shipments/{publicCode}/resend-delivery-code` (`shipment.delivery.resend-code`) mints a new one, retires the old one, and sends SMS only. Guessing is bounded by a dedicated `delivery-confirm` rate limiter keyed by driver + shipment (`SHIPMENT_DELIVERY_CONFIRM_MAX_ATTEMPTS`, default 5/min → 429).
+- **Driver API:** `GET /api/v1/delivery/shipments`, `GET /api/v1/delivery/shipments/{publicCode}`, `POST /api/v1/delivery/shipments/{publicCode}/mark-delivered` (`code` required). Couriers never use `/admin/shipments`. Every query is scoped to their own assigned local deliveries, so another driver's shipment returns **404** rather than 403 — indistinguishable from one that does not exist. The response carries the frozen address (including the map pin), the delivery slot, and the customer's name and phone; it carries no order totals, coupon, or payment data.
+- **Endpoints:** customer `GET /shipment/methods`, `/shipment/delivery-slots`, `/shipments/{publicCode}`, `/orders/{order}/shipment`; delivery worker `/delivery/shipments*`; admin `/admin/shipments*` (business-action POSTs) and `/admin/shipment/delivery-slots*`.
+- **Authorization:** permission-based (`shipment.*`); customer gets `shipment.view-own`, delivery gets `shipment.delivery.view-assigned` + `shipment.delivery.complete-assigned` only, admin gets all.
 
 ### Notification (Infrastructure ready — business events pending)
 In-app notification storage plus multi-channel delivery. The module owns no business copy: the caller supplies the type, title, message, `data` payload, and channel list.
@@ -162,12 +167,25 @@ In-app notification storage plus multi-channel delivery. The module owns no busi
 
 | Event | Raised when | Customer | Admin |
 |---|---|---|---|
-| `OrderPaidEvent` | `markAsPaid` completes a real pending → paid transition | in-app + SMS | in-app |
+| `OrderPaidEvent` | `markAsPaid` completes a real pending → paid transition | in-app + SMS | in-app for every admin; **SMS only for the admins selected** in the recipient settings |
 | `PaymentFailedEvent` | server-side gateway verification rejects the payment | in-app | — |
 | `OrderCancelledEvent` | customer or operator cancels an order | in-app + SMS | — |
 | `ShipmentPreparingStartedEvent` | shipment enters `preparing` | SMS | — |
-| `ShipmentSentEvent` | shipment reaches `handed_to_post` or `out_for_delivery` | in-app + SMS | — |
+| `ShipmentReadyForPickupEvent` | pickup shipment reaches `ready_for_pickup` | in-app + SMS | — |
+| `ShipmentHandedToPostEvent` | postal shipment reaches `handed_to_post` | in-app + SMS (order code + tracking code) | — |
+| `ShipmentOutForDeliveryEvent` | local delivery reaches `out_for_delivery` | in-app + **one** SMS (order code + handoff code) | — |
 | `ShipmentDeliveredEvent` | shipment reaches `delivered` | in-app + SMS | — |
+
+> The generic `ShipmentSentEvent` was split into the three shipment events above. The
+> `shipment_sent` notification **type** stays defined because rows written before the split
+> still carry it — history is never rewritten — but nothing raises it any more.
+
+**Who gets the paid-order admin SMS** is configured, not hard-coded. `GET`/`PUT
+/api/v1/admin/notifications/admin-order-paid-sms-recipients` (permission
+`notification.admin-sms-recipients.manage`) list every admin with a selected flag and replace
+the selected set. Storage is Notification-owned (`notification_recipient_preferences`, keyed
+by user + notification type + channel); `user_id` is a loose Identity reference and admin-ness
+is verified through `IdentityManagerInterface`, never an FK or a join.
 
 - **Transaction-safe:** every listener implements `ShouldHandleEventsAfterCommit`, so a rolled-back business transaction sends nothing. Repeat payment callbacks cannot duplicate notifications — the already-paid early return in `markAsPaid` means the event is never re-dispatched.
 - **Silent by design:** the internal pending-order replacement during checkout, TTL order expiry, and in-store `picked_up`.
@@ -276,6 +294,32 @@ Auto-generated interactive API docs are available at `/docs/api` when running lo
 |---|---|---|---|
 | `GET` | `/notifications` | `notification.view-own` | Caller's notifications, newest first, paginated |
 | `POST` | `/notifications/{id}/read` | `notification.mark-read-own` | Mark own notification read (403 for another user's) |
+
+### Admin Users (`auth:sanctum` + `profile.*` required)
+
+| Method | Endpoint | Permission | Description |
+|---|---|---|---|
+| `GET` | `/admin/users` | `profile.view-any` | Paginated users; `?role=customer\|delivery\|admin` picks a cohort (e.g. drivers) |
+| `POST` | `/admin/users` | `profile.create-any` (+ `profile.assign-delivery` for `role=delivery`) | Create a `customer` or `delivery` account — no password issued; the account signs in by OTP |
+| `POST` | `/admin/users/{user}/delivery-role` | `profile.assign-delivery` | Make an existing account a delivery worker — additive, idempotent, phone required |
+
+### Delivery worker (`auth:sanctum` + `shipment.delivery.*-assigned` required)
+
+Scoped to the caller's own assigned local deliveries; anything else is `404`, never `403`.
+
+| Method | Endpoint | Permission | Description |
+|---|---|---|---|
+| `GET` | `/delivery/shipments` | `shipment.delivery.view-assigned` | My assigned deliveries (paginated, optional `status`) |
+| `GET` | `/delivery/shipments/{publicCode}` | `shipment.delivery.view-assigned` | One assigned delivery: address + map pin, slot, customer contact |
+| `POST` | `/delivery/shipments/{publicCode}/mark-delivered` | `shipment.delivery.complete-assigned` | Close the delivery with the customer's `code` (rate-limited; wrong code → 422) |
+
+### Admin Shipments — delivery assignment (`auth:sanctum` + `shipment.delivery.*`)
+
+| Method | Endpoint | Permission | Description |
+|---|---|---|---|
+| `POST` | `/admin/shipments/{publicCode}/assign-delivery` | `shipment.delivery.assign` | Assign/reassign a driver (local delivery only) |
+| `POST` | `/admin/shipments/{publicCode}/resend-delivery-code` | `shipment.delivery.resend-code` | Issue a **new** handoff code and SMS it to the customer |
+| `POST` | `/admin/shipments/{publicCode}/mark-delivered` | `shipment.delivery.complete` | Close a delivery; for local delivery the customer's `code` is still required |
 
 ---
 

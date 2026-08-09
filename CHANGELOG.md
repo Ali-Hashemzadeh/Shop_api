@@ -2,6 +2,103 @@
 
 ## [Unreleased]
 
+### Feature — Notification refinements: opt-in admin SMS, and one event per fulfillment moment
+
+**The paid-order admin SMS is now opt-in per admin.** Every admin still receives the in-app
+`admin_order_paid` notification — that part is not configurable and did not change. What changed
+is that the SMS goes only to the admins selected in the new recipient settings: a shop with a
+dozen admin accounts does not have a dozen people who want a text at 3am for every order.
+
+- **Storage is Notification-owned and deliberately generic.** New `notification_recipient_preferences`
+  table (`user_id`, `notification_type`, `channel`, `enabled`, unique on the triple). No
+  business-specific column was added to `users`, and no FK crosses into Identity — `user_id` is a
+  loose reference, exactly like `notifications.user_id`. The current use is
+  `admin_order_paid` + `sms`; the shape supports the next one without a migration.
+- **Admin API:** `GET` / `PUT /api/v1/admin/notifications/admin-order-paid-sms-recipients`, behind
+  the new `notification.admin-sms-recipients.manage` permission (seeded to `admin` only, not to
+  `customer`). `GET` returns **every** admin with an `enabled` flag so the picker renders from one
+  call; `PUT` takes `{"user_ids": [...]}` and makes that the entire selected set. An empty array is
+  valid and means "nobody". The replacement is transactional and idempotent, and an admin removed
+  from the list keeps a row flipped to `enabled: false` rather than being deleted — the row is the
+  record of a decision.
+- **Membership is verified through the contract, not a query.** Every submitted id is checked with
+  `IdentityManagerInterface::isAdmin()` and a non-admin id is a **422 on `user_ids.{i}`** before any
+  write, so a partially applied list can never be observed. `exists:users,id` would have been both a
+  cross-module query and the wrong question — a customer id exists too.
+- **Selected admins go through the normal per-user pipeline.** No `getAdminPhones()`, no bulk send:
+  each recipient gets one `NotificationRequestDTO` on `[database, sms]`, so phone resolution,
+  provider skips, delivery auditing and failure isolation all keep working. An admin with no phone
+  is *skipped* and the order still pays.
+- **Its own template, `admin_order_paid`** (`OrderId` = order public code) — never the customer's
+  `payment_success` receipt, which says something else entirely.
+- New `IdentityManagerInterface::getAdminUserSummaries()`: the same audience as `getAdminUserIds()`,
+  but with the name and phone the picker has to show, resolved in one query instead of one per id.
+
+**`ShipmentSentEvent` is split into one event per business moment.** Handing a parcel to the post
+office and putting a courier on the road were never the same thing to say to a customer, and only
+one of them has a tracking number to say it with. New primitives-only
+`ShipmentReadyForPickupEvent`, `ShipmentHandedToPostEvent` and `ShipmentOutForDeliveryEvent`
+replace it, each with a dedicated `NotificationType`, `NotificationTemplate` and after-commit listener.
+
+- **Pickup finally gets told.** `ready_for_pickup` now notifies the customer in-app **and** by SMS
+  (`shipment_ready_for_pickup`, `OrderId`). It is the one message a pickup customer needs, because
+  nothing will arrive at their door to remind them. `picked_up` stays silent — they are standing there.
+- **Postal handoff** raises `shipment_handed_to_post` (`OrderId` + `TrackingCode`) with postal wording
+  and no reference to any delivery code. `handed_to_post` remains the last postal state this system
+  tracks.
+- **Local dispatch** raises `shipment_out_for_delivery` (`OrderId` + `DeliveryCode`) — still exactly
+  **one** customer SMS carrying both, and still no code of any kind in the stored notification's
+  `data`. The verification-code machinery from the delivery-worker release is reused unchanged:
+  same minting inside the transition lock, same hash-only storage, same per-attempt invalidation.
+  The resend path now uses this same template, because a resend repeats that one message with a
+  fresh code rather than saying something new.
+- **Legacy is left alone.** `NotificationType::SHIPMENT_SENT` and the `shipment_sent` /
+  `shipment_sent_delivery_code` templates stay defined and mapped in `config/sms.php` so existing
+  `.env` files and historical notification rows keep working; nothing emits them any more.
+  Historical notifications are never rewritten, so a client must still render `shipment_sent`.
+- New env keys: `SMS_SMSIR_ADMIN_ORDER_PAID_TEMPLATE_ID`,
+  `SMS_SMSIR_SHIPMENT_READY_FOR_PICKUP_TEMPLATE_ID`, `SMS_SMSIR_SHIPMENT_HANDED_TO_POST_TEMPLATE_ID`,
+  `SMS_SMSIR_SHIPMENT_OUT_FOR_DELIVERY_TEMPLATE_ID`. **Deployment note:** an operator who had
+  `SMS_SMSIR_SHIPMENT_SENT*` configured must point the new keys at their templates — an unset
+  template id skips the message rather than failing it, so the symptom is silence, not an error.
+
+**Frontend handoff:** `FRONTEND_NOTIFICATION_SMS_CHANGES.html` documents the new admin settings API,
+the three new notification types, and the UI branching that has to change.
+
+### Feature — Delivery workers: assignment, driver API, and customer handoff codes
+
+**A new `delivery` role, always held *alongside* `customer`.** A courier is a shopper who also delivers, so the role carries only the two extra fulfillment permissions and never a copy of the customer bundle. Granting it is additive — `POST /api/v1/admin/users/{user}/delivery-role` adds `delivery`, ensures `customer`, and touches nothing else; calling it twice changes nothing. A user with no phone number is refused: they could neither receive an assignment SMS nor sign in through the OTP flow.
+
+**Admin user creation.** New `POST /api/v1/admin/users` creates a `customer` or a `delivery` account. No password and no temporary secret is minted — the phone number *is* the credential, and the account signs in through the existing OTP flow and may add a password itself afterwards. `admin` is not a creatable role, and creating somebody directly as `delivery` requires `profile.assign-delivery` **in addition to** `profile.create-any`, so the create endpoint cannot be used as a way around the grant endpoint. `GET /api/v1/admin/users` gained `?role=`, and admin user responses now expose `roles`; `GET /me` additionally exposes `permissions`, since authorization here is permission-based and a role name alone does not tell a client what it may do.
+
+**Only shipments are assignable, never orders**, and only local deliveries: a postal parcel is handed to a carrier and a pickup is collected at the counter. `POST /api/v1/admin/shipments/{publicCode}/assign-delivery` also rejects finished (delivered/cancelled) shipments, non-delivery users, and delivery users without a phone. Reassignment is first-class — it closes the open row in the new append-only `shipment_delivery_assignments` table and opens another under one transaction, so the audit never shows two people holding one shipment at the same moment. Assigning the driver who already holds it is a no-op that notifies nobody.
+
+**The assigned courier is told twice: in-app and by SMS**, via the new primitives-only `ShipmentAssignedToDeliveryEvent` and an after-commit listener, so a rolled-back assignment pages nobody. The message carries the shipment code, order code and delivery slot — never the customer's full address, and never the handoff code.
+
+**A local delivery can no longer be dispatched without a driver.** Enforced inside `ShipmentTransitionService`, under the same row lock as the transition, so it covers both routes into `out_for_delivery` (first dispatch and the retry from `delivery_failed`) rather than one controller. Returns **422** on `assigned_delivery_user_id`. Admin still owns dispatch; couriers have no dispatch, mark-ready, fail, reschedule, or slot permission.
+
+**Dispatch mints a customer handoff code — and only a hash is ever stored.** A CSPRNG numeric code (length configurable, clamped 4–10, default 6) is generated inside the transaction that performs the transition, hashed onto the shipment, and handed to the customer by SMS. The plaintext is never written to the shipment, shipment history, a stored notification, a log, or any API response — admin, customer, and driver surfaces alike. Nothing about it derives from an id, phone number, public code, or the clock.
+
+- **One SMS, not two.** The existing `ShipmentSentEvent` gained a transient `deliveryCode`; postal shipments keep the plain `shipment_sent` template while local delivery uses the new `shipment_sent_delivery_code` template. The stored in-app notification is unchanged and still contains no code.
+- **Validity is scoped to the current attempt, not to a clock.** `out_for_delivery → delivery_failed` clears the hash immediately, so the code the customer is holding stops working; the next dispatch mints a fresh one and the previous code can never be replayed. Completion consumes the hash and stamps `delivery_verification_verified_at`.
+- **Reassignment mid-delivery does not regenerate the code** — the customer is not asked to memorise a new number. The outgoing courier loses API access at once and the incoming one is notified.
+
+**Completion requires the customer's code from everyone.** Driver and admin routes converge on one `MarkShipmentDeliveredAction`; only assignment authorization differs. An admin need not be the assignee but still needs the code — a code-free admin override would quietly undo the guarantee the code exists for. Verification and the transition share one transaction and one row lock, and everything downstream (`delivered_at`, history, order → completed, slot reservation, `ShipmentDeliveredEvent`) stays exactly where it already lived. Pickup and postal completion are untouched.
+
+**A dedicated driver surface** at `GET /api/v1/delivery/shipments`, `GET /api/v1/delivery/shipments/{publicCode}`, and `POST /api/v1/delivery/shipments/{publicCode}/mark-delivered`. Couriers never touch `/admin/shipments`. Every lookup starts from a query scoped to `assigned_delivery_user_id` + `local_delivery`, so a shipment held by another driver is **404**, indistinguishable from one that never existed — a 403 would confirm it exists and turn the public-code space into an oracle. A focused resource carries the address snapshot, slot, customer name and phone, timestamps, and status; it carries no order totals, coupon or payment data, and no verification hash.
+
+**Recovery and brute-force protection.** `POST /api/v1/admin/shipments/{publicCode}/resend-delivery-code` (local delivery, `out_for_delivery` only) mints a *new* code and retires the old one — with only a hash stored there is no old plaintext to recover, and that is the point. Resend is SMS-only and raises no second "shipment sent" in-app notification. A new `delivery-confirm` rate limiter keyed by *caller + shipment* guards both completion routes (default 5/min, `SHIPMENT_DELIVERY_CONFIRM_MAX_ATTEMPTS`): exhausting one delivery's budget cannot strand the rest of a round. Every wrong code returns the same generic 422 on `code` — never a hint that it was stale, expired, or nearly right.
+
+**Address snapshots now carry the map pin.** `EloquentShipmentManager` reads the checkout address through the new `IdentityManagerInterface::getOwnedAddressSnapshot()` + `AddressSnapshotDTO` instead of querying Identity's tables directly, and the frozen snapshot gained `latitude`, `longitude`, and `map_address` so a courier navigates to the pin rather than parsing a street line. Historical orders and shipments are never rewritten, and editing an address later never moves an already-placed delivery.
+
+**Permissions:** `profile.create-any`, `profile.assign-delivery` (Identity) and `shipment.delivery.{assign,view-assigned,complete-assigned,resend-code}` (Shipment). `delivery` receives `view-assigned` + `complete-assigned` only; `admin` receives the rest plus every existing shipment permission, unchanged.
+
+**Migrations:** `shipments` gains `assigned_delivery_user_id` (indexed, loose Identity reference), `delivery_assigned_at`, `delivery_verification_code_hash`, `delivery_verification_issued_at`, `delivery_verification_verified_at`; new `shipment_delivery_assignments` table (same-module FK on `shipment_id`, loose Identity ids). No cross-module foreign keys. Verified on SQLite via `migrate:fresh --seed`.
+
+**Seeders** create a demo courier holding `customer + delivery` and run demo local deliveries through the *real* business path — assignment via `AssignShipmentDeliveryAction`, completion via `MarkShipmentDeliveredAction` with the real code, overheard from the dispatch event exactly as a customer reads it off their SMS. Nothing bypasses the new invariants to make seeding pass.
+
+**Tests:** 47 new tests across `DeliveryRoleTest`, `DeliveryAssignmentTest`, `DeliveryWorkerApiTest`, and `DeliveryVerificationCodeTest`, plus updates to the existing local-delivery workflow and notification tests. Suite: **688 tests**, with the one pre-existing unrelated `ProfileTest::authenticated_user_can_update_profile` failure unchanged.
+
 ### Feature — Promotion module: automatic discounts, coupons, and campaigns
 
 **New bounded context `Modules/Promotion/`** (provider registered in `bootstrap/providers.php` *before* Catalog, since Catalog resolves it for live pricing). Promotion imports no Catalog/Cart/Order/Payment model, contract, or DTO — everything it needs arrives as primitives or its own DTOs, so the dependency arrow stays one-way and no cycle forms.

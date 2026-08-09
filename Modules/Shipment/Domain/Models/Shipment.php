@@ -17,6 +17,8 @@ class Shipment extends Model
         'public_code',
         'order_id',
         'user_id',
+        'assigned_delivery_user_id',
+        'delivery_assigned_at',
         'method_code',
         'method_title',
         'method_type',
@@ -40,6 +42,17 @@ class Shipment extends Model
         'receiver_name',
         'failure_reason',
         'note',
+        'delivery_verification_code_hash',
+        'delivery_verification_issued_at',
+        'delivery_verification_verified_at',
+    ];
+
+    /**
+     * The verification hash never leaves the module: it is hidden here so it can
+     * never be serialised by accident, and no DTO or resource carries it either.
+     */
+    protected $hidden = [
+        'delivery_verification_code_hash',
     ];
 
     protected $casts = [
@@ -55,11 +68,19 @@ class Shipment extends Model
         'ready_for_pickup_at' => 'datetime',
         'picked_up_at' => 'datetime',
         'cancelled_at' => 'datetime',
+        'delivery_assigned_at' => 'datetime',
+        'delivery_verification_issued_at' => 'datetime',
+        'delivery_verification_verified_at' => 'datetime',
     ];
 
     public function histories(): HasMany
     {
         return $this->hasMany(ShipmentStatusHistory::class)->orderBy('id');
+    }
+
+    public function deliveryAssignments(): HasMany
+    {
+        return $this->hasMany(ShipmentDeliveryAssignment::class)->orderBy('id');
     }
 
     /**

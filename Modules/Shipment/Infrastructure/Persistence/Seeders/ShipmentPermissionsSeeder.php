@@ -24,6 +24,10 @@ class ShipmentPermissionsSeeder extends Seeder
             'shipment.delivery.complete',
             'shipment.delivery.fail',
             'shipment.delivery.reschedule',
+            'shipment.delivery.assign',
+            'shipment.delivery.view-assigned',
+            'shipment.delivery.complete-assigned',
+            'shipment.delivery.resend-code',
             'shipment.pickup.mark-ready',
             'shipment.pickup.complete',
             'shipment.slot.view-admin',
@@ -42,6 +46,19 @@ class ShipmentPermissionsSeeder extends Seeder
         // Customers may view their own shipments.
         $customerRole = Role::where('name', 'customer')->where('guard_name', 'web')->first();
         $customerRole?->givePermissionTo(['shipment.view-own']);
+
+        // A delivery worker sees and completes only the shipments assigned to them.
+        // Deliberately absent: shipment.view-admin (the whole store's shipments),
+        // dispatch/mark-ready/fail/reschedule (the store decides what goes out and
+        // when), and every slot permission. A courier carries parcels; they do not
+        // run fulfillment. `shipment.view-own` is not granted here either — it comes
+        // with the `customer` role every delivery worker also holds, for their own
+        // shopping.
+        $deliveryRole = Role::where('name', 'delivery')->where('guard_name', 'web')->first();
+        $deliveryRole?->givePermissionTo([
+            'shipment.delivery.view-assigned',
+            'shipment.delivery.complete-assigned',
+        ]);
 
         app()[PermissionRegistrar::class]->forgetCachedPermissions();
     }

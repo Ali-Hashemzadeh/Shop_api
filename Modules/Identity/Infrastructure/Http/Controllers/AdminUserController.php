@@ -6,9 +6,13 @@ use App\Http\Controllers\Controller;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
+use Modules\Identity\Application\Actions\CreateUserByAdmin;
+use Modules\Identity\Application\Actions\GrantDeliveryRole;
 use Modules\Identity\Application\Actions\UpdateProfile;
 use Modules\Identity\Domain\Models\User;
+use Modules\Identity\Infrastructure\Http\Requests\GrantDeliveryRoleRequest;
 use Modules\Identity\Infrastructure\Http\Requests\ListProfileRequest;
+use Modules\Identity\Infrastructure\Http\Requests\StoreUserRequest;
 use Modules\Identity\Infrastructure\Http\Requests\UpdateProfileRequest;
 use Modules\Identity\Infrastructure\Http\Resources\AddressResource;
 use Modules\Identity\Infrastructure\Http\Resources\UserResource;
@@ -28,7 +32,7 @@ class AdminUserController extends Controller
 
         $perPage = (int) ($request->validated('per_page', 15));
 
-        $paginatedUsers = $users->paginate($perPage);
+        $paginatedUsers = $users->paginate($perPage, $request->validated('role'));
 
         return response()->json([
             'data' => UserResource::collection($paginatedUsers->items()),
@@ -46,6 +50,33 @@ class AdminUserController extends Controller
                 'prev' => $paginatedUsers->previousPageUrl(),
                 'next' => $paginatedUsers->nextPageUrl(),
             ],
+        ]);
+    }
+
+    /**
+     * Create a shopper or a delivery worker. Authorization (including the extra
+     * delivery grant) lives in StoreUserRequest, so an unauthorized caller is
+     * rejected with 403 before validation runs.
+     */
+    public function store(StoreUserRequest $request, CreateUserByAdmin $action): JsonResponse
+    {
+        $user = $action->handle($request->validated());
+
+        return response()->json([
+            'message' => 'User created successfully.',
+            'data' => new UserResource($user),
+        ], 201);
+    }
+
+    /**
+     * Grant delivery responsibility to an existing account, keeping every role it
+     * already holds. Idempotent — a second call returns the same 200.
+     */
+    public function grantDeliveryRole(GrantDeliveryRoleRequest $request, User $user, GrantDeliveryRole $action): JsonResponse
+    {
+        return response()->json([
+            'message' => 'Delivery role granted successfully.',
+            'data' => new UserResource($action->handle($user)),
         ]);
     }
 

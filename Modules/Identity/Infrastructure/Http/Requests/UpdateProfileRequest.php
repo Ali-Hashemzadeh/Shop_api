@@ -33,7 +33,6 @@ class UpdateProfileRequest extends FormRequest
             ],
         ];
 
-
         return $rules;
     }
 }

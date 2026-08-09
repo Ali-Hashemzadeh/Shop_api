@@ -347,10 +347,22 @@
       <td>customer <span class="pill sms">sms</span></td>
     </tr>
     <tr>
-      <td><code>ShipmentSentEvent</code><br><span class="pill">Shipment</span></td>
-      <td><code>ShipmentTransitionService</code> → <code>handed_to_post</code> or <code>out_for_delivery</code></td>
-      <td><code>SendShipmentSentNotifications</code></td>
+      <td><code>ShipmentReadyForPickupEvent</code><br><span class="pill">Shipment</span></td>
+      <td><code>ShipmentTransitionService</code> → <code>ready_for_pickup</code></td>
+      <td><code>SendShipmentReadyForPickupNotifications</code></td>
       <td>customer <span class="pill db">db</span> <span class="pill sms">sms</span></td>
+    </tr>
+    <tr>
+      <td><code>ShipmentHandedToPostEvent</code><br><span class="pill">Shipment</span></td>
+      <td><code>ShipmentTransitionService</code> → <code>handed_to_post</code></td>
+      <td><code>SendShipmentHandedToPostNotifications</code></td>
+      <td>customer <span class="pill db">db</span> <span class="pill sms">sms</span> — <code>OrderId</code> + <code>TrackingCode</code></td>
+    </tr>
+    <tr>
+      <td><code>ShipmentOutForDeliveryEvent</code><br><span class="pill">Shipment</span></td>
+      <td><code>ShipmentTransitionService</code> → <code>out_for_delivery</code> (first dispatch and the retry)</td>
+      <td><code>SendShipmentOutForDeliveryNotifications</code></td>
+      <td>customer <span class="pill db">db</span> + <em>one</em> <span class="pill sms">sms</span> — <code>OrderId</code> + <code>DeliveryCode</code></td>
     </tr>
     <tr>
       <td><code>ShipmentDeliveredEvent</code><br><span class="pill">Shipment</span></td>
@@ -361,14 +373,17 @@
   </table>
 
   <h3>Why shipment events live in one place</h3>
-  <p>Shipment already funnels every status change through a single atomic primitive, <code>ShipmentTransitionService::transition()</code>. Hooking in there — one <code>announce()</code> call driven by a <code>match</code> on the new status — means every workflow (postal, local delivery, pickup) is covered without touching a single action class, and no new status was invented. <code>handed_to_post</code> and <code>out_for_delivery</code> both raise <code>ShipmentSentEvent</code> because the module <em>already</em> maps both to the order status <code>shipped</code>.</p>
+  <p>Shipment already funnels every status change through a single atomic primitive, <code>ShipmentTransitionService::transition()</code>. Hooking in there — one <code>announce()</code> call driven by a <code>match</code> on the new status — means every workflow (postal, local delivery, pickup) is covered without touching a single action class, and no new status was invented.</p>
+  <p><strong>One event per business moment.</strong> <code>handed_to_post</code> and <code>out_for_delivery</code> originally shared a single <code>ShipmentSentEvent</code>, because the module maps both to the order status <code>shipped</code>. That grouping was right for the order summary and wrong for the customer: handing a parcel to the post office gives them a tracking number to follow, while putting a courier on the road gives them a handoff code to guard. The two now raise separate events with separate copy, and <code>ready_for_pickup</code> — previously silent — raises a third. <code>ShipmentSentEvent</code> is gone; the <code>shipment_sent</code> notification <em>type</em> remains defined only because rows written before the split still carry it.</p>
 
   <h3>Registration</h3>
   <pre><span class="cmt">// NotificationServiceProvider::boot()</span>
 Event::listen(OrderPaidEvent::class, SendOrderPaidNotifications::class);
 Event::listen(OrderCancelledEvent::class, SendOrderCancelledNotifications::class);
 Event::listen(PaymentFailedEvent::class, SendPaymentFailedNotification::class);
-<span class="cmt">// …plus the three shipment events</span></pre>
+<span class="cmt">// …plus the five shipment events (preparing, ready-for-pickup,</span>
+<span class="cmt">// handed-to-post, out-for-delivery, delivered), the courier</span>
+<span class="cmt">// assignment event, and the delivery-code resend event</span></pre>
   <p>This is the only file where the two sides meet. Laravel's auto-discovery only scans <code>app/Listeners</code>, so module listeners are registered explicitly — which is better anyway: one file tells you the entire integration surface.</p>
 
   <h2 id="timing">Timing &amp; Idempotency</h2>

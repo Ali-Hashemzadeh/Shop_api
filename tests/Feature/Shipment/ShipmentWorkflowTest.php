@@ -102,13 +102,20 @@ class ShipmentWorkflowTest extends ShipmentTestCase
     {
         $shipment = $this->paidShipment('local_delivery');
         $code = $this->code($shipment);
+        $driver = $this->createDeliveryUser();
 
         $this->postJson("/api/v1/admin/shipments/{$code}/start-preparing")->assertOk();
         $this->postJson("/api/v1/admin/shipments/{$code}/mark-ready-for-dispatch")->assertOk()->assertJsonPath('status', 'ready_for_dispatch');
-        $this->postJson("/api/v1/admin/shipments/{$code}/mark-out-for-delivery")->assertOk()->assertJsonPath('status', 'out_for_delivery');
+        $this->postJson("/api/v1/admin/shipments/{$code}/assign-delivery", ['delivery_user_id' => $driver->id])->assertOk();
+
+        $handoffCode = $this->captureDeliveryCode(
+            fn () => $this->postJson("/api/v1/admin/shipments/{$code}/mark-out-for-delivery")
+                ->assertOk()->assertJsonPath('status', 'out_for_delivery'),
+        );
         $this->assertDatabaseHas('orders', ['id' => $shipment->order_id, 'status' => 'shipped']);
 
-        $this->postJson("/api/v1/admin/shipments/{$code}/mark-delivered", ['receiver_name' => 'Ali'])
+        // Even an admin needs the customer's code to close a local delivery.
+        $this->postJson("/api/v1/admin/shipments/{$code}/mark-delivered", ['receiver_name' => 'Ali', 'code' => $handoffCode])
             ->assertOk()->assertJsonPath('status', 'delivered');
 
         $this->assertDatabaseHas('orders', ['id' => $shipment->order_id, 'status' => 'completed']);
@@ -120,9 +127,11 @@ class ShipmentWorkflowTest extends ShipmentTestCase
     {
         $shipment = $this->paidShipment('local_delivery');
         $code = $this->code($shipment);
+        $driver = $this->createDeliveryUser();
 
         $this->postJson("/api/v1/admin/shipments/{$code}/start-preparing")->assertOk();
         $this->postJson("/api/v1/admin/shipments/{$code}/mark-ready-for-dispatch")->assertOk();
+        $this->postJson("/api/v1/admin/shipments/{$code}/assign-delivery", ['delivery_user_id' => $driver->id])->assertOk();
         $this->postJson("/api/v1/admin/shipments/{$code}/mark-out-for-delivery")->assertOk();
 
         $this->postJson("/api/v1/admin/shipments/{$code}/mark-delivery-failed", [])

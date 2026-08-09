@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Frontend — Delivery Workers &amp; Handoff Codes</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #222537;
+      --border: #2e3147;
+      --text: #e2e4f0;
+      --muted: #8b8fa8;
+      --accent: #7c6af7;
+      --ok: #22c55e;
+      --info: #3b82f6;
+      --warnc: #f59e0b;
+      --bad: #ef4444;
+      --cyan: #22d3ee;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); display: flex; min-height: 100vh; }
+
+    nav { width: 275px; min-width: 275px; background: var(--surface); border-right: 1px solid var(--border); height: 100vh; overflow-y: auto; position: sticky; top: 0; padding: 24px 0; }
+    nav .logo { padding: 0 20px 24px; font-size: 15px; font-weight: 700; color: var(--accent); border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+    nav .logo span { color: var(--muted); font-weight: 400; font-size: 12px; display: block; margin-top: 3px; }
+    nav a { display: block; padding: 6px 20px; font-size: 13px; color: var(--muted); text-decoration: none; border-left: 2px solid transparent; transition: all .15s; }
+    nav a:hover { color: var(--text); background: var(--surface2); }
+    nav .section-label { padding: 16px 20px 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: #4a4d65; }
+
+    main { flex: 1; padding: 48px 56px; max-width: 1060px; }
+    h1 { font-size: 32px; font-weight: 700; margin-bottom: 8px; }
+    .subtitle { font-size: 15px; color: var(--muted); margin-bottom: 28px; }
+    h2 { font-size: 22px; font-weight: 700; margin: 56px 0 20px; padding-top: 56px; border-top: 1px solid var(--border); }
+    h2:first-of-type { border-top: none; padding-top: 0; margin-top: 32px; }
+    h3 { font-size: 15px; font-weight: 600; margin: 30px 0 10px; color: var(--text); }
+    h4 { font-size: 13px; margin: 20px 0 8px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+    p { font-size: 14px; line-height: 1.7; color: var(--muted); margin-bottom: 12px; }
+    p strong, li strong, td strong { color: var(--text); }
+    ul, ol { font-size: 14px; color: var(--muted); padding-left: 20px; line-height: 1.9; margin-bottom: 12px; }
+    a { color: var(--accent); }
+
+    code { font-family: 'SF Mono', Menlo, Consolas, monospace; font-size: 12.5px; background: var(--surface2); padding: 2px 6px; border-radius: 4px; color: var(--cyan); }
+    pre { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px 18px; overflow-x: auto; margin-bottom: 16px; }
+    pre code { background: none; padding: 0; color: var(--text); font-size: 12.5px; line-height: 1.65; white-space: pre; }
+    .del { color: #f87171; }
+    .add { color: #4ade80; }
+    .cmt { color: #5b5f7a; }
+
+    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 13px; display: block; overflow-x: auto; }
+    th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    th { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; font-weight: 700; white-space: nowrap; }
+    td { color: var(--muted); }
+    tbody tr:hover { background: var(--surface); }
+
+    .callout { border-left: 3px solid var(--accent); background: var(--surface); border-radius: 0 8px 8px 0; padding: 14px 18px; margin-bottom: 18px; font-size: 13.5px; line-height: 1.7; color: var(--muted); }
+    .callout.warn { border-left-color: var(--warnc); }
+    .callout.bad { border-left-color: var(--bad); }
+    .callout.ok { border-left-color: var(--ok); }
+    .callout strong { color: var(--text); }
+
+    .pill { display: inline-block; font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 20px; text-transform: uppercase; letter-spacing: .05em; }
+    .pill.get { background: rgba(59,130,246,.15); color: #60a5fa; }
+    .pill.post { background: rgba(34,197,94,.15); color: #4ade80; }
+    .pill.new { background: rgba(124,106,247,.18); color: #a78bfa; }
+    .pill.brk { background: rgba(239,68,68,.15); color: #f87171; }
+    .pill.safe { background: rgba(34,197,94,.15); color: #4ade80; }
+
+    .chk { list-style: none; padding-left: 0; }
+    .chk li { padding-left: 26px; position: relative; margin-bottom: 7px; }
+    .chk li::before { content: "\2610"; position: absolute; left: 4px; color: var(--accent); font-size: 14px; }
+
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; margin-bottom: 16px; }
+    .flow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 18px; font-size: 12px; }
+    .flow .step { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 6px 11px; color: var(--text); font-family: 'SF Mono', Menlo, Consolas, monospace; }
+    .flow .step.gate { border-color: var(--warnc); color: #fbbf24; }
+    .flow .arw { color: #4a4d65; }
+    @media (max-width: 1100px) { body { display: block; } nav { display: none; } main { padding: 32px 20px; } }
+  </style>
+</head>
+<body>
+<nav>
+  <div class="logo">Admin Frontend<span>Delivery workers · Handoff codes</span></div>
+  <div class="section-label">Start here</div>
+  <a href="#tldr">What changed &amp; impact</a>
+  <a href="#breaking">Breaking changes</a>
+  <a href="#rules">Rules to internalize</a>
+  <div class="section-label">Screen by screen</div>
+  <a href="#users-list">Users list</a>
+  <a href="#users-create">Create user</a>
+  <a href="#users-detail">User detail</a>
+  <a href="#ship-detail">Shipment detail</a>
+  <a href="#assign">Assign a driver</a>
+  <a href="#dispatch">Dispatch</a>
+  <a href="#complete">Mark delivered</a>
+  <a href="#resend">Resend the code</a>
+  <div class="section-label">Reference</div>
+  <a href="#endpoints">Endpoint reference</a>
+  <a href="#errors">Error handling</a>
+  <a href="#driver-app">Driver app (separate)</a>
+  <a href="#checklist">Full checklist</a>
+  <a href="#gotchas">Gotchas &amp; FAQ</a>
+</nav>
+
+<main>
+  <h1>Admin Frontend Guide</h1>
+  <p class="subtitle">Delivery-worker accounts, shipment assignment, and the customer handoff code — what the admin panel must add, and why each rule exists.</p>
+
+  <div class="callout ok">
+    <strong>Nothing existing breaks.</strong> Every change here is additive: new endpoints, new response fields, and one new
+    <em>precondition</em> on a button you already have. If you ship nothing, the panel keeps working — except that
+    <strong>“Mark out for delivery” and “Mark delivered” on local deliveries will start returning 422</strong>. Those two are
+    the required work; everything else is new capability.
+  </div>
+
+  <h2 id="tldr">What changed &amp; impact</h2>
+
+  <table>
+    <thead><tr><th>Area</th><th>Change</th><th>Impact on admin UI</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>Roles</strong></td>
+        <td>New <code>delivery</code> role, always held <em>alongside</em> <code>customer</code></td>
+        <td>Show role chips; never render a single “role” value for a user</td>
+      </tr>
+      <tr>
+        <td><strong>Users list</strong></td>
+        <td><code>?role=</code> filter; <code>roles[]</code> on every user object</td>
+        <td>New filter control + a driver picker</td>
+      </tr>
+      <tr>
+        <td><strong>Users</strong></td>
+        <td><span class="pill new">new</span> <code>POST /admin/users</code> — create a customer or a driver</td>
+        <td>New “Create user” form. No password field — see below</td>
+      </tr>
+      <tr>
+        <td><strong>Users</strong></td>
+        <td><span class="pill new">new</span> <code>POST /admin/users/{id}/delivery-role</code></td>
+        <td>“Make delivery worker” action on user detail</td>
+      </tr>
+      <tr>
+        <td><strong>Shipments</strong></td>
+        <td><span class="pill new">new</span> <code>assign-delivery</code> + assignment fields on the shipment payload</td>
+        <td>Driver column, assign/reassign modal</td>
+      </tr>
+      <tr>
+        <td><strong>Shipments</strong></td>
+        <td><span class="pill brk">gate</span> Local delivery cannot be dispatched without a driver</td>
+        <td>Disable “Mark out for delivery” until assigned</td>
+      </tr>
+      <tr>
+        <td><strong>Shipments</strong></td>
+        <td><span class="pill brk">gate</span> <code>mark-delivered</code> now requires <code>code</code> for local delivery</td>
+        <td>Add a code input to the completion dialog — <em>admins are not exempt</em></td>
+      </tr>
+      <tr>
+        <td><strong>Shipments</strong></td>
+        <td><span class="pill new">new</span> <code>resend-delivery-code</code></td>
+        <td>“Resend code” button, enabled only while out for delivery</td>
+      </tr>
+      <tr>
+        <td><strong>Auth</strong></td>
+        <td><code>GET /me</code> now returns <code>roles[]</code> and <code>permissions[]</code></td>
+        <td>Gate menus on <code>permissions</code>, not on role names</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2 id="breaking">Breaking changes</h2>
+
+  <p>Two, both on buttons that already exist, both scoped to <strong>local delivery only</strong>. Postal and pickup
+  flows are untouched.</p>
+
+  <div class="card">
+    <h3>1. “Mark out for delivery” → 422 without an assigned driver</h3>
+    <pre><code><span class="cmt">// POST /api/v1/admin/shipments/bds-K92XMQ/mark-out-for-delivery</span>
+<span class="cmt">// 422</span>
+{
+  "message": "Assign a delivery worker before dispatching this shipment.",
+  "errors": {
+    "assigned_delivery_user_id": ["Assign a delivery worker before dispatching this shipment."]
+  }
+}</code></pre>
+    <p><strong>Fix:</strong> disable the dispatch button while <code>assigned_delivery_user_id === null</code> on a
+    <code>local_delivery</code> shipment, and point the operator at the assign action. This applies to the retry path too —
+    dispatching again after a failed attempt needs a driver just as much as the first attempt did.</p>
+  </div>
+
+  <div class="card">
+    <h3>2. “Mark delivered” → 422 without the customer’s code</h3>
+    <pre><code><span class="cmt">// POST /api/v1/admin/shipments/bds-K92XMQ/mark-delivered   { "receiver_name": "Ali" }</span>
+<span class="cmt">// 422</span>
+{
+  "message": "The delivery code is incorrect.",
+  "errors": { "code": ["The delivery code is incorrect."] }
+}</code></pre>
+    <p><strong>Fix:</strong> add a required <code>code</code> field to the completion dialog for
+    <code>method_type === "local_delivery"</code>. Leave the dialog exactly as it is for pickup
+    (<code>confirm-pickup</code>) and postal (<code>hand-to-post</code>) — neither uses a code.</p>
+  </div>
+
+  <div class="callout warn">
+    <strong>There is no admin override, and that is deliberate.</strong> An admin can complete a delivery they were never
+    assigned to — but they still need the number the customer was texted. A code-free admin path would quietly undo the only
+    thing the code proves: that somebody at the address actually received the parcel. If an operator is stuck, the answer is
+    <a href="#resend">resend</a>, not bypass.
+  </div>
+
+  <h2 id="rules">Rules to internalize</h2>
+
+  <h3>A delivery worker is a shopper who also delivers</h3>
+  <p>Drivers hold <strong>two</strong> roles: <code>customer</code> <em>and</em> <code>delivery</code>. They keep their own
+  cart, orders and addresses. Never model “role” as a single-select on a user, never render “Delivery” as if it replaced
+  “Customer”, and never send a request that would sync roles down to one.</p>
+
+  <h3>Only shipments get assigned — and only local ones</h3>
+  <p>Assignment lives on the <strong>shipment</strong>, not the order. Postal parcels are handed to a carrier and pickups are
+  collected at the counter, so both reject assignment with a 422. Show the driver column and the assign action only when
+  <code>method_type === "local_delivery"</code>.</p>
+
+  <h3>The code is never readable — only reissuable</h3>
+  <p>Only a hash is stored server-side. No endpoint returns the code, and none ever will: not the admin shipment payload, not
+  the shipment history, not the customer’s in-app notifications. Do not build a “show code” affordance, and do not put the
+  code into any log, analytics event, or error report you forward.</p>
+
+  <h3>A code belongs to one delivery attempt</h3>
+  <p>Marking a delivery failed invalidates the code immediately. The next dispatch issues a new one and SMSes it. A code from
+  a previous attempt will never work again — so if an operator is reading an old SMS thread over the phone, the correct
+  action is to resend.</p>
+
+  <h3>Reassignment does not change the customer’s code</h3>
+  <p>Swapping drivers mid-delivery keeps the code the customer already has. The outgoing driver loses API access instantly;
+  the incoming one is notified in-app and by SMS. Do not warn the operator that reassigning will invalidate anything — it
+  does not.</p>
+
+  <h2 id="users-list">Users list</h2>
+
+  <p><code>GET /api/v1/admin/users</code> gained a <code>role</code> query parameter and every user object now carries
+  <code>roles[]</code>.</p>
+
+  <pre><code>GET /api/v1/admin/users?role=delivery&amp;per_page=25
+
+{
+  "data": [
+    {
+      "id": 87,
+      "name": "Ali",
+      "last_name": "Ahmadi",
+      "email": "ali@example.com",
+      "phone": "09123456789",
+      <span class="add">"roles": ["customer", "delivery"],</span>
+      "created_at": "...",
+      "updated_at": "..."
+    }
+  ],
+  "meta": { "current_page": 1, "last_page": 1, "per_page": 25, "total": 1, "from": 1, "to": 1 },
+  "links": { "first": "...", "last": "...", "prev": null, "next": null }
+}</code></pre>
+
+  <table>
+    <thead><tr><th>Param</th><th>Values</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td><code>role</code></td><td><code>admin</code> · <code>customer</code> · <code>delivery</code></td><td>Anything else → 422. Omit for “all”</td></tr>
+      <tr><td><code>per_page</code></td><td>1–100 (default 15)</td><td>Unchanged</td></tr>
+    </tbody>
+  </table>
+
+  <p><strong>Build:</strong> a role filter chip row, a <code>roles[]</code> chip cell, and — most importantly — a reusable
+  <em>driver picker</em> backed by <code>?role=delivery</code>. The assign modal needs it, so build it as a shared component
+  rather than inline.</p>
+
+  <div class="callout">
+    <strong>Note the pagination envelope differs from the rest of the API.</strong> This endpoint returns
+    <code>{data, meta, links}</code> assembled by hand, not the standard Laravel paginator body. It has always been this way;
+    just do not copy your Catalog list adapter over verbatim.
+  </div>
+
+  <h2 id="users-create">Create user</h2>
+
+  <p><span class="pill post">post</span> <code>/api/v1/admin/users</code> — permission <code>profile.create-any</code>,
+  <strong>plus</strong> <code>profile.assign-delivery</code> when <code>role=delivery</code>.</p>
+
+  <pre><code>POST /api/v1/admin/users
+{
+  "name": "Ali",
+  "last_name": "Ahmadi",
+  "phone": "09123456789",
+  "email": "ali@example.com",
+  "role": "delivery"
+}
+
+<span class="cmt">// 201</span>
+{ "message": "User created successfully.", "data": { "id": 87, ..., "roles": ["customer", "delivery"] } }</code></pre>
+
+  <table>
+    <thead><tr><th>Field</th><th>Rules</th><th>UI note</th></tr></thead>
+    <tbody>
+      <tr><td><code>name</code></td><td>required, ≤120</td><td>—</td></tr>
+      <tr><td><code>last_name</code></td><td>optional, ≤120</td><td>—</td></tr>
+      <tr><td><code>phone</code></td><td>required, <code>09xxxxxxxxx</code>, unique</td><td>Mask the input; surface “already registered” inline</td></tr>
+      <tr><td><code>email</code></td><td>optional, unique</td><td>—</td></tr>
+      <tr><td><code>role</code></td><td>required, <code>customer</code> | <code>delivery</code></td><td>Two options only</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout warn">
+    <strong>Do not add a password field, and do not offer to generate one.</strong> The API issues no password and no
+    temporary secret. The phone number <em>is</em> the credential: the new account signs in through the ordinary OTP flow and
+    can set its own password afterwards from its own session. Copy for the success state should say something like
+    “Ali can now sign in with 0912…&nbsp;using a one-time code.”
+  </div>
+
+  <div class="callout bad">
+    <strong><code>admin</code> is not creatable here</strong> — sending it returns 422 on <code>role</code>. Do not put it in
+    the dropdown “for completeness”; there is no admin-creation endpoint to fall back to.
+  </div>
+
+  <h3>Two permissions, not one</h3>
+  <p>An operator holding only <code>profile.create-any</code> can create customers but gets <strong>403</strong> the moment
+  they submit <code>role: "delivery"</code>. Gate the <em>option</em>, not just the error: if the current user lacks
+  <code>profile.assign-delivery</code>, hide or disable the “Delivery” choice rather than letting them fill in a form that
+  cannot succeed.</p>
+
+  <h2 id="users-detail">User detail — grant the delivery role</h2>
+
+  <p><span class="pill post">post</span> <code>/api/v1/admin/users/{user}/delivery-role</code> — permission
+  <code>profile.assign-delivery</code>. Empty body.</p>
+
+  <pre><code>POST /api/v1/admin/users/87/delivery-role      <span class="cmt">// no body</span>
+
+<span class="cmt">// 200</span>
+{ "message": "Delivery role granted successfully.", "data": { ..., "roles": ["customer", "delivery"] } }</code></pre>
+
+  <ul>
+    <li><strong>Additive.</strong> Every role the user already had is preserved, and <code>customer</code> is ensured.</li>
+    <li><strong>Idempotent.</strong> Clicking twice is harmless and returns the same 200 — no need to disable the button on an
+      already-delivery user, though hiding it is tidier.</li>
+    <li><strong>Phone required.</strong> A user with no phone gets <strong>422</strong> on <code>phone</code>:
+      <em>“A delivery worker must have a phone number.”</em> Surface this next to the phone field and offer to edit the
+      profile first — a courier with no number can neither receive an assignment SMS nor sign in.</li>
+  </ul>
+
+  <p>There is no “revoke” endpoint in this release. If the panel needs one, it is a backend change, not something to fake by
+  syncing roles from the client.</p>
+
+  <h2 id="ship-detail">Shipment detail — new fields</h2>
+
+  <p><code>GET /api/v1/admin/shipments/{publicCode}</code> (and every admin action response, which returns the same resource)
+  gained three fields:</p>
+
+  <pre><code>{
+  "id": "bds-K92XMQ",
+  "method_type": "local_delivery",
+  "status": "out_for_delivery",
+  "status_label": "Out for delivery",
+  <span class="add">"assigned_delivery_user_id": 87,</span>
+  <span class="add">"delivery_assigned_at": "2026-08-09T12:04:11.000000Z",</span>
+  <span class="add">"has_active_delivery_code": true,</span>
+  "address": {
+    "address_id": 12, "province_name": "Tehran", "city_name": "Tehran",
+    "postal_code": "1234512345", "address": "123 Test Street",
+    <span class="add">"latitude": "35.7000000", "longitude": "51.4000000",</span>
+    <span class="add">"map_address": "Pinned at 123 Test Street"</span>
+  },
+  "delivery_slot": { "slot_id": 3, "date": "2026-08-11", "starts_at": "15:00:00", "ends_at": "16:30:00" },
+  ...
+}</code></pre>
+
+  <table>
+    <thead><tr><th>Field</th><th>Type</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td><code>assigned_delivery_user_id</code></td><td><code>int | null</code></td><td>Current assignee. Resolve the name via the users endpoint or your driver picker cache</td></tr>
+      <tr><td><code>delivery_assigned_at</code></td><td><code>ISO | null</code></td><td>When the <em>current</em> assignment started (resets on reassign)</td></tr>
+      <tr><td><code>has_active_delivery_code</code></td><td><code>bool</code></td><td>A code is outstanding. Use it to enable “Resend”. It never tells you what the code is</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <strong>The map pin is new on <em>new</em> shipments only.</strong> <code>address.latitude</code>,
+    <code>longitude</code> and <code>map_address</code> appear on shipments created after this release. Historical shipments
+    keep their original snapshot and will have these keys absent or null — render the map link conditionally.
+    The snapshot is frozen at checkout by design: if the customer edits that address later, the delivery still points where
+    it was ordered to.
+  </div>
+
+  <h2 id="assign">Assign a driver</h2>
+
+  <p><span class="pill post">post</span> <code>/api/v1/admin/shipments/{publicCode}/assign-delivery</code> — permission
+  <code>shipment.delivery.assign</code>.</p>
+
+  <pre><code>POST /api/v1/admin/shipments/bds-K92XMQ/assign-delivery
+{ "delivery_user_id": 87 }
+
+<span class="cmt">// 200 — the full shipment resource, with assignment fields updated</span></code></pre>
+
+  <p>Use the same modal for assign and reassign; the API does not distinguish them. Pre-select the current assignee when
+  there is one.</p>
+
+  <h4>All rejections are 422 on <code>delivery_user_id</code></h4>
+  <table>
+    <thead><tr><th>Message</th><th>Cause</th><th>Prevent in UI by…</th></tr></thead>
+    <tbody>
+      <tr><td>Only local delivery shipments can be assigned to a delivery worker.</td><td>Postal or pickup shipment</td><td>Hiding the action unless <code>method_type === "local_delivery"</code></td></tr>
+      <tr><td>This shipment is already finished and cannot be assigned.</td><td>Status is <code>delivered</code> or <code>cancelled</code></td><td>Hiding the action on terminal statuses</td></tr>
+      <tr><td>The selected user is not a delivery worker.</td><td>User lacks the <code>delivery</code> role</td><td>Sourcing the picker from <code>?role=delivery</code></td></tr>
+      <tr><td>The selected delivery worker has no phone number.</td><td>Driver’s phone was cleared</td><td>Showing phone in the picker; it should never be blank</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout ok">
+    <strong>Reassigning to the same driver is a silent no-op.</strong> It returns 200, writes no history row, and sends no
+    duplicate notification. You do not need to guard against it — but a toast saying “Assigned” when nothing changed reads
+    oddly, so compare against the current value before showing a success message.
+  </div>
+
+  <h3>What the driver receives</h3>
+  <p>On a real change of assignee the courier gets an in-app notification <em>and</em> an SMS containing the shipment code,
+  order code and delivery window. They do <strong>not</strong> receive the customer’s address by SMS (they read it from their
+  own app) and never the handoff code. Nothing for the admin panel to build — just useful when explaining the flow.</p>
+
+  <h2 id="dispatch">Dispatch</h2>
+
+  <div class="flow">
+    <span class="step">preparing</span><span class="arw">→</span>
+    <span class="step">ready_for_dispatch</span><span class="arw">→</span>
+    <span class="step gate">assign driver</span><span class="arw">→</span>
+    <span class="step">out_for_delivery</span><span class="arw">→</span>
+    <span class="step">delivered</span>
+  </div>
+
+  <p>Assignment can happen at any point before dispatch — the gate is only checked when the shipment moves into
+  <code>out_for_delivery</code>. In practice the cleanest UX is to assign on the <code>ready_for_dispatch</code> screen and
+  keep the dispatch button disabled until <code>assigned_delivery_user_id !== null</code>, with a tooltip explaining why.</p>
+
+  <p>The same gate applies to the retry path <code>delivery_failed → out_for_delivery</code>. If a driver was unassigned in
+  between, the retry is blocked identically.</p>
+
+  <p>Dispatch is what issues the customer’s code and sends the SMS. After a successful dispatch,
+  <code>has_active_delivery_code</code> flips to <code>true</code> — that is your cue to enable the resend action.</p>
+
+  <h2 id="complete">Mark delivered</h2>
+
+  <p><span class="pill post">post</span> <code>/api/v1/admin/shipments/{publicCode}/mark-delivered</code> — permission
+  <code>shipment.delivery.complete</code>.</p>
+
+  <pre><code>POST /api/v1/admin/shipments/bds-K92XMQ/mark-delivered
+{
+  <span class="add">"code": "583241",</span>            <span class="cmt">// required for local_delivery</span>
+  "receiver_name": "Sara Ahmadi",
+  "note": "Delivered",
+  "proof_media_id": 42
+}</code></pre>
+
+  <p>Everything downstream is unchanged and still automatic: <code>delivered_at</code>, the status history row, the order
+  moving to <code>completed</code>, the delivery slot settling, and the customer’s “delivered” notification. You call one
+  endpoint.</p>
+
+  <h4>Input handling</h4>
+  <ul>
+    <li>Send the code as typed; the server strips spaces and dashes itself.</li>
+    <li>Do not validate the length client-side beyond a sane <code>maxlength</code> (16). Code length is configurable and
+      telling a guesser their code was the wrong <em>shape</em> is already a hint.</li>
+    <li>Every failure — wrong, stale, from a previous attempt, never issued — returns the identical message. Do not try to
+      differentiate them in copy; you cannot, and the API will not help you.</li>
+  </ul>
+
+  <div class="callout warn">
+    <strong>This endpoint is rate limited harder than the rest of the API.</strong> The <code>delivery-confirm</code> limiter
+    allows ~5 attempts per minute <em>per operator per shipment</em>. On <strong>429</strong>, read <code>Retry-After</code>
+    and show a countdown rather than letting the operator hammer it. Note the budget is per shipment, so being throttled on
+    one delivery does not block work on another.
+  </div>
+
+  <h2 id="resend">Resend the code</h2>
+
+  <p><span class="pill post">post</span> <code>/api/v1/admin/shipments/{publicCode}/resend-delivery-code</code> — permission
+  <code>shipment.delivery.resend-code</code>. Empty body, returns the shipment resource.</p>
+
+  <p>Enable it only when <code>method_type === "local_delivery"</code> <strong>and</strong>
+  <code>status === "out_for_delivery"</code>; anything else is a 422. It is SMS-only — no in-app notification is created, so
+  the customer’s notification list will not show a duplicate “order sent” entry.</p>
+
+  <div class="callout bad">
+    <strong>Resend replaces the code.</strong> There is no old plaintext to recover, so “resend” genuinely means “issue a new
+    one and retire the old one”. Word the confirmation accordingly — something like <em>“Send a new delivery code? The
+    previous code will stop working.”</em> Copy such as “resend the same code” would be wrong and would strand a customer who
+    tries the old number.
+  </div>
+
+  <h2 id="endpoints">Endpoint reference</h2>
+
+  <table>
+    <thead><tr><th>Method</th><th>Endpoint</th><th>Permission</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td><span class="pill get">get</span></td><td><code>/admin/users?role=</code></td><td><code>profile.view-any</code></td><td>New <code>role</code> filter; <code>roles[]</code> on each row</td></tr>
+      <tr><td><span class="pill post">post</span></td><td><code>/admin/users</code></td><td><code>profile.create-any</code> + <code>profile.assign-delivery</code> for drivers</td><td>201; no password issued</td></tr>
+      <tr><td><span class="pill post">post</span></td><td><code>/admin/users/{user}/delivery-role</code></td><td><code>profile.assign-delivery</code></td><td>Idempotent; 422 if no phone</td></tr>
+      <tr><td><span class="pill post">post</span></td><td><code>/admin/shipments/{code}/assign-delivery</code></td><td><code>shipment.delivery.assign</code></td><td>Body <code>delivery_user_id</code></td></tr>
+      <tr><td><span class="pill post">post</span></td><td><code>/admin/shipments/{code}/mark-out-for-delivery</code></td><td><code>shipment.delivery.dispatch</code></td><td><strong>Now 422 without an assignee</strong></td></tr>
+      <tr><td><span class="pill post">post</span></td><td><code>/admin/shipments/{code}/mark-delivered</code></td><td><code>shipment.delivery.complete</code></td><td><strong>Now requires <code>code</code></strong>; throttled</td></tr>
+      <tr><td><span class="pill post">post</span></td><td><code>/admin/shipments/{code}/resend-delivery-code</code></td><td><code>shipment.delivery.resend-code</code></td><td>Out-for-delivery only; SMS only</td></tr>
+      <tr><td><span class="pill get">get</span></td><td><code>/me</code></td><td>—</td><td>Now returns <code>user.roles[]</code> + <code>user.permissions[]</code></td></tr>
+    </tbody>
+  </table>
+
+  <h3>Permission gating</h3>
+  <p><code>GET /me</code> now returns the caller’s effective permissions, so menu and button visibility should key off
+  <code>permissions.includes('shipment.delivery.assign')</code> rather than <code>roles.includes('admin')</code>.
+  Authorization on the server has always been permission-based — a permission can be granted to a non-admin operator, and a
+  role check in the UI would hide a button that would in fact have worked.</p>
+
+  <pre><code><span class="cmt">// GET /api/v1/me</span>
+{
+  "user": {
+    "id": 1, "name": "Ops", "phone": "09197238119",
+    <span class="add">"roles": ["admin"],</span>
+    <span class="add">"permissions": ["shipment.delivery.assign", "profile.create-any", ...]</span>
+  }
+}</code></pre>
+
+  <h2 id="errors">Error handling</h2>
+
+  <table>
+    <thead><tr><th>Status</th><th>When</th><th>UI response</th></tr></thead>
+    <tbody>
+      <tr><td><strong>401</strong></td><td>No/expired token</td><td>Existing re-auth flow</td></tr>
+      <tr><td><strong>403</strong></td><td>Missing permission</td><td>Should be unreachable if you gate on <code>permissions</code>. Generic “not allowed”</td></tr>
+      <tr><td><strong>404</strong></td><td>Unknown shipment/user code</td><td>Generic not-found</td></tr>
+      <tr><td><strong>422</strong></td><td>Validation + every business rule above</td><td>Field-level errors; keys are <code>delivery_user_id</code>, <code>assigned_delivery_user_id</code>, <code>code</code>, <code>phone</code>, <code>role</code></td></tr>
+      <tr><td><strong>429</strong></td><td>Too many completion attempts</td><td>Read <code>Retry-After</code>, disable + count down</td></tr>
+    </tbody>
+  </table>
+
+  <p>All 422 bodies use the standard Laravel shape — <code>{ message, errors: { field: [msg] } }</code> — so your existing
+  form-error adapter works unchanged. The only unusual key is <code>assigned_delivery_user_id</code>, which arrives on the
+  <em>dispatch</em> request even though that request has no body; map it to a form-level banner rather than a field.</p>
+
+  <h2 id="driver-app">Driver app — separate surface, not the admin panel</h2>
+
+  <div class="callout">
+    <strong>Couriers must not be given the admin panel.</strong> They have no <code>shipment.view-admin</code> permission, so
+    every <code>/admin/shipments*</code> call returns 403 for them. Their endpoints live under <code>/api/v1/delivery/*</code>
+    and are scoped to their own assignments. Included here only so the boundary is clear — this is a separate build.
+  </div>
+
+  <table>
+    <thead><tr><th>Method</th><th>Endpoint</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td><span class="pill get">get</span></td><td><code>/delivery/shipments</code></td><td>Paginated; optional <code>status</code></td></tr>
+      <tr><td><span class="pill get">get</span></td><td><code>/delivery/shipments/{code}</code></td><td>Address + map pin, slot, customer name/phone</td></tr>
+      <tr><td><span class="pill post">post</span></td><td><code>/delivery/shipments/{code}/mark-delivered</code></td><td>Body <code>code</code> (required), <code>receiver_name</code>, <code>note</code></td></tr>
+    </tbody>
+  </table>
+
+  <p>A shipment assigned to a different driver returns <strong>404</strong>, not 403 — the two cases are deliberately
+  indistinguishable. Do not write client code that treats 404 as “exists but forbidden”; from the driver’s side it simply is
+  not there. The driver payload carries no order totals, coupon, or payment data at all.</p>
+
+  <h2 id="checklist">Full checklist</h2>
+
+  <h4>Required — otherwise operators hit dead ends</h4>
+  <ul class="chk">
+    <li>Add a required <code>code</code> input to the “mark delivered” dialog for <code>local_delivery</code></li>
+    <li>Disable “Mark out for delivery” while <code>assigned_delivery_user_id === null</code> on a local delivery</li>
+    <li>Handle <strong>429</strong> + <code>Retry-After</code> on the completion endpoint</li>
+    <li>Map the <code>assigned_delivery_user_id</code> 422 (from a body-less dispatch request) to a form-level banner</li>
+  </ul>
+
+  <h4>New capability</h4>
+  <ul class="chk">
+    <li>Users list: <code>?role=</code> filter and <code>roles[]</code> chips</li>
+    <li>Reusable driver picker sourced from <code>?role=delivery</code></li>
+    <li>“Create user” form — customer/delivery only, no password field</li>
+    <li>Hide or disable the “Delivery” option without <code>profile.assign-delivery</code></li>
+    <li>“Make delivery worker” action on user detail, with the no-phone 422 handled inline</li>
+    <li>Shipment list/detail: driver column + assigned-at, local deliveries only</li>
+    <li>Assign / reassign modal, hidden on postal, pickup, delivered and cancelled</li>
+    <li>“Resend code” button gated on <code>out_for_delivery</code>, with replace-not-repeat confirmation copy</li>
+    <li>Map link from <code>address.latitude</code>/<code>longitude</code>, rendered only when present</li>
+    <li>Switch menu/button gating from <code>roles</code> to <code>permissions</code></li>
+  </ul>
+
+  <h4>Do not build</h4>
+  <ul class="chk">
+    <li>Any “show / reveal delivery code” affordance — the value does not exist server-side</li>
+    <li>A password or “generate temporary password” field on user creation</li>
+    <li>An <code>admin</code> option in the create-user role dropdown</li>
+    <li>An assign action on orders — assignment is on shipments</li>
+    <li>A single-select “role” control on a user</li>
+  </ul>
+
+  <h2 id="gotchas">Gotchas &amp; FAQ</h2>
+
+  <h3>“The driver says the code doesn’t work.”</h3>
+  <p>Almost always a code from a previous attempt: marking a delivery failed retires the code immediately. Check
+  <code>has_active_delivery_code</code> — if it is <code>true</code>, the customer has a valid code and is reading the wrong
+  SMS; resend. If <code>false</code>, the shipment is not out for delivery.</p>
+
+  <h3>“Can an admin just close the delivery?”</h3>
+  <p>Yes, from any account with <code>shipment.delivery.complete</code>, and without being the assignee — but the code is
+  still required. There is no bypass to build a button for.</p>
+
+  <h3>“Why is the assign action missing on this shipment?”</h3>
+  <p>It is postal or pickup, or already <code>delivered</code>/<code>cancelled</code>. All four are 422 server-side.</p>
+
+  <h3>“Do I need to resend the code after reassigning?”</h3>
+  <p>No. Reassignment keeps the customer’s code. Only a failed attempt or an explicit resend changes it.</p>
+
+  <h3>“Where do I show the driver’s name?”</h3>
+  <p>The shipment payload carries only <code>assigned_delivery_user_id</code>. Resolve it through the users endpoint — in
+  practice, cache the <code>?role=delivery</code> list you already load for the picker and look the id up locally.</p>
+
+  <h3>“Why does a driver get a 404 instead of a 403?”</h3>
+  <p>So that a shipment code cannot be probed for existence. Anything not assigned to the caller reads as nonexistent. This
+  only affects the driver app; the admin panel sees everything it is permitted to.</p>
+
+  <h3>“Is the customer’s address in the driver’s SMS?”</h3>
+  <p>No — only the shipment code, order code and delivery window. The address lives behind the authenticated driver API.</p>
+</main>
+</body>
+</html>
