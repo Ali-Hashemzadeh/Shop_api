@@ -537,7 +537,8 @@ class EloquentCatalogManager implements CatalogManagerInterface
     private function applyProductFilters($query, array $filters, bool $admin = false): void
     {
         if (isset($filters['category_id'])) {
-            $query->where('category_id', (int) $filters['category_id']);
+            $categoryIds = $this->categories->descendantsOf([(int) $filters['category_id']]);
+            $query->whereIn('category_id', $categoryIds);
         }
 
         if (isset($filters['brand_id'])) {

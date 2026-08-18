@@ -1634,7 +1634,7 @@ const res = await fetch(<span class="str">'/api/v1/media'</span>, {
         <tr><th>Param</th><th>Type</th><th>Description</th></tr>
         <tr><td>per_page</td><td class="opt">optional integer</td><td>Items per page. 1–100. Default: 15.</td></tr>
         <tr><td>page</td><td class="opt">optional integer</td><td>Page number. Default: 1.</td></tr>
-        <tr><td>category_id</td><td class="opt">optional integer</td><td>Filter by category ID. Must be a valid existing category — returns 422 otherwise.</td></tr>
+        <tr><td>category_id</td><td class="opt">optional integer</td><td>Filter by category ID. Matches the selected category and all of its descendants recursively at any depth (ancestors are not included). Must be a valid existing category — returns 422 otherwise.</td></tr>
         <tr><td>brand_id</td><td class="opt">optional integer</td><td>Filter by brand ID. Must be a valid existing brand — returns 422 otherwise.</td></tr>
         <tr><td>min_price</td><td class="opt">optional integer</td><td>Minimum price in rials. Compares against the default variant's <code>base_price</code>. Must be ≥ 0.</td></tr>
         <tr><td>max_price</td><td class="opt">optional integer</td><td>Maximum price in rials. Compares against the default variant's <code>base_price</code>. Must be ≥ 0.</td></tr>
@@ -1757,7 +1757,7 @@ GET /api/v1/catalog/products?available=true</pre>
       <span class="badge">Public</span>
     </div>
     <div class="endpoint-body">
-      <p>Paginated list of published products in a specific category. Supports the same price and search filters as the general product index — useful for filtering within a category browse page.</p>
+      <p>Paginated list of published products in a specific category and all of its descendants recursively at any depth (ancestors are not included). Supports the same price and search filters as the general product index — useful for filtering within a category browse page.</p>
       <div class="block-label">Query Parameters</div>
       <table>
         <tr><th>Param</th><th>Type</th><th>Description</th></tr>
@@ -1787,7 +1787,7 @@ GET /api/v1/catalog/products?available=true</pre>
         <tr><td>per_page</td><td class="opt">optional integer</td><td>1–100. Default: 15.</td></tr>
         <tr><td>page</td><td class="opt">optional integer</td><td>Page number. Default: 1.</td></tr>
         <tr><td>status</td><td class="opt">optional string</td><td>Filter by <code>draft</code> or <code>published</code>. Omitted → both.</td></tr>
-        <tr><td>category_id</td><td class="opt">optional integer</td><td>Filter by category ID. Must exist — 422 otherwise.</td></tr>
+        <tr><td>category_id</td><td class="opt">optional integer</td><td>Filter by category ID. Matches the selected category and all of its descendants recursively (ancestors are not included). Must exist — 422 otherwise.</td></tr>
         <tr><td>min_price</td><td class="opt">optional integer</td><td>Minimum default-variant <code>base_price</code> in rials. ≥ 0.</td></tr>
         <tr><td>max_price</td><td class="opt">optional integer</td><td>Maximum default-variant <code>base_price</code> in rials. ≥ 0.</td></tr>
         <tr><td>search</td><td class="opt">optional string</td><td>Free-text contains-match on <code>title</code>, <code>description</code>, <code>slug</code>, or variant <code>sku</code>. Max 255 chars. <strong>Public-code exact search is deliberately not applied here</strong> — the admin list keeps its substring behaviour.</td></tr>

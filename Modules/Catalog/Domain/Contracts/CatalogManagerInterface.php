@@ -63,7 +63,7 @@ interface CatalogManagerInterface
      * Fetch all published products with optional filters.
      *
      * Supported keys in $filters:
-     *   - category_id  (int)    — exact match on category_id
+     *   - category_id  (int)    — matches the selected category and all of its descendants recursively (ancestors excluded)
      *   - brand_id     (int)    — exact match on brand_id
      *   - min_price    (int)    — default variant base_price >= value
      *   - max_price    (int)    — default variant base_price <= value
@@ -84,7 +84,7 @@ interface CatalogManagerInterface
      *
      * Supported keys in $filters:
      *   - status       (string) — exact match on status (draft|published)
-     *   - category_id  (int)    — exact match on category_id
+     *   - category_id  (int)    — matches the selected category and all of its descendants recursively (ancestors excluded)
      *   - brand_id     (int)    — exact match on brand_id
      *   - min_price    (int)    — default variant base_price >= value
      *   - max_price    (int)    — default variant base_price <= value

@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### Fix — Catalog: hierarchical category product filtering
+
+**Product filtering by category is now hierarchy-aware.** Selecting a category includes products assigned directly to the chosen category as well as all of its descendant subcategories recursively at arbitrary depth. Ancestors and sibling categories are strictly excluded.
+
+- **Reused existing scoped service:** Product filtering in `EloquentCatalogManager::applyProductFilters` expands category IDs before SQL pagination via `CategoryHierarchy::descendantsOf()`. The tree is loaded once per request in a single lightweight `id => parent_id` query and traversed in-memory without recursive N+1 database queries.
+- **Pre-pagination SQL resolution:** Descendant IDs are resolved into a SQL `whereIn('category_id', $categoryIds)` constraint before pagination, ensuring `meta.total`, `meta.last_page`, per-page pagination item distributions, and sorting (`cheapest`, `most_expensive`, `most_sold`, latest) remain exact.
+- **Affected endpoints:**
+  - `GET /api/v1/catalog/products?category_id={id}`
+  - `GET /api/v1/catalog/categories/{categoryId}/products`
+  - `GET /api/v1/catalog/products/admin?category_id={id}`
+  - `GET /api/v1/catalog/campaigns/{slug}/products?category_id={id}`
+- **Validation preserved:** FormRequest validation (`IndexProductsRequest`, `IndexAdminProductsRequest`) validates `category_id` via `exists:categories,id` before tree expansion, returning `422 Unprocessable Entity` for invalid category IDs.
+- **Tests added:** Full unit test suite `CategoryHierarchyTest` and feature test suite `CategoryHierarchyProductFilterTest` with realistic 4-level category hierarchy fixtures covering root, intermediate, leaf (with and without products), sibling exclusion, ancestor exclusion, filter composition, pagination, and admin/campaign routes.
+
 ### Feature — Notification refinements: opt-in admin SMS, and one event per fulfillment moment
 
 **The paid-order admin SMS is now opt-in per admin.** Every admin still receives the in-app

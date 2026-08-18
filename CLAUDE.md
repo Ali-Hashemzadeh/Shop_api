@@ -371,6 +371,7 @@ Order items snapshot prices and images at checkout and are never refreshed or ba
   were removed and will be reintroduced later; do not assume a cache exists.
 - **No inline file uploads on product endpoints.** Pass `primary_media_id`,
   `gallery_media_ids`, or `variants.*.media_id` (pre-uploaded via `POST /api/v1/media`).
+- **Hierarchical category product filtering:** filtering products by `category_id` (`/products`, `/categories/{id}/products`, `/products/admin`, `/campaigns/{slug}/products`) resolves the selected category and all of its descendants recursively via `CategoryHierarchy::descendantsOf()` before SQL pagination (`whereIn('category_id', $categoryIds)`). Ancestors and siblings are excluded. Invalid categories return 422 via FormRequest validation before expansion.
 - **Product sort:** all listing endpoints (`/products`, `/categories/{id}/products`,
   `/products/admin`) accept `?sort=` ∈ {`cheapest`, `most_expensive`, `most_sold`}. Price sorts
   order by the **default variant's** `base_price`; `most_sold` orders by a denormalized, indexed
