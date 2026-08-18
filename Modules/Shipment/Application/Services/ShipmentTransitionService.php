@@ -14,6 +14,7 @@ use Modules\Shipment\Domain\Enums\ReservationStatus;
 use Modules\Shipment\Domain\Enums\ShipmentMethodType;
 use Modules\Shipment\Domain\Enums\ShipmentStatus;
 use Modules\Shipment\Domain\Events\ShipmentDeliveredEvent;
+use Modules\Shipment\Domain\Events\ShipmentDeliveryFailedEvent;
 use Modules\Shipment\Domain\Events\ShipmentHandedToPostEvent;
 use Modules\Shipment\Domain\Events\ShipmentOutForDeliveryEvent;
 use Modules\Shipment\Domain\Events\ShipmentPreparingStartedEvent;
@@ -218,6 +219,20 @@ class ShipmentTransitionService
                 orderId: $shipment->order_id,
                 userId: $shipment->user_id,
                 orderPublicCode: $orderPublicCode,
+                shipmentId: $shipment->id,
+                method: $shipment->method_type,
+                driverId: $shipment->assigned_delivery_user_id ? (int) $shipment->assigned_delivery_user_id : null,
+                deliveryMinutes: $shipment->out_for_delivery_at ? max(1, (int) $shipment->out_for_delivery_at->diffInMinutes(now())) : null,
+                deliveredAt: now()->toDateTimeString(),
+            ),
+            ShipmentStatus::DeliveryFailed => new ShipmentDeliveryFailedEvent(
+                orderId: $shipment->order_id,
+                userId: $shipment->user_id,
+                orderPublicCode: $orderPublicCode,
+                shipmentId: $shipment->id,
+                method: $shipment->method_type,
+                driverId: $shipment->assigned_delivery_user_id ? (int) $shipment->assigned_delivery_user_id : null,
+                failedAt: now()->toDateTimeString(),
             ),
             default => null,
         };

@@ -28,6 +28,8 @@ class ProductVariantDTO
          * discount takes effect immediately everywhere it is displayed.
          */
         public readonly ?AutomaticDiscountResultDTO $automaticDiscount = null,
+        public readonly ?int $productId = null,
+        public readonly array $categoryIds = [],
     ) {}
 
     /**
@@ -49,6 +51,8 @@ class ProductVariantDTO
         ?int $availableStock = null,
         ?string $productPrimaryImageUrl = null,
         ?AutomaticDiscountResultDTO $automaticDiscount = null,
+        ?int $productId = null,
+        array $categoryIds = [],
     ): self {
         return new self(
             id: $variant->id,
@@ -63,6 +67,8 @@ class ProductVariantDTO
             availableStock: $availableStock,
             productPrimaryImageUrl: $productPrimaryImageUrl,
             automaticDiscount: $automaticDiscount,
+            productId: $productId ?? ($variant->product_id ? (int) $variant->product_id : null),
+            categoryIds: $categoryIds,
         );
     }
 }

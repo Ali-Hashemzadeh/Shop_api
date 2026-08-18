@@ -16,6 +16,7 @@ use Modules\Order\Domain\Contracts\OrderManagerInterface;
 use Modules\Order\Domain\DTOs\AdminOrderDetailDTO;
 use Modules\Order\Domain\DTOs\OrderDTO;
 use Modules\Order\Domain\DTOs\OrderItemDTO;
+use Modules\Order\Domain\DTOs\OrderPaidItemDTO;
 use Modules\Order\Domain\Enums\OrderStatus;
 use Modules\Order\Domain\Events\OrderPaidEvent;
 use Modules\Order\Domain\Models\Order;
@@ -160,11 +161,42 @@ class EloquentOrderManager implements OrderManagerInterface
             // repeated callback never reaches this line, so notifications are not
             // duplicated. Listeners implement ShouldHandleEventsAfterCommit, so
             // nothing is sent if this (or an enclosing) transaction rolls back.
+            $paidItems = [];
+            $totalItemDiscount = 0;
+            foreach ($order->items as $item) {
+                $itemDiscount = (int) ($item->automatic_discount_amount_per_unit ?? 0) * (int) $item->quantity;
+                $totalItemDiscount += $itemDiscount;
+                $snapshot = $item->product_snapshot ?? [];
+                $autoSnapshot = $item->automatic_discount_snapshot ?? [];
+
+                $paidItems[] = new OrderPaidItemDTO(
+                    productId: (int) ($snapshot['product_id'] ?? 0),
+                    variantId: (int) ($snapshot['variant_id'] ?? 0),
+                    quantity: (int) $item->quantity,
+                    unitPrice: (int) $item->price_per_unit,
+                    discountAmount: $itemDiscount,
+                    categoryIds: array_values(array_map('intval', $snapshot['category_ids'] ?? [])),
+                    discountId: isset($autoSnapshot['discount_id']) ? (int) $autoSnapshot['discount_id'] : null,
+                    regularUnitPrice: (int) ($item->regular_price_per_unit ?: $item->price_per_unit),
+                    sku: $item->sku,
+                    productTitle: $item->product_title,
+                );
+            }
+
+            $couponAmount = (int) ($order->coupon_discount_amount ?? 0);
+            $couponSnapshot = $order->coupon_snapshot ?? [];
+            $couponId = isset($couponSnapshot['coupon_id']) ? (int) $couponSnapshot['coupon_id'] : null;
+
             Event::dispatch(new OrderPaidEvent(
                 orderId: $order->id,
                 userId: $order->user_id,
                 totalAmount: (int) $order->total_amount,
                 orderPublicCode: $order->public_code,
+                discountAmount: $totalItemDiscount,
+                couponAmount: $couponAmount,
+                couponId: $couponId,
+                items: $paidItems,
+                paidAt: now()->toDateTimeString(),
             ));
 
             return $this->toDTO($order->fresh('items'));

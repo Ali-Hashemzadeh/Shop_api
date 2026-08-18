@@ -1,6 +1,7 @@
 <?php
 
 use App\Providers\AppServiceProvider;
+use Modules\Analytics\Infrastructure\Providers\AnalyticsServiceProvider;
 use Modules\Cart\Infrastructure\Providers\CartServiceProvider;
 use Modules\Catalog\Infrastructure\Providers\CatalogServiceProvider;
 use Modules\Identity\Infrastructure\Providers\IdentityServiceProvider;
@@ -28,4 +29,5 @@ return [
     ShipmentServiceProvider::class,
     SmsServiceProvider::class,
     NotificationServiceProvider::class,
+    AnalyticsServiceProvider::class,
 ];

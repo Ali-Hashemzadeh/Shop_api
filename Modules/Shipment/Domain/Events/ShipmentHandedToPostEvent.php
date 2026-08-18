@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Modules\Shipment\Domain\Events;
 
+use Illuminate\Support\Str;
+
 /**
  * Published integration event: a postal parcel left the store and is now the
  * carrier's problem.
@@ -18,6 +20,8 @@ namespace Modules\Shipment\Domain\Events;
  */
 class ShipmentHandedToPostEvent
 {
+    public readonly string $eventId;
+
     public function __construct(
         public readonly int $orderId,
         public readonly int $userId,
@@ -25,5 +29,8 @@ class ShipmentHandedToPostEvent
         public readonly ?string $orderPublicCode = null,
         /** The postal tracking number recorded at handoff. */
         public readonly ?string $trackingCode = null,
-    ) {}
+        ?string $eventId = null,
+    ) {
+        $this->eventId = $eventId ?? (string) Str::uuid();
+    }
 }

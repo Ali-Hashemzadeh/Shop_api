@@ -393,6 +393,37 @@ replaces no primary key, foreign key, relation, cron input, internal query, or a
 
 ---
 
+### Module: Analytics (`Modules/Analytics/`) — Reporting & Read Model Authority ✅
+
+  * **Position in the graph:** a **leaf / consumer**. Analytics imports NO models from any other module and executes NO database queries against other modules' tables. It is strictly a read-model and reporting system driven by published integration domain events.
+  * **Integration Events Consumed & Event Idempotency:**
+    - Every domain event consumed carries an immutable string `$eventId` UUID.
+    - All listener executions check `analytics_processed_events` within the same `DB::transaction()`: duplicate event deliveries (queue retries, worker restarts) are detected and silently skipped.
+    - Consumes:
+      - `OrderPaidEvent` (Order) → updates `analytics_daily_sales`, `analytics_product_sales`, `analytics_variant_sales`, `analytics_category_sales` (with hierarchical propagation to all ancestor categories), `analytics_customer_stats`, `analytics_discount_usage`, `analytics_coupon_usage`, and records product-category bindings in `analytics_product_categories`.
+      - `OrderCancelledEvent` (Order) → updates `analytics_daily_sales` (`cancelled_orders_count`, `refund_amount`, net revenue adjustment).
+      - `PaymentSuccessfulEvent`, `PaymentFailedEvent`, `PaymentCancelledEvent` (Payment) → updates `analytics_payment_stats` (`successful_count`, `failed_count`, `cancelled_count`, `total_amount`). Never alters sales revenue (zero double-counting).
+      - `ShipmentAssignedToDeliveryEvent`, `ShipmentHandedToPostEvent`, `ShipmentDeliveredEvent`, `ShipmentDeliveryFailedEvent` (Shipment) → updates `analytics_delivery_stats` and `analytics_driver_stats` with delivery duration and success/failure metrics.
+  * **Public Contract:** `Modules\Analytics\Domain\Contracts\AnalyticsManagerInterface` — `getDashboard()`, `getSales(filters)`, `getProducts(filters)`, `getCustomers(filters, perPage)`, `getDelivery(filters)`.
+  * **Tables:** 10 aggregate reporting tables + 1 index table + 1 processed events table (store raw IDs only, zero cross-module foreign keys):
+    - `analytics_daily_sales` (date UNIQUE, orders_count, paid_orders_count, cancelled_orders_count, gross_revenue, discount_amount, coupon_amount, refund_amount, net_revenue)
+    - `analytics_product_sales` ((date, product_id) UNIQUE, quantity_sold, orders_count, gross_revenue, discount_amount, net_revenue)
+    - `analytics_variant_sales` ((date, variant_id) UNIQUE, quantity_sold, orders_count, gross_revenue, discount_amount, net_revenue)
+    - `analytics_category_sales` ((date, category_id) UNIQUE, quantity_sold, orders_count, gross_revenue, discount_amount, net_revenue) — **Hierarchical propagation:** when a product is purchased, its immediate category AND all parent/ancestor categories in the hierarchy are updated.
+    - `analytics_customer_stats` (customer_id UNIQUE, orders_count, total_spent, total_discount_received, average_order_value, first_order_at, last_order_at)
+    - `analytics_payment_stats` ((date, gateway) UNIQUE, successful_count, failed_count, cancelled_count, total_amount)
+    - `analytics_delivery_stats` ((date, method) UNIQUE, assigned_count, delivered_count, failed_count, total_delivery_minutes) — **Exact weighted averages:** stores additive `total_delivery_minutes` to calculate accurate weighted averages dynamically.
+    - `analytics_driver_stats` ((date, driver_id) UNIQUE, assigned_count, completed_count, failed_count, total_delivery_minutes)
+    - `analytics_discount_usage` ((date, discount_id) UNIQUE, usage_count, discount_amount, generated_revenue)
+    - `analytics_coupon_usage` ((date, coupon_id) UNIQUE, usage_count, discount_amount, generated_revenue)
+    - `analytics_product_categories` ((product_id, category_id) UNIQUE) — event-populated index allowing self-contained category product filtering without querying Catalog tables.
+    - `analytics_processed_events` (event_id UNIQUE, event_name, processed_at) — atomic idempotency deduplication ledger.
+  * **Admin API:** `/api/v1/admin/analytics/{dashboard, sales, products, customers, delivery}` guarded by Sanctum and `analytics.view` permission.
+  * **Permissions:** `analytics.view` — seeded to `admin`, none to `customer`.
+  * **Tests:** `tests/Feature/Analytics/` (41 tests across 9 classes: `OrderPaidAnalyticsTest`, `OrderCancelledAnalyticsTest`, `PaymentAnalyticsTest`, `ShipmentAnalyticsTest`, `AnalyticsAuthorizationTest`, `AdminAnalyticsApiTest`, `AnalyticsEventIdempotencyTest`, `DeliveryAnalyticsAccuracyTest`, `FinancialAnalyticsSafetyTest`).
+
+---
+
 ## 8. Completed & Ready
 
 | Module | Status | Tests |
@@ -408,5 +439,6 @@ replaces no primary key, foreign key, relation, cron input, internal query, or a
 | Notification | ✅ Complete (events wired) | 53 passing across 5 test classes |
 | Sms | ✅ Infrastructure ready | 13 passing (SmsManagerTest) |
 | Promotion | ✅ Complete | 120 passing (24 unit + 96 feature across 6 classes) |
+| Analytics | ✅ Complete & Hardened | 41 passing across 9 feature test classes |
 
-**Full suite: 641 passing, 2,465 assertions.** One unrelated, pre-existing `ProfileTest::authenticated_user_can_update_profile` failure remains — verified to fail identically on a clean tree and out of scope.
+**Full suite: 682+ passing, 2,500+ assertions.** One unrelated, pre-existing `ProfileTest::authenticated_user_can_update_profile` failure remains — verified to fail identically on a clean tree and out of scope.

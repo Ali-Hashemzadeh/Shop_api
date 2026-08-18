@@ -199,11 +199,29 @@ Provider abstraction for notification SMS: provider selection, provider-specific
 - **Three outcomes:** `SmsResultDTO` is success, `skipped` (nothing attempted — not configured for that template), or failure (a real attempt that did not succeed).
 - **Separate from OTP:** Identity's `OtpSenderInterface` is untouched. Same vendor, different responsibility.
 
+### Analytics (Complete)
+Reporting and read-model authority for sales, performance, customer lifetime statistics, and delivery metrics.
+
+- **Design:** Decoupled event-driven read model. Never queries other modules' database tables or imports their Eloquent models.
+- **Key Tables:** `analytics_daily_sales`, `analytics_product_sales`, `analytics_variant_sales`, `analytics_category_sales` (with ancestor hierarchy propagation), `analytics_customer_stats`, `analytics_payment_stats`, `analytics_delivery_stats`, `analytics_driver_stats`, `analytics_discount_usage`, `analytics_coupon_usage`, `analytics_product_categories`.
+- **Public Contract:** `AnalyticsManagerInterface` — `getDashboard()`, `getSales()`, `getProducts()`, `getCustomers()`, `getDelivery()`.
+- **Authorization:** `analytics.view` permission required on all `/api/v1/admin/analytics/*` routes.
+
 ---
 
 ## API Overview
 
 Base prefix: `/api/v1`
+
+### Analytics — Admin (`auth:sanctum` + `analytics.view` required)
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/admin/analytics/dashboard` | High-level summary of gross/net revenue, order counts, top products, top categories, and customer metrics |
+| `GET` | `/admin/analytics/sales` | Daily sales and revenue timeline. Optional query filters: `from` (`Y-m-d`), `to` (`Y-m-d`) |
+| `GET` | `/admin/analytics/products` | Best-selling products and variants. Optional query filters: `from`, `to`, `category_id` |
+| `GET` | `/admin/analytics/customers` | Paginated customer spending metrics. Optional query filters: `sort` (`total_spent`, `orders_count`, `average_order_value`), `direction` (`asc`, `desc`), `per_page`, `page` |
+| `GET` | `/admin/analytics/delivery` | Delivery and driver performance stats. Optional query filters: `from`, `to`, `method`, `driver_id` |
 
 ### Media (`auth:sanctum` + permission required)
 
@@ -427,6 +445,20 @@ or invoke the generator directly with the command above.
 
 ---
 
+### Admin Analytics (`auth:sanctum` + `analytics.view` required)
+
+Read-only reporting and dashboard analytics aggregated via domain event projections with atomic idempotency deduplication.
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/admin/analytics/dashboard` | High-level summary metrics: gross/net revenue, paid orders, best-selling products/categories |
+| `GET` | `/admin/analytics/sales` | Daily sales trends with optional `from` and `to` date filters |
+| `GET` | `/admin/analytics/products` | Best-selling products and variants with optional date and `category_id` filter |
+| `GET` | `/admin/analytics/customers` | Customer lifetime statistics (orders count, total spent, AOV) with pagination & sorting |
+| `GET` | `/admin/analytics/delivery` | Delivery method & driver fulfillment metrics with exact weighted average delivery times |
+
+---
+
 ## Testing
 
 ```bash
@@ -458,9 +490,19 @@ tests/
     │   └── InventoryAuthorizationTest.php # Auth matrix: 401 / 403 / public access
     ├── Cart/
     │   └── CartTest.php                 # Guest + auth carts, stock validation, isolation
-    └── Order/
-        ├── OrderTest.php                # Checkout flow, customer/product snapshots + immutability, auto-cancel, TTL expiry, auth matrix
-        └── AdminOrderTest.php           # Admin list/detail/cancel, permission matrix, no status-mutation endpoints
+    ├── Order/
+    │   ├── OrderTest.php                # Checkout flow, customer/product snapshots + immutability, auto-cancel, TTL expiry, auth matrix
+    │   └── AdminOrderTest.php           # Admin list/detail/cancel, permission matrix, no status-mutation endpoints
+    └── Analytics/
+        ├── AdminAnalyticsApiTest.php          # Admin reporting endpoints & payload schemas
+        ├── AnalyticsAuthorizationTest.php     # 401/403/200 authorization boundary verification
+        ├── AnalyticsEventIdempotencyTest.php  # Deduplication and retry safety via analytics_processed_events
+        ├── DeliveryAnalyticsAccuracyTest.php  # Weighted delivery average accuracy verification
+        ├── FinancialAnalyticsSafetyTest.php   # Revenue integrity & zero payment double-counting
+        ├── OrderPaidAnalyticsTest.php         # Order paid sale aggregation & ancestor category propagation
+        ├── OrderCancelledAnalyticsTest.php    # Order cancellation & refund handling
+        ├── PaymentAnalyticsTest.php           # Gateway payment statistics
+        └── ShipmentAnalyticsTest.php          # Delivery method and driver analytics
 ```
 
 ---
@@ -475,7 +517,12 @@ tests/
 | Inventory | Complete |
 | Cart | Complete |
 | Order | Complete |
-| Payment | Planned |
+| Payment | Complete |
+| Shipment | Complete |
+| Notification | Complete |
+| Sms | Complete |
+| Promotion | Complete |
+| Analytics | Complete & Hardened |
 
 ---
 

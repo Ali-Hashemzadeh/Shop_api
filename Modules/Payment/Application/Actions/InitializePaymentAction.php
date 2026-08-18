@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace Modules\Payment\Application\Actions;
 
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Modules\Order\Domain\Contracts\OrderManagerInterface;
 use Modules\Payment\Domain\Enums\PaymentMethodType;
 use Modules\Payment\Domain\Enums\PaymentStatus;
+use Modules\Payment\Domain\Events\PaymentSuccessfulEvent;
 use Modules\Payment\Domain\Models\Payment;
 use Modules\Payment\Infrastructure\Gateways\PaymentGatewayFactory;
 
@@ -39,7 +41,7 @@ class InitializePaymentAction
         $method = PaymentMethodType::from($methodType);
 
         if ($method === PaymentMethodType::IN_PERSON) {
-            return DB::transaction(function () use ($orderId, $order) {
+            return DB::transaction(function () use ($orderId, $order, $userId) {
                 $transactionRef = 'CASH-'.uniqid();
 
                 $payment = Payment::createWithPublicCode([
@@ -52,6 +54,17 @@ class InitializePaymentAction
                 ]);
 
                 $this->orderManager->markAsPaid($orderId, $transactionRef);
+
+                Event::dispatch(new PaymentSuccessfulEvent(
+                    orderId: $orderId,
+                    userId: $userId,
+                    gateway: 'in_person',
+                    amount: (int) $order->totalAmount,
+                    paymentId: $payment->id,
+                    paymentPublicCode: $payment->public_code,
+                    orderPublicCode: $order->publicCode,
+                    paidAt: now()->toDateTimeString(),
+                ));
 
                 return [
                     'type' => 'in_person',

@@ -2,6 +2,38 @@
 
 ## [Unreleased]
 
+### Feature — Analytics: Event-driven read-model and reporting system (Hardened)
+
+**A new, decoupled Analytics module (`Modules/Analytics`) provides high-performance reporting and analytics for admin dashboards.**
+Analytics functions strictly as a read-model/reporting authority: it never performs cross-module queries or imports other modules' Eloquent models. It listens to published integration events across Order, Payment, and Shipment, maintaining self-contained aggregated tables.
+
+- **Event Idempotency Protection:**
+  - All integration domain events carry immutable string `$eventId` UUIDs.
+  - Listeners execute inside `DB::transaction()` and check/insert `analytics_processed_events` to ensure duplicate event deliveries (queue retries, worker restarts) are deduplicated without double-counting.
+- **Delivery Metric Accuracy:**
+  - `analytics_delivery_stats` and `analytics_driver_stats` store additive `total_delivery_minutes` alongside delivery counts rather than pre-averaged numbers.
+  - Average delivery duration is computed dynamically at query/resource time, ensuring mathematically exact weighted averages across arbitrary date ranges.
+- **Financial Analytics Safety:**
+  - Revenue is strictly incremented by `OrderPaidEvent` (and refunded by `OrderCancelledEvent`).
+  - `PaymentSuccessfulEvent`, `PaymentFailedEvent`, and `PaymentCancelledEvent` exclusively update gateway stats in `analytics_payment_stats`, preventing any risk of double-counting sales revenue.
+- **Hierarchical Category Analytics & Self-Contained Index:**
+  - When products are purchased, sales metrics propagate up the entire category ancestor tree (immediate category and all ancestors are updated atomically).
+  - The `analytics_product_categories` event index enables category-filtered product sales reporting without cross-module queries to Catalog tables.
+- **Prerequisite Integration Enhancements:**
+  - `OrderPaidEvent` enriched with immutable purchase payload: `discountAmount`, `couponAmount`, `couponId`, `paidAt`, `eventId`, and item list (`OrderPaidItemDTO`) carrying `productId`, `variantId`, `quantity`, `unitPrice`, `discountAmount`, `categoryIds`, `discountId`, and `regularUnitPrice`.
+  - `ProductVariantDTO` carries `productId` and `categoryIds` resolved from `CategoryHierarchy::ancestorsFor()`.
+  - Added `PaymentSuccessfulEvent` and `PaymentCancelledEvent` in `Modules/Payment/Domain/Events/`.
+  - Added `ShipmentDeliveryFailedEvent` and duration metrics in `Modules/Shipment/Domain/Events/`.
+- **Database Schema:** 10 analytics aggregate tables + 1 index table + 1 processed events table (store IDs only, zero cross-module FKs):
+  `analytics_daily_sales`, `analytics_product_sales`, `analytics_variant_sales`, `analytics_category_sales`, `analytics_customer_stats`, `analytics_payment_stats`, `analytics_delivery_stats`, `analytics_driver_stats`, `analytics_discount_usage`, `analytics_coupon_usage`, `analytics_product_categories`, `analytics_processed_events`.
+- **Admin APIs (`analytics.view` permission):**
+  - `GET /api/v1/admin/analytics/dashboard` (revenue summary, order summary, best products, best categories, customer lifetime summary)
+  - `GET /api/v1/admin/analytics/sales` (daily sales/revenue timeline with `from`/`to` filters)
+  - `GET /api/v1/admin/analytics/products` (best-selling products and variants with `from`, `to`, `category_id` filters)
+  - `GET /api/v1/admin/analytics/customers` (paginated customer stats with sorting and pagination)
+  - `GET /api/v1/admin/analytics/delivery` (delivery method and driver stats with exact weighted delivery duration averages)
+- **Tests Added:** 41 feature tests in `tests/Feature/Analytics/` across 9 test classes (`OrderPaidAnalyticsTest`, `OrderCancelledAnalyticsTest`, `PaymentAnalyticsTest`, `ShipmentAnalyticsTest`, `AnalyticsAuthorizationTest`, `AdminAnalyticsApiTest`, `AnalyticsEventIdempotencyTest`, `DeliveryAnalyticsAccuracyTest`, `FinancialAnalyticsSafetyTest`).
+
 ### Fix — Catalog: hierarchical category product filtering
 
 **Product filtering by category is now hierarchy-aware.** Selecting a category includes products assigned directly to the chosen category as well as all of its descendant subcategories recursively at arbitrary depth. Ancestors and sibling categories are strictly excluded.

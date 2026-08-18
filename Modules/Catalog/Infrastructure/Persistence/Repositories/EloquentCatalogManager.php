@@ -420,6 +420,8 @@ class EloquentCatalogManager implements CatalogManagerInterface
     private function hydrateVariant(ProductVariant $variant): ProductVariantDTO
     {
         $discountMap = $this->discountMapForVariants(collect([$variant]));
+        $ancestors = $this->categories->ancestorsFor([$variant->product?->category_id]);
+        $categoryIds = $ancestors[$variant->product?->category_id] ?? [];
 
         return ProductVariantDTO::fromModel(
             $variant,
@@ -428,6 +430,8 @@ class EloquentCatalogManager implements CatalogManagerInterface
             $this->availableStockFor($variant->sku),
             null,
             $discountMap[$variant->id] ?? null,
+            (int) $variant->product_id,
+            $categoryIds,
         );
     }
 
@@ -452,6 +456,9 @@ class EloquentCatalogManager implements CatalogManagerInterface
         // One Promotion call for every SKU asked for — this is the path Cart uses
         // for the whole basket and Order uses for the whole checkout.
         $discountMap = $this->discountMapForVariants($variants);
+        $ancestors = $this->categories->ancestorsFor(
+            $variants->pluck('product.category_id')->filter()->unique()->all()
+        );
         $mediaIds = $variants
             ->flatMap(fn (ProductVariant $variant): array => [
                 $variant->media_id,
@@ -473,6 +480,8 @@ class EloquentCatalogManager implements CatalogManagerInterface
                     ? $mediaMap->get($variant->product->primary_media_id)?->url
                     : null,
                 $discountMap[$variant->id] ?? null,
+                (int) $variant->product_id,
+                $ancestors[$variant->product?->category_id] ?? [],
             ),
         ])->all();
     }
@@ -824,6 +833,9 @@ class EloquentCatalogManager implements CatalogManagerInterface
             ))
             ->all();
 
+        $ancestors = $this->categories->ancestorsFor([$product->category_id]);
+        $categoryIds = $ancestors[$product->category_id] ?? [];
+
         $variants = $product->variants
             ->map(fn ($v) => ProductVariantDTO::fromModel(
                 $v,
@@ -832,6 +844,8 @@ class EloquentCatalogManager implements CatalogManagerInterface
                 $stockMap[$v->sku] ?? 0,
                 $primaryImageUrl,
                 $discountMap[$v->id] ?? null,
+                (int) $product->id,
+                $categoryIds,
             ))
             ->all();
 

@@ -9,7 +9,9 @@ use Illuminate\Support\Facades\Event;
 use Modules\Cart\Domain\Contracts\CartManagerInterface;
 use Modules\Order\Domain\Contracts\OrderManagerInterface;
 use Modules\Payment\Domain\Enums\PaymentStatus;
+use Modules\Payment\Domain\Events\PaymentCancelledEvent;
 use Modules\Payment\Domain\Events\PaymentFailedEvent;
+use Modules\Payment\Domain\Events\PaymentSuccessfulEvent;
 use Modules\Payment\Domain\Models\Payment;
 use Modules\Payment\Infrastructure\Gateways\PaymentGatewayFactory;
 
@@ -31,6 +33,20 @@ class HandleZarinpalCallbackAction
 
         if ($status !== 'OK') {
             $payment->update(['status' => PaymentStatus::FAILED->value]);
+
+            $order = $this->orderManager->findOrder($payment->order_id);
+            if ($order !== null) {
+                Event::dispatch(new PaymentCancelledEvent(
+                    orderId: $order->id,
+                    userId: $order->userId,
+                    gateway: $payment->gateway ?? 'zarinpal',
+                    amount: (int) $payment->amount,
+                    paymentId: $payment->id,
+                    paymentPublicCode: $payment->public_code,
+                    orderPublicCode: $order->publicCode,
+                    cancelledAt: now()->toDateTimeString(),
+                ));
+            }
 
             return ['success' => false, 'message' => 'Payment was cancelled by the user.', 'payment_id' => $payment->id];
         }
@@ -60,6 +76,8 @@ class HandleZarinpalCallbackAction
                         orderId: $order->id,
                         userId: $order->userId,
                         orderPublicCode: $order->publicCode,
+                        gateway: $payment->gateway ?? 'zarinpal',
+                        amount: (int) $payment->amount,
                     ));
                 }
 
@@ -74,6 +92,17 @@ class HandleZarinpalCallbackAction
 
             $order = $this->orderManager->markAsPaid($payment->order_id, (string) $result['reference_id']);
             $this->cartManager->clearUserCart($order->userId);
+
+            Event::dispatch(new PaymentSuccessfulEvent(
+                orderId: $order->id,
+                userId: $order->userId,
+                gateway: $payment->gateway ?? 'zarinpal',
+                amount: (int) $payment->amount,
+                paymentId: $payment->id,
+                paymentPublicCode: $payment->public_code,
+                orderPublicCode: $order->publicCode,
+                paidAt: now()->toDateTimeString(),
+            ));
 
             return [
                 'success' => true,

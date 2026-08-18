@@ -176,6 +176,13 @@
   <a href="#promotions-campaigns">Campaigns</a>
   <a href="#promotions-admin">Admin API</a>
   <a href="#promotions-permissions">Permissions</a>
+
+  <div class="section-label">Analytics</div>
+  <a href="#analytics-dashboard">Admin — Dashboard</a>
+  <a href="#analytics-sales">Admin — Sales</a>
+  <a href="#analytics-products">Admin — Products</a>
+  <a href="#analytics-customers">Admin — Customers</a>
+  <a href="#analytics-delivery">Admin — Delivery</a>
 </nav>
 
 <main>
@@ -4585,6 +4592,250 @@ order total</pre>
   <div class="note">All six are seeded and granted to the <strong>admin</strong> role. Coupon and campaign management are split from discount CRUD deliberately, so a marketing operator can be given code and merchandising control without the ability to rewrite pricing rules.</div>
 
   <div class="warn"><strong>Customers need no promotion permission at all.</strong> Browsing products with live pricing, listing campaigns, viewing campaign products, checking a coupon on your own order, and paying are protected by authentication and ownership — never by a <code>promotion.*</code> permission. The <code>customer</code> role is granted none of them.</div>
+
+  <!-- ============================================================ -->
+  <!--                      ANALYTICS                               -->
+  <!-- ============================================================ -->
+
+  <h2 id="analytics-dashboard">Analytics — Admin Dashboard</h2>
+  <p>Returns high-level business KPI aggregates across gross/net revenue, order counts, top selling products and categories, and customer lifetime averages.</p>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/admin/analytics/dashboard</span>
+      <span class="badge auth">auth:sanctum</span>
+      <span class="badge admin">analytics.view</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="block-label">Response 200 OK</div>
+      <pre>{
+  <span class="key">"data"</span>: {
+    <span class="key">"revenue"</span>: {
+      <span class="key">"total_gross_revenue"</span>: <span class="num">150000000</span>,
+      <span class="key">"total_net_revenue"</span>: <span class="num">135000000</span>,
+      <span class="key">"total_discount_amount"</span>: <span class="num">10000000</span>,
+      <span class="key">"total_coupon_amount"</span>: <span class="num">5000000</span>,
+      <span class="key">"total_refund_amount"</span>: <span class="num">0</span>
+    },
+    <span class="key">"orders"</span>: {
+      <span class="key">"total_orders"</span>: <span class="num">42</span>,
+      <span class="key">"total_paid_orders"</span>: <span class="num">40</span>,
+      <span class="key">"total_cancelled_orders"</span>: <span class="num">2</span>
+    },
+    <span class="key">"top_products"</span>: [
+      {
+        <span class="key">"product_id"</span>: <span class="num">101</span>,
+        <span class="key">"quantity_sold"</span>: <span class="num">15</span>,
+        <span class="key">"total_revenue"</span>: <span class="num">75000000</span>
+      }
+    ],
+    <span class="key">"top_categories"</span>: [
+      {
+        <span class="key">"category_id"</span>: <span class="num">10</span>,
+        <span class="key">"quantity_sold"</span>: <span class="num">25</span>,
+        <span class="key">"total_revenue"</span>: <span class="num">120000000</span>
+      }
+    ],
+    <span class="key">"customers"</span>: {
+      <span class="key">"total_customers"</span>: <span class="num">35</span>,
+      <span class="key">"average_order_value"</span>: <span class="num">3571428</span>
+    }
+  }
+}</pre>
+    </div>
+  </div>
+
+  <h2 id="analytics-sales">Analytics — Sales &amp; Revenue Timeline</h2>
+  <p>Returns daily sales records and summary totals. Supports optional <code>from</code> and <code>to</code> date filters in <code>YYYY-MM-DD</code> format.</p>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/admin/analytics/sales?from=2026-08-01&amp;to=2026-08-31</span>
+      <span class="badge auth">auth:sanctum</span>
+      <span class="badge admin">analytics.view</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="block-label">Query Parameters</div>
+      <table>
+        <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
+        <tr><td><code>from</code></td><td><code>string (Y-m-d)</code> <span class="opt">optional</span></td><td>Filter records starting on or after this date.</td></tr>
+        <tr><td><code>to</code></td><td><code>string (Y-m-d)</code> <span class="opt">optional</span></td><td>Filter records on or before this date.</td></tr>
+      </table>
+
+      <div class="block-label">Response 200 OK</div>
+      <pre>{
+  <span class="key">"data"</span>: {
+    <span class="key">"daily_sales"</span>: [
+      {
+        <span class="key">"date"</span>: <span class="str">"2026-08-15"</span>,
+        <span class="key">"orders_count"</span>: <span class="num">5</span>,
+        <span class="key">"paid_orders_count"</span>: <span class="num">5</span>,
+        <span class="key">"cancelled_orders_count"</span>: <span class="num">0</span>,
+        <span class="key">"gross_revenue"</span>: <span class="num">25000000</span>,
+        <span class="key">"discount_amount"</span>: <span class="num">2000000</span>,
+        <span class="key">"coupon_amount"</span>: <span class="num">1000000</span>,
+        <span class="key">"refund_amount"</span>: <span class="num">0</span>,
+        <span class="key">"net_revenue"</span>: <span class="num">22000000</span>
+      }
+    ],
+    <span class="key">"summary"</span>: {
+      <span class="key">"total_gross_revenue"</span>: <span class="num">25000000</span>,
+      <span class="key">"total_net_revenue"</span>: <span class="num">22000000</span>,
+      <span class="key">"total_discount_amount"</span>: <span class="num">2000000</span>,
+      <span class="key">"total_coupon_amount"</span>: <span class="num">1000000</span>,
+      <span class="key">"total_refund_amount"</span>: <span class="num">0</span>,
+      <span class="key">"total_orders"</span>: <span class="num">5</span>,
+      <span class="key">"total_paid_orders"</span>: <span class="num">5</span>,
+      <span class="key">"total_cancelled_orders"</span>: <span class="num">0</span>
+    }
+  }
+}</pre>
+    </div>
+  </div>
+
+  <h2 id="analytics-products">Analytics — Product &amp; Variant Sales</h2>
+  <p>Returns sales performance per product and per variant. When <code>category_id</code> is provided, results are filtered to products in that category using the self-contained Analytics index.</p>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/admin/analytics/products?category_id=10</span>
+      <span class="badge auth">auth:sanctum</span>
+      <span class="badge admin">analytics.view</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="block-label">Query Parameters</div>
+      <table>
+        <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
+        <tr><td><code>from</code></td><td><code>string (Y-m-d)</code> <span class="opt">optional</span></td><td>Filter sales on or after this date.</td></tr>
+        <tr><td><code>to</code></td><td><code>string (Y-m-d)</code> <span class="opt">optional</span></td><td>Filter sales on or before this date.</td></tr>
+        <tr><td><code>category_id</code></td><td><code>integer</code> <span class="opt">optional</span></td><td>Filter products belonging to this category.</td></tr>
+      </table>
+
+      <div class="block-label">Response 200 OK</div>
+      <pre>{
+  <span class="key">"data"</span>: {
+    <span class="key">"products"</span>: [
+      {
+        <span class="key">"product_id"</span>: <span class="num">101</span>,
+        <span class="key">"quantity_sold"</span>: <span class="num">12</span>,
+        <span class="key">"orders_count"</span>: <span class="num">10</span>,
+        <span class="key">"gross_revenue"</span>: <span class="num">60000000</span>,
+        <span class="key">"discount_amount"</span>: <span class="num">5000000</span>,
+        <span class="key">"net_revenue"</span>: <span class="num">55000000</span>
+      }
+    ],
+    <span class="key">"variants"</span>: [
+      {
+        <span class="key">"variant_id"</span>: <span class="num">201</span>,
+        <span class="key">"quantity_sold"</span>: <span class="num">7</span>,
+        <span class="key">"orders_count"</span>: <span class="num">6</span>,
+        <span class="key">"gross_revenue"</span>: <span class="num">35000000</span>,
+        <span class="key">"discount_amount"</span>: <span class="num">3000000</span>,
+        <span class="key">"net_revenue"</span>: <span class="num">32000000</span>
+      }
+    ]
+  }
+}</pre>
+    </div>
+  </div>
+
+  <h2 id="analytics-customers">Analytics — Customer Lifetime Stats</h2>
+  <p>Returns paginated customer lifetime statistics including total spend, order count, and average order value.</p>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/admin/analytics/customers?sort=total_spent&amp;direction=desc&amp;per_page=15</span>
+      <span class="badge auth">auth:sanctum</span>
+      <span class="badge admin">analytics.view</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="block-label">Query Parameters</div>
+      <table>
+        <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
+        <tr><td><code>sort</code></td><td><code>string</code> <span class="opt">optional</span></td><td><code>total_spent</code>, <code>orders_count</code>, <code>average_order_value</code>, or <code>created_at</code> (default: <code>total_spent</code>).</td></tr>
+        <tr><td><code>direction</code></td><td><code>string</code> <span class="opt">optional</span></td><td><code>asc</code> or <code>desc</code> (default: <code>desc</code>).</td></tr>
+        <tr><td><code>per_page</code></td><td><code>integer</code> <span class="opt">optional</span></td><td>Items per page (1–100, default: 15).</td></tr>
+        <tr><td><code>page</code></td><td><code>integer</code> <span class="opt">optional</span></td><td>Page number.</td></tr>
+      </table>
+
+      <div class="block-label">Response 200 OK</div>
+      <pre>{
+  <span class="key">"data"</span>: [
+    {
+      <span class="key">"customer_id"</span>: <span class="num">42</span>,
+      <span class="key">"orders_count"</span>: <span class="num">8</span>,
+      <span class="key">"total_spent"</span>: <span class="num">48000000</span>,
+      <span class="key">"total_discount_received"</span>: <span class="num">4000000</span>,
+      <span class="key">"average_order_value"</span>: <span class="num">6000000</span>,
+      <span class="key">"first_order_at"</span>: <span class="str">"2026-06-01T10:00:00.000000Z"</span>,
+      <span class="key">"last_order_at"</span>: <span class="str">"2026-08-18T14:30:00.000000Z"</span>
+    }
+  ],
+  <span class="key">"links"</span>: { <span class="comment">/* standard pagination links */</span> },
+  <span class="key">"meta"</span>: {
+    <span class="key">"current_page"</span>: <span class="num">1</span>,
+    <span class="key">"per_page"</span>: <span class="num">15</span>,
+    <span class="key">"total"</span>: <span class="num">1</span>
+  }
+}</pre>
+    </div>
+  </div>
+
+  <h2 id="analytics-delivery">Analytics — Delivery &amp; Driver Performance</h2>
+  <p>Returns fulfillment aggregates per shipping method (assigned, delivered, failed counts, average delivery duration in minutes) and per delivery driver.</p>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/admin/analytics/delivery?method=local_delivery</span>
+      <span class="badge auth">auth:sanctum</span>
+      <span class="badge admin">analytics.view</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="block-label">Query Parameters</div>
+      <table>
+        <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
+        <tr><td><code>from</code></td><td><code>string (Y-m-d)</code> <span class="opt">optional</span></td><td>Filter deliveries on or after this date.</td></tr>
+        <tr><td><code>to</code></td><td><code>string (Y-m-d)</code> <span class="opt">optional</span></td><td>Filter deliveries on or before this date.</td></tr>
+        <tr><td><code>method</code></td><td><code>string</code> <span class="opt">optional</span></td><td>Filter by shipping method code (e.g. <code>local_delivery</code>, <code>post_standard</code>).</td></tr>
+        <tr><td><code>driver_id</code></td><td><code>integer</code> <span class="opt">optional</span></td><td>Filter driver stats by driver user ID.</td></tr>
+      </table>
+
+      <div class="block-label">Response 200 OK</div>
+      <pre>{
+  <span class="key">"data"</span>: {
+    <span class="key">"delivery_by_method"</span>: [
+      {
+        <span class="key">"method"</span>: <span class="str">"local_delivery"</span>,
+        <span class="key">"assigned_count"</span>: <span class="num">20</span>,
+        <span class="key">"delivered_count"</span>: <span class="num">19</span>,
+        <span class="key">"failed_count"</span>: <span class="num">1</span>,
+        <span class="key">"average_delivery_minutes"</span>: <span class="num">35</span>
+      }
+    ],
+    <span class="key">"driver_stats"</span>: [
+      {
+        <span class="key">"driver_id"</span>: <span class="num">7</span>,
+        <span class="key">"assigned_count"</span>: <span class="num">20</span>,
+        <span class="key">"completed_count"</span>: <span class="num">19</span>,
+        <span class="key">"failed_count"</span>: <span class="num">1</span>,
+        <span class="key">"average_delivery_minutes"</span>: <span class="num">35</span>
+      }
+    ],
+    <span class="key">"summary"</span>: {
+      <span class="key">"total_assigned"</span>: <span class="num">20</span>,
+      <span class="key">"total_delivered"</span>: <span class="num">19</span>,
+      <span class="key">"total_failed"</span>: <span class="num">1</span>,
+      <span class="key">"overall_average_delivery_minutes"</span>: <span class="num">35</span>
+    }
+  }
+}</pre>
+    </div>
+  </div>
 
 
 </main>

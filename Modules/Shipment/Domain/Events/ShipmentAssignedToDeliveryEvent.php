@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Modules\Shipment\Domain\Events;
 
+use Illuminate\Support\Str;
+
 /**
  * Published integration event: a delivery worker became responsible for a
  * local-delivery shipment.
@@ -19,6 +21,8 @@ namespace Modules\Shipment\Domain\Events;
  */
 class ShipmentAssignedToDeliveryEvent
 {
+    public readonly string $eventId;
+
     public function __construct(
         public readonly int $shipmentId,
         public readonly string $shipmentPublicCode,
@@ -31,5 +35,8 @@ class ShipmentAssignedToDeliveryEvent
         /** Slot window start (`H:i:s`) from the frozen slot snapshot. */
         public readonly ?string $deliveryStartsAt = null,
         public readonly ?string $deliveryEndsAt = null,
-    ) {}
+        ?string $eventId = null,
+    ) {
+        $this->eventId = $eventId ?? (string) Str::uuid();
+    }
 }

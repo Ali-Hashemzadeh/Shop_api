@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
+use Modules\Analytics\Infrastructure\Persistence\Seeders\AnalyticsPermissionsSeeder;
 use Modules\Catalog\Infrastructure\Persistence\Seeders\CatalogModuleSeeder;
 use Modules\Catalog\Infrastructure\Persistence\Seeders\CatalogSampleDataSeeder;
 use Modules\Identity\Infrastructure\Persistence\Seeders\IdentityModuleSeeder;
@@ -40,6 +41,7 @@ class DatabaseSeeder extends Seeder
             ShipmentPermissionsSeeder::class,
             NotificationPermissionsSeeder::class,
             PromotionPermissionsSeeder::class,
+            AnalyticsPermissionsSeeder::class,
             CatalogSampleDataSeeder::class,
             // Runs after the catalog demo data: promotion targets are loose
             // references to real product/category ids, so those rows must exist first.
