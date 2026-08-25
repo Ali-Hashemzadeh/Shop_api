@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Review Module — Ratings &amp; Comments Architecture</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #222537;
+      --border: #2e3147;
+      --text: #e2e4f0;
+      --muted: #8b8fa8;
+      --accent: #7c6af7;
+      --ok: #22c55e;
+      --info: #3b82f6;
+      --warnc: #f59e0b;
+      --bad: #ef4444;
+      --cyan: #22d3ee;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); display: flex; }
+
+    nav { width: 260px; min-width: 260px; background: var(--surface); border-right: 1px solid var(--border); height: 100vh; overflow-y: auto; position: sticky; top: 0; padding: 24px 0; }
+    nav .logo { padding: 0 20px 24px; font-size: 15px; font-weight: 700; color: var(--accent); border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+    nav .logo span { color: var(--muted); font-weight: 400; font-size: 12px; display: block; margin-top: 3px; }
+    nav a { display: block; padding: 6px 20px; font-size: 13px; color: var(--muted); text-decoration: none; border-left: 2px solid transparent; }
+    nav a:hover { color: var(--text); background: var(--surface2); }
+    nav .section-label { padding: 16px 20px 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: #565b73; }
+
+    main { flex: 1; padding: 48px 56px; max-width: 1040px; }
+    h1 { font-size: 32px; font-weight: 700; margin-bottom: 8px; }
+    .subtitle { font-size: 15px; color: var(--muted); margin-bottom: 28px; }
+    h2 { font-size: 22px; font-weight: 700; margin: 56px 0 20px; padding-top: 56px; border-top: 1px solid var(--border); }
+    h2:first-of-type { border-top: none; padding-top: 0; margin-top: 32px; }
+    h3 { font-size: 14px; font-weight: 600; margin: 32px 0 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+    p { font-size: 14px; line-height: 1.7; color: var(--muted); margin-bottom: 12px; }
+    p strong, li strong, td strong { color: var(--text); }
+    ul, ol { font-size: 14px; color: var(--muted); padding-left: 20px; line-height: 1.9; margin-bottom: 12px; }
+    a { color: var(--accent); }
+
+    code { font-family: 'SF Mono', Menlo, Consolas, monospace; font-size: 12.5px; background: var(--surface2); padding: 2px 6px; border-radius: 4px; color: var(--cyan); }
+    pre { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px 18px; overflow-x: auto; margin-bottom: 16px; font-size: 12.5px; line-height: 1.65; color: var(--text); }
+    pre code { background: none; padding: 0; }
+
+    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 13px; display: block; overflow-x: auto; }
+    th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    th { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; font-weight: 700; white-space: nowrap; }
+    td { color: var(--muted); }
+    tbody tr:hover { background: var(--surface); }
+
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; margin-bottom: 16px; }
+    .callout { border-left: 3px solid var(--accent); background: var(--surface); border-radius: 0 8px 8px 0; padding: 14px 18px; margin-bottom: 16px; font-size: 13.5px; line-height: 1.7; color: var(--muted); }
+    .callout.warn { border-left-color: var(--warnc); }
+    .callout.bad { border-left-color: var(--bad); }
+    .callout.ok { border-left-color: var(--ok); }
+    .callout strong { color: var(--text); }
+
+    .pill { display: inline-block; font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 20px; text-transform: uppercase; letter-spacing: .04em; }
+    .pill.get { background: rgba(34,197,94,.15); color: #4ade80; }
+    .pill.post { background: rgba(59,130,246,.15); color: #60a5fa; }
+    .pill.patch { background: rgba(245,158,11,.15); color: #fbbf24; }
+
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 1100px) { body { display: block; } nav { display: none; } main { padding: 32px 20px; } .grid2 { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+<nav>
+  <div class="logo">Review Module<span>Ratings · Comments · Moderation</span></div>
+
+  <div class="section-label">Overview</div>
+  <a href="#what">What it is</a>
+  <a href="#entity">One entity, two jobs</a>
+  <a href="#boundaries">Module boundaries</a>
+
+  <div class="section-label">Core rules</div>
+  <a href="#subject">Subject references</a>
+  <a href="#purchase">Verified-purchase gating</a>
+  <a href="#upsert">One review per user per subject</a>
+  <a href="#moderation">Moderation lifecycle</a>
+
+  <div class="section-label">Aggregation</div>
+  <a href="#sync">Rating sync to Catalog</a>
+  <a href="#math">Average &amp; count math</a>
+
+  <div class="section-label">Reference</div>
+  <a href="#endpoints">Endpoints</a>
+  <a href="#permissions">Permissions</a>
+  <a href="#non-goals">Deliberate non-goals</a>
+</nav>
+
+<main>
+  <h1>Review Module</h1>
+  <p class="subtitle">How product ratings and comments work inside the Shop API modular monolith — one entity that is always a comment and sometimes also a star rating.</p>
+
+  <!-- ─────────────────────────── Overview ─────────────────────────── -->
+
+  <h2 id="what">What it is</h2>
+  <p><code>Modules/Review</code> owns exactly one entity: the <strong>Review</strong>. A review is a comment a signed-in
+  customer leaves on a product. Whether that same row also carries a star rating is decided by the
+  <em>server</em>, from the customer's purchase history — never by the client.</p>
+  <p>The module follows the standard <code>Domain / Application / Infrastructure</code> blueprint and obeys every
+  enclosure rule of the monolith: no Catalog model is ever imported, no Order table is ever queried directly, and
+  everything that crosses the wall travels as a contract call or an immutable DTO.</p>
+  <div class="callout ok">
+    <strong>The mental model.</strong> A customer can always <em>speak</em>. They may only <em>score</em> if the backend can
+    prove they bought the thing. And whatever they write goes back into the moderation queue.
+  </div>
+
+  <h2 id="entity">One entity, two jobs</h2>
+  <p>There is no separate <code>comments</code> table and no <code>Comment</code> model. A single <code>reviews</code> row holds:</p>
+  <table>
+    <tr><th>Column</th><th>Meaning</th></tr>
+    <tr><td><code>uuid</code></td><td>Public code <code>bdr-XXXXXX</code> — the API-facing handle for update/moderation routes.</td></tr>
+    <tr><td><code>subject_type</code> + <code>subject_id</code></td><td>Loose reference to what is being reviewed (today only <code>product</code>). No FK, no Eloquent morph map.</td></tr>
+    <tr><td><code>user_id</code></td><td>Loose reference to the author. No FK.</td></tr>
+    <tr><td><code>rating</code></td><td>Nullable tinyint 1–5. <code>null</code> = "comment without rating". Never a float.</td></tr>
+    <tr><td><code>body</code></td><td>The comment text. Always required, purchase or not.</td></tr>
+    <tr><td><code>gallery_media_ids</code></td><td>JSON array of pre-uploaded Media ids. Purchasers only.</td></tr>
+    <tr><td><code>verified_purchase</code></td><td>Server-computed. Never accepted from client input.</td></tr>
+    <tr><td><code>status</code></td><td><code>pending</code> → <code>approved</code> / <code>rejected</code>. Default <code>pending</code>.</td></tr>
+    <tr><td><code>seller_reply</code> / <code>seller_reply_at</code></td><td>Single overwritable seller reply. No thread.</td></tr>
+  </table>
+  <div class="grid2">
+    <div class="card"><strong>Comment-only review</strong><br/>Anyone signed in with <code>review.create</code>, on any product. <code>rating = null</code>, <code>verified_purchase = false</code>.</div>
+    <div class="card"><strong>Rated review</strong><br/>Same table, same row shape — but the server proved a realized purchase, so <code>rating</code> (and optionally photos) are allowed. <code>verified_purchase = true</code>.</div>
+  </div>
+
+  <h2 id="boundaries">Module boundaries</h2>
+  <p>Review is a leaf consumer. Two contracts connect it to the rest of the system, and nothing else:</p>
+  <pre>                    ┌────────────┐
+                    │   Review   │
+                    └─────┬──────┘
+        asks "did user X buy product Y?"
+                          │  OrderManagerInterface::hasPurchasedProduct()
+                          ▼
+                    ┌────────────┐          pushes absolute tallies hourly
+                    │   Order    │   ┌────────────────────────────────────┐
+                    └────────────┘   │ CatalogManagerInterface::         │
+                                     │        syncRatingSummary()        │
+                                     ▼                              │
+                               ┌────────────┐                       │
+                               │  Catalog   │◄──────────────────────┘
+                               └────────────┘
+                     reads reviews? NEVER. It stores counters only.</pre>
+  <ul>
+    <li><strong>Order answers one question:</strong> <code>hasPurchasedProduct(userId, productId)</code> — true when at least one order item for that product sits on an order in a realized state (<code>paid</code>, <code>processing</code>, <code>shipped</code>). Cancelled, failed, and pending orders never grant rating privileges.</li>
+    <li><strong>Catalog receives numbers, not queries:</strong> it stores raw <code>rating_sum</code> / <code>rating_count</code> on <code>products</code> and derives the average at read time. It cannot see the reviews table, and Review never sees products.</li>
+    <li><strong>Media is asked about ids:</strong> gallery ids submitted by purchasers are validated against <code>MediaManagerInterface</code>; the DTO carries resolved public URLs, never raw ids.</li>
+  </ul>
+
+  <!-- ─────────────────────────── Core rules ───────────────────────── -->
+
+  <h2 id="subject">Subject references: loose columns, not relations</h2>
+  <p>Like <code>media_id</code> everywhere else in this codebase, the review's subject is stored as two plain columns:
+  <code>subject_type</code> (an enum-backed whitelist) plus <code>subject_id</code>. There is deliberately no
+  <code>morphTo()</code>: instantiating Catalog's Product model from Review would break the hard module-isolation rule,
+  and an FK would weld the two schemas together.</p>
+  <p>The consequence is clean: <strong>consuming modules resolve their own subjects.</strong> Catalog enriches a page of
+  products with one batch call — <code>getSummaryForSubjects('product', $pageIds)</code> — the same discipline as its
+  batch stock lookup. Review's own public listing returns reviews only; composing them with product data is the
+  caller's job.</p>
+  <div class="callout">
+    <strong>Blog-ready without a migration.</strong> Adding blog-post reviews later means adding one enum case
+    (<code>blog_post</code>) and teaching the Form Requests its verification rule. No schema change, no new string
+    literals scattered through controllers.
+  </div>
+
+  <h2 id="purchase">Verified-purchase gating is validation, not a silent fix</h2>
+  <p>The gating decision happens <strong>inside the Form Request</strong>, before any Action runs:</p>
+  <table>
+    <tr><th>Situation</th><th><code>rating</code></th><th><code>gallery_media_ids</code></th><th><code>body</code></th></tr>
+    <tr><td>Purchaser (<code>hasPurchasedProduct = true</code>)</td><td><strong>required</strong>, integer 1–5</td><td>optional, each id must exist in Media</td><td>required</td></tr>
+    <tr><td>Non-purchaser</td><td>must be absent/null — sending one is <strong>422</strong></td><td>must be absent/empty — sending ids is <strong>422</strong></td><td>required</td></tr>
+  </table>
+  <div class="callout warn">
+    <strong>Nothing is silently dropped.</strong> A non-purchaser who submits a rating gets an explicit validation error on
+    <code>rating</code> — the API never pretends the field wasn't there. Non-purchasers are allowed to speak; they just
+    cannot score.
+  </div>
+  <p>Purchase status is re-resolved <strong>on every write</strong>, including edits. That is what makes the upgrade path in
+  the next section possible.</p>
+
+  <h2 id="upsert">One review per user per subject</h2>
+  <p>A unique index on <code>(user_id, subject_type, subject_id)</code> makes the write path an upsert. The classic flow:</p>
+  <ol>
+    <li>Before buying, the customer leaves a comment → row created, <code>rating = null</code>, <code>verified_purchase = false</code>.</li>
+    <li>They buy the product (order reaches <code>paid</code>).</li>
+    <li>They PATCH their review with a rating and photos → the <em>same row</em> is updated: <code>verified_purchase</code> flips to true, the rating sticks.</li>
+  </ol>
+  <pre>POST /api/v1/reviews            → 201 (fresh create)
+POST /api/v1/reviews  (again)   → 200 (same row updated in place)
+PATCH /api/v1/reviews/{uuid}    → 200 (owner-only edit)</pre>
+  <div class="callout bad">
+    <strong>Every edit resets <code>status</code> back to <code>pending</code>.</strong> An approved review that gets edited contains
+    unmoderated content — it goes back to the queue, even if only a typo changed. The previous approval never leaks
+    through.
+  </div>
+
+  <h2 id="moderation">Moderation lifecycle</h2>
+  <pre>            create / edit                admin decision            admin re-review
+   ┌──────────────────────────┐   ┌──────────────────────────┐   ┌─────────────────────┐
+   │                          ▼   │                          ▼   │                     │
+   │                       pending ───► approved ◄────────► rejected                      │
+   │                          ▲   │        │                      ▲                   │
+   └──────────────────────────┘   └────────│──────────────────────┘
+                                            │
+                                       (edit anywhere → back to pending)</pre>
+  <table>
+    <tr><th>Transition</th><th>Who</th><th>Legal?</th></tr>
+    <tr><td><code>pending → approved</code> / <code>pending → rejected</code></td><td>admin (<code>review.moderate</code>)</td><td>yes</td></tr>
+    <tr><td><code>approved ↔ rejected</code> (re-review)</td><td>admin</td><td>yes</td></tr>
+    <tr><td>anything <code>→ pending</code></td><td>nobody via the admin endpoint</td><td><strong>no — 422.</strong> Only create/edit sets pending.</td></tr>
+    <tr><td>approved content edited by owner</td><td>system</td><td>forced reset to <code>pending</code></td></tr>
+  </table>
+  <p>The public listing serves <strong>approved rows only, always</strong>. Any <code>status</code> query parameter a client sends
+  is ignored — there is no way to read pending or rejected content through the public route. The seller reply is a
+  single overwritable field: replying again replaces it, no threads.</p>
+
+  <!-- ─────────────────────────── Aggregation ──────────────────────── -->
+
+  <h2 id="sync">Rating sync to Catalog: the <code>sales_count</code> pattern</h2>
+  <p>Averages are never computed live across the reviews table on product pages. Instead, an hourly scheduled command
+  mirrors how best-seller counts already work:</p>
+  <ol>
+    <li><code>reviews:sync-product-ratings</code> aggregates Review's <strong>own tables</strong>: rows with <code>status = approved</code>
+        <strong>and</strong> a non-null <code>rating</code>, grouped per product → <code>SUM(rating)</code>, <code>COUNT(*)</code>.</li>
+    <li>It pushes each absolute tally through <code>CatalogManagerInterface::syncRatingSummary(productId, sum, count)</code>.</li>
+    <li>Catalog stamps raw integers onto <code>products.rating_sum</code> / <code>products.rating_count</code> — the exact structural twin of <code>sales_count</code>.</li>
+  </ol>
+  <div class="callout ok">
+    <strong>Self-correcting sweep.</strong> Every product that has ever been reviewed (any status) appears in the sweep, so a
+    product whose approved ratings all get rejected is synced back to zero without needing a global reset — review
+    rows are never deleted, so the subject list is complete.
+  </div>
+
+  <h2 id="math">"4.5★ (2 ratings) · 3 reviews" is correct output</h2>
+  <p>Because only rated rows feed the counters, the average and the review count answer different questions:</p>
+  <table>
+    <tr><th>Row</th><th>Status</th><th>Feeds average?</th><th>Shown publicly?</th></tr>
+    <tr><td>"Great, 5★"</td><td>approved</td><td>yes (sum+count)</td><td>yes</td></tr>
+    <tr><td>"Great, 4★"</td><td>approved</td><td>yes (sum+count)</td><td>yes</td></tr>
+    <tr><td>"Question about sizing" (no rating)</td><td>approved</td><td><strong>no</strong></td><td>yes</td></tr>
+    <tr><td>"Terrible, 1★"</td><td>pending</td><td>no</td><td>no</td></tr>
+  </table>
+  <p>Catalog derives <code>rating_average = round(rating_sum / rating_count, 2)</code> at read time — it is never stored, so
+  it cannot drift from its inputs. Unrated products report <code>null</code>. The ordering math behind
+  <code>?sort=rating</code> and the <code>min_rating</code> filter is pure integer arithmetic
+  (<code>(rating_sum × 10000) / rating_count</code>, <code>rating_sum ≥ n × rating_count</code>) — no floats touch the pipeline.</p>
+
+  <!-- ─────────────────────────── Reference ────────────────────────── -->
+
+  <h2 id="endpoints">Endpoints at a glance</h2>
+  <table>
+    <tr><th>Method</th><th>Route</th><th>Auth</th><th>Purpose</th></tr>
+    <tr><td><span class="pill get">GET</span></td><td><code>/api/v1/reviews?subject_type=product&amp;subject_id=…</code></td><td>public, throttle <code>public</code></td><td>Approved reviews for one subject. Sorts <code>newest|highest|lowest</code>.</td></tr>
+    <tr><td><span class="pill post">POST</span></td><td><code>/api/v1/reviews</code></td><td><code>review.create</code>, throttle <code>api</code></td><td>Create, or upgrade-in-place (201 / 200).</td></tr>
+    <tr><td><span class="pill patch">PATCH</span></td><td><code>/api/v1/reviews/{uuid}</code></td><td>owner (<code>review.create</code> + policy)</td><td>Edit own review. Re-gates, resets to pending.</td></tr>
+    <tr><td><span class="pill get">GET</span></td><td><code>/api/v1/admin/reviews</code></td><td><code>review.view-admin</code></td><td>All statuses, filterable by <code>status</code>/<code>subject_type</code>.</td></tr>
+    <tr><td><span class="pill patch">PATCH</span></td><td><code>/api/v1/admin/reviews/{uuid}/status</code></td><td><code>review.moderate</code></td><td>Approve / reject / swap. Never <code>pending</code>.</td></tr>
+    <tr><td><span class="pill post">POST</span></td><td><code>/api/v1/admin/reviews/{uuid}/reply</code></td><td><code>review.moderate</code></td><td>Set/overwrite the single seller reply.</td></tr>
+  </table>
+  <p>Full request/response shapes live in <code>API_DOCUMENTATION.html</code> and the auto-generated Scramble docs at
+  <code>/docs/api</code>.</p>
+
+  <h2 id="permissions">Permissions</h2>
+  <table>
+    <tr><th>Permission</th><th>Customer</th><th>Admin</th><th>Guards</th></tr>
+    <tr><td><code>review.create</code></td><td>✓</td><td>✓</td><td>POST /reviews, PATCH /reviews/{uuid} (+ ownership)</td></tr>
+    <tr><td><code>review.view-admin</code></td><td>—</td><td>✓</td><td>GET /admin/reviews</td></tr>
+    <tr><td><code>review.moderate</code></td><td>—</td><td>✓</td><td>status + reply endpoints</td></tr>
+  </table>
+  <p>Authorization is permission-based throughout: roles are bundles, and ownership on PATCH is enforced by
+  <code>ReviewPolicy</code> as a standard <strong>403</strong> — deliberately unlike the driver-API pattern where another driver gets a
+  404. An owner may always address their own review.</p>
+
+  <h2 id="non-goals">Deliberate non-goals</h2>
+  <ul>
+    <li>No separate Comment entity — one row is both rating and comment.</li>
+    <li>No blog support yet — the whitelist has exactly one value today.</li>
+    <li>No half-star or decimal ratings; integer 1–5 only.</li>
+    <li>No helpful/unhelpful voting, no reporting/flagging, no reply threads beyond the single seller reply.</li>
+    <li>No inline file uploads on review endpoints — media must be pre-uploaded via <code>POST /api/v1/media</code>.</li>
+    <li>No caching layer (matches Catalog's current state).</li>
+  </ul>
+</main>
+</body>
+</html>

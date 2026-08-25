@@ -122,6 +122,18 @@ class ReviewRatingSyncTest extends TestCase
     /**
      * @test
      */
+    public function product_reads_expose_the_numeric_id_needed_for_review_subject_id(): void
+    {
+        $product = $this->createProduct();
+
+        $this->getJson("/api/v1/catalog/products/{$product->uuid}")
+            ->assertOk()
+            ->assertJsonPath('product_id', $product->id);
+    }
+
+    /**
+     * @test
+     */
     public function products_can_be_sorted_by_rating_and_filtered_by_min_rating(): void
     {
         $great = $this->createProduct();

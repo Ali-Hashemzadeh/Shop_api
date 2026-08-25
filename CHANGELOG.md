@@ -41,7 +41,10 @@ moderation needs and nothing more.
 - **Catalog additions:** all three product listings (`/products`, `/categories/{id}/products`,
   `/products/admin`) accept `sort=rating` (pure integer ordering, unrated last) and a `min_rating` filter
   (1–5, integer math `rating_sum >= n × rating_count`, unrated excluded); product reads expose derived
-  `rating_average` + raw `rating_count`.
+  `rating_average` + raw `rating_count`, plus the numeric `product_id` (additive — reviews are addressed by
+  integer subject ids while product URLs stay on the public code).
+- **Frontend docs:** `REVIEW_ARCHITECTURE.html` (module explainer) and a Reviews section with an end-to-end
+  frontend implementation guide in `API_DOCUMENTATION.html`.
 - **Permissions:** `review.create` (customer + admin); `review.view-admin`, `review.moderate` (admin only),
   seeded by `ReviewPermissionsSeeder`. Rate limiting follows convention: `public` on the open read, `api` on
   authenticated writes/admin surface.

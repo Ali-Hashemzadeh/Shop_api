@@ -17,6 +17,9 @@ class ProductResource extends JsonResource
         return [
             // Public identifier is the opaque UUID; the internal integer id is not exposed.
             'id' => $dto->uuid,
+            // Numeric key for cross-referencing surfaces keyed by integer ids
+            // (e.g. reviews' subject_id). Never used in URLs by clients.
+            'product_id' => $dto->id,
             'title' => $dto->title,
             'slug' => $dto->slug,
             'description' => $dto->description,

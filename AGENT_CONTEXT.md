@@ -460,7 +460,9 @@ replaces no primary key, foreign key, relation, cron input, internal query, or a
     identical to `sales_count`) and derives `rating_average` at read time.
   * **Catalog additions:** `sort=rating` (pure integer ordering `(rating_sum*10000)/rating_count`, unrated last) and
     `min_rating` (integer math `rating_sum >= n × rating_count`, unrated excluded) on all three product listings;
-    product reads expose derived `rating_average` + `rating_count`.
+    product reads expose derived `rating_average` + `rating_count`, and the additive numeric `product_id`
+    (reviews take integer subject ids while product URLs stay on the public code — the frontend gets the number
+    from the product payload).
   * **Endpoints:** customer `POST /api/v1/reviews` (`review.create`, throttle `api`), `PATCH /api/v1/reviews/{uuid}`
     (owner), `GET /api/v1/reviews?subject_type=&subject_id=&sort=newest|highest|lowest` (public, approved-only regardless
     of any `status` param passed, throttled `public`); admin `GET /api/v1/admin/reviews?status=&subject_type=`
