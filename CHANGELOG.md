@@ -2,6 +2,52 @@
 
 ## [Unreleased]
 
+### Feature — Review: product ratings & comments (one entity, both jobs)
+
+**A new Review module (`Modules/Review`) adds star ratings and comments to products.** One entity —
+`Review` — is always a comment and *sometimes* also a rating, depending on server-resolved purchase
+status. There is no separate `comments` table, no half-star inputs, no helpful-voting: exactly what
+moderation needs and nothing more.
+
+- **Loose subject reference, enum-backed whitelist.** `reviews.subject_type` + `subject_id` carry no FK and
+  no Eloquent morph map (the same discipline as `media_id`); today the only legal value is `product`, and
+  blog support later is a new `ReviewSubjectType` enum case — never a schema change. Consuming modules
+  resolve their own subjects; Catalog enriches listings through the batch
+  `ReviewManagerInterface::getSummaryForSubjects()` (one page-wide call, no N+1), and Review's public read
+  endpoint returns reviews only.
+- **Verified-purchase gating by validation.** Purchase status is resolved server-side through the new
+  `OrderManagerInterface::hasPurchasedProduct()` (realized statuses only — the same set `sales_count`
+  uses) before rules run. A purchaser must send `rating` (integer 1–5) and may attach pre-uploaded media;
+  a non-purchaser sending `rating` or `gallery_media_ids` gets **422** — never silently dropped. Body-only
+  comments are always allowed.
+- **One review per user per subject.** A unique `(user_id, subject_type, subject_id)` index makes POST an
+  upsert: a commenter who later buys the product edits their existing row via PATCH — the edit re-resolves
+  purchase status (`verified_purchase` flips true) and accepts rating/photos. POST returns 201 on create,
+  200 on the upgrade path. Every write resets `status=pending`: edited content is unmoderated content.
+- **Public reads are approved-only, always.** `GET /api/v1/reviews?subject_type=&subject_id=` ignores any
+  caller-passed `status`; sorts are `newest|highest|lowest` with unrated rows kept below rated ones in both
+  directions. Writes are owner-scoped: `PATCH /api/v1/reviews/{uuid}` is a standard policy 403 for
+  non-owners, 404 before validation for unknown codes (`bdr-XXXXXX`, public-code column `reviews.uuid`).
+- **Moderation:** admin may move pending→approved/rejected and approved↔rejected (re-review); nothing ever
+  transitions into `pending` — that state is system-only, set on create/edit. Single overwritable seller
+  reply per review. Admin listing shows every status with `status=`/`subject_type=` filters.
+- **Rating aggregation mirrors `sales_count` structurally.** New hourly scheduled command
+  `reviews:sync-product-ratings` aggregates approved + non-null-rating reviews per product from Review's own
+  tables and pushes absolute tallies through the new `CatalogManagerInterface::syncRatingSummary()`.
+  Catalog stores raw integer `products.rating_sum`/`rating_count` (never client-accepted) and derives
+  `rating_average` at read time, so it cannot drift; products whose counters lapse are synced back to zero
+  (self-correcting sweep). An approved comment without a rating never moves the average — "4.3★ (8 ratings)
+  · 12 reviews" is correct output.
+- **Catalog additions:** all three product listings (`/products`, `/categories/{id}/products`,
+  `/products/admin`) accept `sort=rating` (pure integer ordering, unrated last) and a `min_rating` filter
+  (1–5, integer math `rating_sum >= n × rating_count`, unrated excluded); product reads expose derived
+  `rating_average` + raw `rating_count`.
+- **Permissions:** `review.create` (customer + admin); `review.view-admin`, `review.moderate` (admin only),
+  seeded by `ReviewPermissionsSeeder`. Rate limiting follows convention: `public` on the open read, `api` on
+  authenticated writes/admin surface.
+- **Tests Added:** 35 feature tests in `tests/Feature/Review/` across 4 classes (`ReviewTest`,
+  `ReviewModerationTest`, `ReviewAuthorizationTest`, `ReviewRatingSyncTest`).
+
 ### Feature — Analytics: Event-driven read-model and reporting system (Hardened)
 
 **A new, decoupled Analytics module (`Modules/Analytics`) provides high-performance reporting and analytics for admin dashboards.**

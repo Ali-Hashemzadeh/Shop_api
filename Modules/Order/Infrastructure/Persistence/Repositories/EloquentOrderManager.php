@@ -20,6 +20,7 @@ use Modules\Order\Domain\DTOs\OrderPaidItemDTO;
 use Modules\Order\Domain\Enums\OrderStatus;
 use Modules\Order\Domain\Events\OrderPaidEvent;
 use Modules\Order\Domain\Models\Order;
+use Modules\Order\Domain\Models\OrderItem;
 use Modules\Promotion\Domain\Contracts\PromotionManagerInterface;
 use Modules\Promotion\Domain\Exceptions\CouponRejectedException;
 use Modules\Shipment\Domain\Contracts\ShipmentManagerInterface;
@@ -303,6 +304,20 @@ class EloquentOrderManager implements OrderManagerInterface
         $shipment = app(ShipmentManagerInterface::class)->findForOrder($orderId);
 
         return new AdminOrderDetailDTO($this->toDTO($order), $shipment);
+    }
+
+    public function hasPurchasedProduct(int $userId, int $productId): bool
+    {
+        // Realized orders only — the exact status set `sales_count` uses, so a
+        // cancelled or failed attempt never grants rating privileges. The
+        // product match rides on the immutable checkout snapshot
+        // (`product_snapshot.product_id`), entirely within Order's own tables.
+        return OrderItem::query()
+            ->join('orders', 'orders.id', '=', 'order_items.order_id')
+            ->where('orders.user_id', $userId)
+            ->whereIn('orders.status', OrderStatus::soldStatuses())
+            ->where('order_items.product_snapshot->product_id', $productId)
+            ->exists();
     }
 
     private function toDTO(Order $order): OrderDTO

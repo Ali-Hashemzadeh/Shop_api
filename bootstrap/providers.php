@@ -11,6 +11,7 @@ use Modules\Notification\Infrastructure\Providers\NotificationServiceProvider;
 use Modules\Order\Infrastructure\Providers\OrderServiceProvider;
 use Modules\Payment\Infrastructure\Providers\PaymentServiceProvider;
 use Modules\Promotion\Infrastructure\Providers\PromotionServiceProvider;
+use Modules\Review\Infrastructure\Providers\ReviewServiceProvider;
 use Modules\Shipment\Infrastructure\Providers\ShipmentServiceProvider;
 use Modules\Sms\Infrastructure\Providers\SmsServiceProvider;
 
@@ -30,4 +31,5 @@ return [
     SmsServiceProvider::class,
     NotificationServiceProvider::class,
     AnalyticsServiceProvider::class,
+    ReviewServiceProvider::class,
 ];

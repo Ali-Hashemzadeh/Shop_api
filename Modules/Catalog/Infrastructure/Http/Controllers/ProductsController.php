@@ -93,6 +93,7 @@ class ProductsController extends Controller
             'brand_id' => $request->integer('brand_id') ?: null,
             'min_price' => $request->has('min_price') ? $request->integer('min_price') : null,
             'max_price' => $request->has('max_price') ? $request->integer('max_price') : null,
+            'min_rating' => $request->has('min_rating') ? $request->integer('min_rating') : null,
             'search' => $request->string('search')->trim()->toString() ?: null,
             'sort' => $request->string('sort')->trim()->toString() ?: null,
             'has_discount' => $request->has('has_discount') ? $request->boolean('has_discount') : null,
@@ -114,6 +115,7 @@ class ProductsController extends Controller
             'brand_id' => $request->integer('brand_id') ?: null,
             'min_price' => $request->has('min_price') ? $request->integer('min_price') : null,
             'max_price' => $request->has('max_price') ? $request->integer('max_price') : null,
+            'min_rating' => $request->has('min_rating') ? $request->integer('min_rating') : null,
             'search' => $request->string('search')->trim()->toString() ?: null,
             'sort' => $request->string('sort')->trim()->toString() ?: null,
         ], fn ($v) => $v !== null);
@@ -128,6 +130,7 @@ class ProductsController extends Controller
         $filters = array_filter([
             'min_price' => $request->has('min_price') ? $request->integer('min_price') : null,
             'max_price' => $request->has('max_price') ? $request->integer('max_price') : null,
+            'min_rating' => $request->has('min_rating') ? $request->integer('min_rating') : null,
             'search' => $request->string('search')->trim()->toString() ?: null,
             'sort' => $request->string('sort')->trim()->toString() ?: null,
             'available' => $request->has('available') ? $request->string('available')->toString() === 'true' : null,

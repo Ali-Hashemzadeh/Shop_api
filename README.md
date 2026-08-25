@@ -62,8 +62,9 @@ Tables outside the Media module never use cascading foreign keys to the `media` 
 Every Action and Repository method that mutates state has matching feature tests covering: happy path, validation failure, not-found (404), invariant enforcement, and authorization (401/403).
 
 ### Customer-Facing Public Codes
-Products, variants, orders, payments, shipments, addresses and categories each carry a short, human-safe code —
-`bdp-K92XMQ`, `bdv-R7P4NZ`, `bdo-Q8M2XC`, `bdt-W4N7KP`, `bds-Z9C3TR`, `bda-H7Q9CM`, `bdc-T4K8NP`. The `bd`
+Products, variants, orders, payments, shipments, addresses, categories and reviews each carry a short, human-safe
+code — `bdp-K92XMQ`, `bdv-R7P4NZ`, `bdo-Q8M2XC`, `bdt-W4N7KP`, `bds-Z9C3TR`, `bda-H7Q9CM`, `bdc-T4K8NP`,
+`bdr-M2X9KQ`. The `bd`
 namespace comes from the required `PUBLIC_CODE_NAMESPACE` env key; the six-character suffix is CSPRNG output
 over `23456789ABCDEFGHJKMNPQRSTUVWXYZ` (no `0`/`O`/`1`/`I`/`L`, so a code cannot be misread). They are built
 only by `App\Support\PublicCodeGenerator`, are server-owned (never client-writable, never regenerated, never
@@ -103,7 +104,7 @@ ull = unlimited by Catalog, minimum configured value 1). It applies independentl
 - **Key contract:** `CatalogManagerInterface` — full read/write surface consumed by higher-level modules (e.g. Orders, Inventory)
 - **Authorization:** Public read endpoints require no auth. Write endpoints and the admin product view require `auth:sanctum`; authorization is permission-based (`catalog.category.*`, `catalog.product.*`, `catalog.variant.*`) enforced via Laravel policies — any user granted a specific permission can act, independent of role.
 - **Pagination:** List endpoints return `LengthAwarePaginator` with a `{data, links, meta}` envelope. `per_page` (1–100) and `page` are documented automatically by Scramble.
-- **Product sort:** listing endpoints accept `?sort=cheapest|most_expensive|most_sold`. Price sorts use the default variant's `base_price`; `most_sold` uses a denormalized `sales_count` kept in sync hourly from realized orders (Order module's `orders:sync-sales-counts` → `CatalogManagerInterface::syncSalesCounts()`). Invalid values → 422.
+- **Product sort:** listing endpoints accept `?sort=cheapest|most_expensive|most_sold|rating`. Price sorts use the default variant's `base_price`; `most_sold` uses a denormalized `sales_count` kept in sync hourly from realized orders (Order module's `orders:sync-sales-counts` → `CatalogManagerInterface::syncSalesCounts()`); `rating` orders by the derived average of synced `rating_sum`/`rating_count` (Review module's hourly sync). All listings also accept `min_rating=1..5`. Invalid values → 422.
 - **Image input:** Write endpoints accept images two ways — either send a `media_id` (pre-uploaded via the Media endpoint) or attach the file inline as `multipart/form-data`. The two are mutually exclusive per field. Inline fields: `image` on category create, `primary_image` + `gallery[]` (index sets sort order) on product create/update, and `variant_image` on variant create/update. These multipart fields are documented in Scramble via `#[BodyParameter]` attributes.
 
 ### Inventory (Complete)
@@ -206,6 +207,16 @@ Reporting and read-model authority for sales, performance, customer lifetime sta
 - **Key Tables:** `analytics_daily_sales`, `analytics_product_sales`, `analytics_variant_sales`, `analytics_category_sales` (with ancestor hierarchy propagation), `analytics_customer_stats`, `analytics_payment_stats`, `analytics_delivery_stats`, `analytics_driver_stats`, `analytics_discount_usage`, `analytics_coupon_usage`, `analytics_product_categories`.
 - **Public Contract:** `AnalyticsManagerInterface` — `getDashboard()`, `getSales()`, `getProducts()`, `getCustomers()`, `getDelivery()`.
 - **Authorization:** `analytics.view` permission required on all `/api/v1/admin/analytics/*` routes.
+
+### Review (Complete)
+One entity — `Review` — that serves as both star rating and comment in a single record. Product subjects only today; blog support later is an enum case, not a schema change.
+
+- **Subject references:** loose columns (`subject_type` enum whitelist + `subject_id`, no FK, no morph map) — the same discipline as `media_id`. Review never imports Catalog's models; Catalog batch-enriches products via `ReviewManagerInterface::getSummaryForSubjects()` (one call per page, no N+1).
+- **Verified-purchase gating:** purchase status is resolved server-side via `OrderManagerInterface::hasPurchasedProduct()` and enforced by validation. Purchasers must rate (int 1–5) and may attach pre-uploaded media ids; non-purchasers may comment only — sending `rating` or `gallery_media_ids` is a 422, never silently dropped.
+- **One review per user per subject** (unique index): POST upgrades in place — 201 on create, 200 on the upgrade path. Every edit re-resolves purchase status and resets `status=pending` for re-moderation.
+- **Rating aggregation mirrors `sales_count`:** the hourly `reviews:sync-product-ratings` command pushes absolute tallies of approved + rated reviews through `CatalogManagerInterface::syncRatingSummary()`. Catalog stores raw `rating_sum`/`rating_count`, derives `rating_average` at read time, and adds `sort=rating` + a `min_rating` filter to all product listings. An approved comment without a rating never moves the average.
+- **Endpoints:** public `GET /api/v1/reviews?subject_type=&subject_id=` (approved-only regardless of any `status` param; sorts `newest|highest|lowest`); writes `POST /api/v1/reviews`, `PATCH /api/v1/reviews/{uuid}` (owner-only, 403 policy); admin `GET /api/v1/admin/reviews`, `PATCH /api/v1/admin/reviews/{uuid}/status` (approved/rejected only — nothing re-enters `pending`), `POST /api/v1/admin/reviews/{uuid}/reply` (single overwritable reply).
+- **Authorization:** permission-based — `review.create` (customer + admin); `review.view-admin`, `review.moderate` (admin only). Public code: `bdr-XXXXXX`.
 
 ---
 
@@ -413,6 +424,7 @@ Several modules rely on Laravel's scheduler (defined in `routes/console.php`):
 | `orders:cancel-expired` | every minute | Cancel unpaid pending orders past the 15-min TTL and release their reservations |
 | `payments:expire-stale` | every 5 minutes | Fail/settle stale payment attempts |
 | `orders:sync-sales-counts` | hourly | Push best-seller tallies to Catalog |
+| `reviews:sync-product-ratings` | hourly | Push rating summaries (approved + rated reviews) to Catalog |
 | `shipment:generate-delivery-slots` | daily at 00:30 | Generate dated local-delivery sessions from the recurring working periods |
 
 These fire **only if Laravel's scheduler is itself driven by the system cron**. In production add this **single** cron entry (it runs `schedule:run` every minute; Laravel then decides which commands are due):
@@ -523,6 +535,7 @@ tests/
 | Sms | Complete |
 | Promotion | Complete |
 | Analytics | Complete & Hardened |
+| Review | Complete |
 
 ---
 

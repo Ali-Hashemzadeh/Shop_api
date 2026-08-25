@@ -73,7 +73,7 @@ interface CatalogManagerInterface
      *                             owning product), both case-insensitive and
      *                             whole-string; anything else is LIKE %value% on
      *                             title, description, OR brand name
-     *   - sort         (string) — cheapest | most_expensive (default variant base_price) | most_sold (sales_count desc)
+     *   - sort         (string) — cheapest | most_expensive (default variant base_price) | most_sold (sales_count desc) | rating (average rating, unrated last)
      *
      * @return LengthAwarePaginator<ProductDTO>
      */
@@ -89,7 +89,7 @@ interface CatalogManagerInterface
      *   - min_price    (int)    — default variant base_price >= value
      *   - max_price    (int)    — default variant base_price <= value
      *   - search       (string) — LIKE %value% on title, description, slug, variant SKU, or brand name
-     *   - sort         (string) — cheapest | most_expensive (default variant base_price) | most_sold (sales_count desc)
+     *   - sort         (string) — cheapest | most_expensive (default variant base_price) | most_sold (sales_count desc) | rating (average rating, unrated last)
      *
      * @return LengthAwarePaginator<ProductDTO>
      */
@@ -133,6 +133,15 @@ interface CatalogManagerInterface
      * @param  array<string, int>  $skuTotals  sku => total units sold
      */
     public function syncSalesCounts(array $skuTotals): void;
+
+    /**
+     * Replace one product's denormalized rating counters with an authoritative,
+     * absolute tally (owned by the Review module, approved + rated rows only).
+     *
+     * The average is derived at read time from these raw integers, mirroring
+     * how `sales_count` works structurally. Never client-accepted.
+     */
+    public function syncRatingSummary(int $productId, int $ratingSum, int $ratingCount): void;
 
     // ── Product Variants ──────────────────────────────────────────────────────
 

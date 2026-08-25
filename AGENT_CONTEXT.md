@@ -72,6 +72,7 @@ replaces no primary key, foreign key, relation, cron input, internal query, or a
 | Shipment | `bds-XXXXXX` | `shipments.public_code` | reused; replaces `SH-*` generation |
 | Address | `bda-XXXXXX` | `addresses.public_code` | new |
 | Category | `bdc-XXXXXX` | `categories.public_code` | new |
+| Review | `bdr-XXXXXX` | `reviews.uuid` | new; column name historical like Product |
 
 * **Immutable and server-owned.** Never accepted from client input, never a writable field, never regenerated
   on update, never reused after deletion. The four new columns are **nullable at the DB level** (matching the
@@ -424,7 +425,58 @@ replaces no primary key, foreign key, relation, cron input, internal query, or a
 
 ---
 
-## 8. Completed & Ready
+### Module: Review (`Modules/Review/`) — Product Ratings & Comments ✅
+
+  * **Position in the graph:** a **leaf consumer**. Review imports no Catalog model ever; it reaches Order only through
+    `OrderManagerInterface::hasPurchasedProduct()` and pushes aggregates into Catalog only through
+    `CatalogManagerInterface::syncRatingSummary()`. One entity — `Review` — is both star rating and comment; there is no
+    separate Comment entity and no blog support yet.
+  * **Subject reference pattern:** `subject_type` + `subject_id` are plain loose columns (no FK, no Eloquent morph map).
+    `subject_type` is an enum-backed whitelist (`ReviewSubjectType`, today only `product`); adding `blog_post` later means
+    adding an enum case, never a schema change or scattered string literals. Consuming modules resolve their own subjects —
+    Catalog calls the batch `getSummaryForSubjects()` beside its other page-wide batching; Review's public read endpoint
+    returns reviews only and never fetches product data.
+  * **Table:** `reviews` (`uuid` = unique public code `bdr-XXXXXX`, nullable at the DB level per the public-code rule;
+    `subject_type`/`subject_id`; loose `user_id`; nullable tinyint `rating`; text `body`; JSON `gallery_media_ids`
+    (pre-uploaded Media ids — no inline uploads); server-computed `verified_purchase`; `status` pending/approved/rejected,
+    default pending; `seller_reply`/`seller_reply_at`; timestamps). **Unique index on `(user_id, subject_type,
+    subject_id)`** — one review per user per subject.
+  * **Verified-purchase gating is validation, not an Action correction.** Purchase status is resolved server-side through
+    `hasPurchasedProduct()` (realized statuses only — the same set `sales_count` uses) before rules run. Purchaser ⇒
+    `rating` required integer 1–5, photos optional (each id checked against MediaManagerInterface), body required.
+    Non-purchaser ⇒ `rating`/`gallery_media_ids` must be absent/null — sending them is a **422**, never silently dropped;
+    body-only comments are always allowed. `verified_purchase` is re-resolved on every edit, so a commenter who later buys
+    the product upgrades their existing review via PATCH (rating/photos accepted, flag flips true).
+  * **Edit resets moderation.** Create and the create-or-upgrade path both stamp `status=pending`; editing an approved
+    review sends it back to pending for re-moderation. POST returns **201 on a fresh create, 200 on the upgrade-in-place**
+    (`ReviewWriteResultDTO.created`). PATCH `/reviews/{uuid}` is owner-only via `ReviewPolicy` (standard **403** for
+    non-owners — deliberately unlike the driver-API 404 scoping).
+  * **Rating aggregation mirrors `sales_count` exactly:** hourly `reviews:sync-product-ratings` aggregates approved +
+    non-null-rating rows per product from Review's own tables and pushes absolute tallies through
+    `syncRatingSummary()`. An approved comment without a rating never moves the average (so "4.3★ (8 ratings) · 12
+    reviews" is correct). Products that once had counters but currently have no approved rated rows are synced back to
+    zero — every product ever pushed has at least one review row (rows are never deleted), so the sweep is self-correcting
+    without a global reset. Catalog stores raw `products.rating_sum`/`products.rating_count` (integer, indexed semantics
+    identical to `sales_count`) and derives `rating_average` at read time.
+  * **Catalog additions:** `sort=rating` (pure integer ordering `(rating_sum*10000)/rating_count`, unrated last) and
+    `min_rating` (integer math `rating_sum >= n × rating_count`, unrated excluded) on all three product listings;
+    product reads expose derived `rating_average` + `rating_count`.
+  * **Endpoints:** customer `POST /api/v1/reviews` (`review.create`, throttle `api`), `PATCH /api/v1/reviews/{uuid}`
+    (owner), `GET /api/v1/reviews?subject_type=&subject_id=&sort=newest|highest|lowest` (public, approved-only regardless
+    of any `status` param passed, throttled `public`); admin `GET /api/v1/admin/reviews?status=&subject_type=`
+    (`review.view-admin`), `PATCH /api/v1/admin/reviews/{uuid}/status` and `POST /api/v1/admin/reviews/{uuid}/reply`
+    (`review.moderate`). Moderation allows pending→approved/rejected and approved↔rejected re-review; nothing transitions
+    into `pending` (system-only, on create/edit). Reply is single and overwritable.
+  * **Permissions:** `review.create` (customer + admin); `review.view-admin`, `review.moderate` (admin only) — seeded by
+    `ReviewPermissionsSeeder`.
+  * **Tests:** `tests/Feature/Review/` — **35 tests** (ReviewTest 13, ReviewModerationTest 9, ReviewAuthorizationTest 7,
+    ReviewRatingSyncTest 6): purchase gating matrix, upsert/upgrade semantics, edit-resets-pending, public approved-only
+    guarantee, moderation transitions incl. the pending prohibition, reply overwrite, rating-summary correctness, and
+    Catalog sort/filter integration.
+
+---
+
+
 
 | Module | Status | Tests |
 |---|---|---|
@@ -440,5 +492,6 @@ replaces no primary key, foreign key, relation, cron input, internal query, or a
 | Sms | ✅ Infrastructure ready | 13 passing (SmsManagerTest) |
 | Promotion | ✅ Complete | 120 passing (24 unit + 96 feature across 6 classes) |
 | Analytics | ✅ Complete & Hardened | 41 passing across 9 feature test classes |
+| Review | ✅ Complete | 35 passing across 4 feature test classes |
 
-**Full suite: 682+ passing, 2,500+ assertions.** One unrelated, pre-existing `ProfileTest::authenticated_user_can_update_profile` failure remains — verified to fail identically on a clean tree and out of scope.
+**Full suite: 808 tests, 806 passing.** Two unrelated pre-existing failures remain — `ProfileTest::authenticated_user_can_update_profile` and `Analytics\FinancialAnalyticsSafetyTest::payment_failed_and_cancelled_events_do_not_mutate_payment_stats` — both verified to fail identically on a clean tree and out of scope.

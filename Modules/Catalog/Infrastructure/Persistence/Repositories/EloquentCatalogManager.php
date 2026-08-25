@@ -404,6 +404,16 @@ class EloquentCatalogManager implements CatalogManagerInterface
         });
     }
 
+    public function syncRatingSummary(int $productId, int $ratingSum, int $ratingCount): void
+    {
+        // Absolute replacement — the caller (Review's sync command) is the
+        // authority for the complete tally of this product.
+        Product::query()->whereKey($productId)->update([
+            'rating_sum' => max(0, $ratingSum),
+            'rating_count' => max(0, $ratingCount),
+        ]);
+    }
+
     // ── Product Variants ──────────────────────────────────────────────────────
 
     public function findVariant(int $variantId): ?ProductVariantDTO
@@ -572,6 +582,13 @@ class EloquentCatalogManager implements CatalogManagerInterface
             );
         }
 
+        // Average rating >= min_rating expressed in pure integer math:
+        // sum >= min * count (with count > 0). Unrated products never match.
+        if (isset($filters['min_rating'])) {
+            $minRating = max(1, min(5, (int) $filters['min_rating']));
+            $query->whereRaw('rating_count > 0 AND rating_sum >= ? * rating_count', [$minRating]);
+        }
+
         if (isset($filters['search']) && $filters['search'] !== '') {
             if (! $admin && $this->applyPublicCodeSearch($query, (string) $filters['search'])) {
                 return;
@@ -728,6 +745,13 @@ class EloquentCatalogManager implements CatalogManagerInterface
         switch ($sort) {
             case 'most_sold':
                 $query->orderByDesc('sales_count')->orderByDesc('id');
+                break;
+
+            case 'rating':
+                // Pure integer math (scaled by 10^4) so the average ordering
+                // never depends on float behaviour; unrated products sort last.
+                $query->orderByRaw('CASE WHEN rating_count > 0 THEN (rating_sum * 10000) / rating_count ELSE 0 END DESC')
+                    ->orderByDesc('id');
                 break;
 
             case 'cheapest':

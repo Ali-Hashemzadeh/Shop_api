@@ -24,7 +24,20 @@ class ProductDTO
         public readonly ?string $primaryImageUrl,
         public readonly array $images,
         public readonly array $variants,
+        public readonly int $ratingSum = 0,
+        public readonly int $ratingCount = 0,
     ) {}
+
+    /**
+     * Derived at read time from the raw synced counters — never stored, so it
+     * cannot drift. Null when no approved rating exists yet.
+     */
+    public function ratingAverage(): ?float
+    {
+        return $this->ratingCount > 0
+            ? round($this->ratingSum / $this->ratingCount, 2)
+            : null;
+    }
 
     /**
      * @param  ProductImageDTO[]  $images
@@ -50,6 +63,8 @@ class ProductDTO
             primaryImageUrl: $primaryImageUrl,
             images: $images,
             variants: $variants,
+            ratingSum: (int) ($product->rating_sum ?? 0),
+            ratingCount: (int) ($product->rating_count ?? 0),
         );
     }
 }

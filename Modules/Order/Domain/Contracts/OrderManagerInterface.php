@@ -76,4 +76,13 @@ interface OrderManagerInterface
      * state resolved through the Shipment contract. Null when the order is missing.
      */
     public function getAdminOrderDetail(int $orderId): ?AdminOrderDetailDTO;
+
+    /**
+     * True when the user has at least one order item for this product on an
+     * order in a realized state (the same status set `sales_count` uses).
+     *
+     * Consumed by the Review module for verified-purchase gating; Order answers
+     * the question from its own tables — no cross-module query ever happens.
+     */
+    public function hasPurchasedProduct(int $userId, int $productId): bool;
 }

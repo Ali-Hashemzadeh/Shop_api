@@ -23,6 +23,9 @@ class ProductResource extends JsonResource
             'features' => $dto->features,
             'status' => $dto->status,
             'sales_count' => $dto->salesCount,
+            // Rating summary synced from the Review module (approved + rated rows only).
+            'rating_average' => $dto->ratingAverage(),
+            'rating_count' => $dto->ratingCount,
             'category_id' => $dto->categoryId,
             'brand_id' => $dto->brandId,
             'primary_image_url' => $dto->primaryImageUrl,

@@ -201,8 +201,10 @@ Order items snapshot prices and images at checkout and are never refreshed or ba
 | **Notification** | ✅ Infrastructure | `Modules/Notification/`. Provider registered. In-app notification storage (`notifications`) + external-delivery audit (`notification_deliveries`), `NotificationManagerInterface` (`send`/`getUserNotifications`/`markAsRead`/`unreadCount`), channel abstraction (`DatabaseChannel`, `SmsChannel` — no email/push). **SMS is optional:** internal template names are the `NotificationTemplate` enum; when the active provider has no template id configured for one, the send is *skipped* (info log + `skipped` delivery row), never thrown and never failed — `DeliveryStatus` is pending/sent/failed/skipped. Customer API: `GET /api/v1/notifications`, `POST /api/v1/notifications/{id}/read` (owner-only, 403 otherwise). Admin API: `GET`/`PUT /api/v1/admin/notifications/admin-order-paid-sms-recipients` (`notification.admin-sms-recipients.manage`) — **every** admin gets the in-app `admin_order_paid` notification, but only the admins selected here also get the `admin_order_paid` SMS. Selection lives in Notification's own generic `notification_recipient_preferences` table (user + notification type + channel); `user_id` is a loose Identity reference and admin-ness is checked through `IdentityManagerInterface::isAdmin()`, never an FK or `exists:users,id`. **Business flows are wired via published integration events** (primitives only, `Domain/Events/`): `OrderPaidEvent` (from `markAsPaid`, real transition only → customer db+sms + admin db, selected admins also sms), `PaymentFailedEvent` (verification-failure branch → customer db), `OrderCancelledEvent` (customer/admin cancel actions → db+sms), `Shipment{PreparingStarted,ReadyForPickup,HandedToPost,OutForDelivery,Delivered}Event` (from `ShipmentTransitionService`). The generic `ShipmentSentEvent` is gone; `NotificationType::SHIPMENT_SENT` stays defined for historical rows only and is never emitted. Listeners live in `Notification/Application/Listeners`, are registered in `NotificationServiceProvider::boot()`, and all implement `ShouldHandleEventsAfterCommit`. Never call `NotificationManagerInterface` from a controller, callback, or resource. Tests under `tests/Feature/Notification/`. |
 | **Sms** | ✅ Infrastructure | `Modules/Sms/`. Provider registered. `SmsManagerInterface` → `SmsProviderFactory` → `SmsProviderInterface` (`smsir`/`log`/`fake`), config-backed via `config/sms.php` + `SMS_*` env. Stable internal `SmsMessageDTO` (receiver/template/parameters); providers own all API-shape translation. `SmsResultDTO` has three outcomes — success / **skipped** (provider not configured for that template; expected) / failure (a real attempt that failed). **Separate from Identity's `OtpSenderInterface`** — never reuse it. Tests under `tests/Feature/Sms/`. |
 | **Analytics** | ✅ Implemented | `Modules/Analytics/`. Provider registered. Read-model and reporting authority. Never queries other modules' tables or imports other modules' Eloquent models. Consumes published integration domain events carrying immutable `$eventId` UUIDs (`OrderPaidEvent`, `OrderCancelledEvent`, `PaymentSuccessfulEvent`, `PaymentFailedEvent`, `PaymentCancelledEvent`, `Shipment{AssignedToDelivery,HandedToPost,Delivered,DeliveryFailed}Event`). Event processing is atomic and idempotent via `analytics_processed_events` deduplication. Owns 10 reporting tables + 1 category index + 1 processed events table: `analytics_daily_sales`, `analytics_product_sales`, `analytics_variant_sales`, `analytics_category_sales` (hierarchical propagation: item category + all ancestor categories are updated on purchase), `analytics_customer_stats`, `analytics_payment_stats`, `analytics_delivery_stats` (stores additive `total_delivery_minutes` to calculate accurate weighted averages), `analytics_driver_stats` (`total_delivery_minutes`), `analytics_discount_usage`, `analytics_coupon_usage`, `analytics_product_categories` (event-maintained self-contained index enabling category-filtered product reporting without Catalog cross-module queries), `analytics_processed_events`. Admin APIs (`analytics.view` permission): `GET /api/v1/admin/analytics/dashboard`, `GET /api/v1/admin/analytics/sales`, `GET /api/v1/admin/analytics/products`, `GET /api/v1/admin/analytics/customers`, `GET /api/v1/admin/analytics/delivery`. Tests under `tests/Feature/Analytics/`. |
+| **Review** | ✅ Implemented | `Modules/Review/`. Provider registered. One entity — `Review` — is both star rating and comment (no separate Comment entity; product subjects only today, blog-ready via the enum-backed `subject_type`). Loose subject reference (no FK, no morph map); verified-purchase gating resolved server-side through the new `OrderManagerInterface::hasPurchasedProduct()` and enforced by validation (non-purchasers may comment but sending a rating/photos is 422). One review per `(user_id, subject_type, subject_id)` unique index — POST upgrades in place (201 create / 200 upgrade) and every edit re-resolves purchase status and resets `status=pending`. Hourly `reviews:sync-product-ratings` pushes approved+rated-only tallies through the new `CatalogManagerInterface::syncRatingSummary()`; Catalog stores raw `products.rating_sum`/`rating_count`, derives `rating_average`, adds `sort=rating` + `min_rating`. Customer routes under `/api/v1/reviews*`, admin under `/api/v1/admin/reviews*`. Tests under `tests/Feature/Review/`. |
 
-**Test suite baseline: 707 tests green (120 of them Promotion, 47 of them delivery workers, 53 of them Notification), with one unrelated pre-existing `ProfileTest::authenticated_user_can_update_profile` failure that also fails on a clean tree.**
+**Test suite baseline: 808 tests (806 green). Two unrelated pre-existing failures also fail on a clean tree:
+`ProfileTest::authenticated_user_can_update_profile` and `Analytics\FinancialAnalyticsSafetyTest::payment_failed_and_cancelled_events_do_not_mutate_payment_stats`.**
 
 ### Delivery workers — cross-module rule
 - **A delivery worker is a shopper who also delivers: they hold `customer` *and* `delivery`.** The `delivery` role carries only
@@ -374,14 +376,18 @@ Order items snapshot prices and images at checkout and are never refreshed or ba
   `gallery_media_ids`, or `variants.*.media_id` (pre-uploaded via `POST /api/v1/media`).
 - **Hierarchical category product filtering:** filtering products by `category_id` (`/products`, `/categories/{id}/products`, `/products/admin`, `/campaigns/{slug}/products`) resolves the selected category and all of its descendants recursively via `CategoryHierarchy::descendantsOf()` before SQL pagination (`whereIn('category_id', $categoryIds)`). Ancestors and siblings are excluded. Invalid categories return 422 via FormRequest validation before expansion.
 - **Product sort:** all listing endpoints (`/products`, `/categories/{id}/products`,
-  `/products/admin`) accept `?sort=` ∈ {`cheapest`, `most_expensive`, `most_sold`}. Price sorts
+  `/products/admin`) accept `?sort=` ∈ {`cheapest`, `most_expensive`, `most_sold`, `rating`}. Price sorts
   order by the **default variant's** `base_price`; `most_sold` orders by a denormalized, indexed
-  `products.sales_count` (exposed as `sales_count`, never client-accepted). Absent/invalid → newest-first
+  `products.sales_count` (exposed as `sales_count`, never client-accepted); `rating` orders by the derived
+  average of denormalized `rating_sum`/`rating_count` (pure integer math, unrated last). Absent/invalid → newest-first
   default (invalid → 422). `sales_count` is kept current by the **Order** module: the hourly
   `orders:sync-sales-counts` command aggregates realized orders (`OrderStatus::soldStatuses()` =
   paid/processing/shipped) and pushes an absolute per-SKU tally through
   `CatalogManagerInterface::syncSalesCounts()` — Catalog resolves SKU→variant→product internally,
-  so no cross-module join.
+  so no cross-module join. The rating counters are kept current by the **Review** module's hourly
+  `reviews:sync-product-ratings` via `CatalogManagerInterface::syncRatingSummary()` (see Review — key
+  facts); product reads expose the derived `rating_average` + raw `rating_count`. All three listings also
+  accept a `min_rating` filter (1–5, integer math, unrated products excluded).
 - **Brands.** Flat lookup (`brands` table: `name`, unique `slug`, loose `media_id`, `is_active`) that
   products optionally belong to via a nullable `products.brand_id` FK (`nullOnDelete` — deleting a brand
   unlinks its products, never deletes them). Public reads (`GET /catalog/brands`, `GET /catalog/brands/{id}`);
@@ -398,6 +404,40 @@ Order items snapshot prices and images at checkout and are never refreshed or ba
 - **Contract:** `InventoryManagerInterface` — `getStockBySku`, `getBatchStockBySkus`, `adjustStock`, `reserveStock`, `commitReservation`, `releaseReservation`.
 - Exceptions: `StockNotFoundException` (unknown SKU), `InsufficientStockException` (available < requested).
 - Permissions: `inventory.stock.manage`, `inventory.ledger.view`.
+
+### Review — key facts
+- **One entity, two jobs.** `Review` is both star rating and comment; there is no `comments` table and no
+  separate Comment entity. Product subjects only today — `subject_type` is an enum-backed whitelist
+  (`ReviewSubjectType`), so blog support later is a new enum case, never a schema change or a scattered
+  `'product'` literal.
+- **Subject references are loose columns.** `subject_type` + `subject_id` carry no FK and no Eloquent morph
+  relation (same discipline as `media_id`). Review never imports Catalog's models; consuming modules resolve
+  their own subjects via the batch `ReviewManagerInterface::getSummaryForSubjects()` (one page-wide call,
+  no N+1). Review's public endpoint returns reviews only.
+- **Verified-purchase gating is validation, enforced by Form Requests.** Purchase status is resolved
+  server-side through `OrderManagerInterface::hasPurchasedProduct()` (realized statuses only — the same set
+  `sales_count` uses) before rules run. A purchaser must send `rating` (int 1–5) and may attach pre-uploaded
+  media; a non-purchaser sending `rating` or `gallery_media_ids` gets **422** — never silently dropped. Body-only
+  comments are always allowed.
+- **One review per `(user_id, subject_type, subject_id)`** (unique index). POST upgrades in place: **201 on
+  create, 200 on the upgrade path**. Every write re-resolves `verified_purchase`, so a commenter who later buys
+  the product adds rating/photos to their existing row via PATCH. Every edit resets `status=pending` — edited
+  content is unmoderated content.
+- **PATCH /reviews/{uuid} is owner-only policy 403** (standard pattern — deliberately not driver-style 404
+  scoping); unknown uuid → 404 before validation.
+- **Public reads are approved-only, always.** `GET /api/v1/reviews` never honors a caller-passed `status`;
+  sorts are `newest|highest|lowest`, with unrated rows kept below rated ones in both directions. Throttled with
+  the `public` limiter; writes use `api`.
+- **Moderation:** admin may move pending→approved/rejected and approved↔rejected (re-review); nothing
+  transitions into `pending` — that state is system-only, set on create/edit. Single overwritable seller reply.
+- **Rating sync mirrors `sales_count` structurally.** Catalog stores raw integer `products.rating_sum` +
+  `rating_count`; the hourly `reviews:sync-product-ratings` command pushes absolute per-product tallies of
+  approved+rated reviews through `CatalogManagerInterface::syncRatingSummary()` and zeroes products whose
+  counters lapsed (self-correcting sweep — every pushed product has at least one review row, rows are never
+  deleted). `rating_average` is derived at read time, never stored. An approved comment without a rating never
+  moves the average ("4.3★ (8 ratings) · 12 reviews" is correct).
+- **Permissions:** `review.create` (customer + admin), `review.view-admin` + `review.moderate` (admin only).
+- Public code: `bdr-XXXXXX` in `reviews.uuid` (column name historical, like `products.uuid`).
 
 ### Per-variant order quantity limit — cross-module rule
 - Catalog owns nullable `product_variants.max_quantity_per_order` and exposes it only through immutable `ProductVariantDTO`; `null` means no special limit and the minimum configured value is 1.

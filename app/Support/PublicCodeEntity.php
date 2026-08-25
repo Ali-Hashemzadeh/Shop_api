@@ -22,4 +22,5 @@ enum PublicCodeEntity: string
     case Shipment = 's';
     case Address = 'a';
     case Category = 'c';
+    case Review = 'r';
 }

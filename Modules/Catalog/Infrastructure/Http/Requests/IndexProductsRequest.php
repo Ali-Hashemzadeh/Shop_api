@@ -21,7 +21,8 @@ class IndexProductsRequest extends FormRequest
             'min_price' => ['nullable', 'integer', 'min:0'],
             'max_price' => ['nullable', 'integer', 'min:0'],
             'search' => ['nullable', 'string', 'max:255'],
-            'sort' => ['nullable', 'string', 'in:cheapest,most_expensive,most_sold'],
+            'sort' => ['nullable', 'string', 'in:cheapest,most_expensive,most_sold,rating'],
+            'min_rating' => ['nullable', 'integer', 'min:1', 'max:5'],
             'available' => ['sometimes', 'string', 'in:true,false'],
             'has_discount' => ['sometimes', 'string', 'in:true,false'],
         ];

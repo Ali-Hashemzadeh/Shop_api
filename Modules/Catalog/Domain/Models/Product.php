@@ -28,6 +28,8 @@ class Product extends Model
         return [
             'features' => 'array',
             'sales_count' => 'integer',
+            'rating_sum' => 'integer',
+            'rating_count' => 'integer',
         ];
     }
 
