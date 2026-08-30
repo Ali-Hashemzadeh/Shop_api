@@ -51,6 +51,8 @@ class UpdateProductRequest extends FormRequest
             'category_id' => ['nullable', 'integer', 'exists:categories,id'],
             'brand_id' => ['nullable', 'integer', 'exists:brands,id'],
             'primary_media_id' => ['nullable', 'integer'],
+            'gallery_media_ids' => ['nullable', 'array'],
+            'gallery_media_ids.*' => ['integer'],
             'variants' => ['nullable', 'array', 'min:1'],
             'variants.*.id' => ['nullable', 'integer', 'distinct'],
             'variants.*.type' => ['required', 'in:image,color'],

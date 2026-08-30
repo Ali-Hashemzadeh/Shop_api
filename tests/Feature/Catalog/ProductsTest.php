@@ -5,6 +5,7 @@ namespace Tests\Feature\Catalog;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Modules\Catalog\Domain\Models\Category;
 use Modules\Catalog\Domain\Models\Product;
+use Modules\Catalog\Domain\Models\ProductImage;
 use Modules\Catalog\Domain\Models\ProductVariant;
 use Modules\Inventory\Domain\Models\InventoryStock;
 use Tests\TestCase;
@@ -276,6 +277,107 @@ class ProductsTest extends TestCase
     public function it_returns_404_when_updating_a_non_existent_product(): void
     {
         $this->patchJson('/api/v1/catalog/products/99999', ['title' => 'Ghost'])->assertNotFound();
+    }
+
+    /** @test */
+    public function it_adds_new_gallery_images_when_updating_a_product(): void
+    {
+        $product = Product::create(['title' => 'Camera', 'slug' => 'camera', 'status' => 'draft']);
+
+        $this->patchJson("/api/v1/catalog/products/{$product->uuid}", [
+            'gallery_media_ids' => [701, 702],
+        ])->assertOk()
+            ->assertJsonCount(2, 'images');
+
+        $this->assertDatabaseHas('product_images', [
+            'product_id' => $product->id,
+            'media_id' => 701,
+            'sort_order' => 0,
+        ]);
+        $this->assertDatabaseHas('product_images', [
+            'product_id' => $product->id,
+            'media_id' => 702,
+            'sort_order' => 1,
+        ]);
+    }
+
+    /** @test */
+    public function it_does_not_duplicate_existing_gallery_images_submitted_on_update(): void
+    {
+        $product = Product::create(['title' => 'Camera', 'slug' => 'camera', 'status' => 'draft']);
+        ProductImage::create(['product_id' => $product->id, 'media_id' => 801, 'sort_order' => 0]);
+
+        $this->patchJson("/api/v1/catalog/products/{$product->uuid}", [
+            'gallery_media_ids' => [801, 802, 802],
+        ])->assertOk()
+            ->assertJsonCount(2, 'images');
+
+        $this->assertSame(1, ProductImage::where('product_id', $product->id)->where('media_id', 801)->count());
+        $this->assertSame(1, ProductImage::where('product_id', $product->id)->where('media_id', 802)->count());
+        $this->assertDatabaseHas('product_images', [
+            'product_id' => $product->id,
+            'media_id' => 802,
+            'sort_order' => 1,
+        ]);
+    }
+
+    /** @test */
+    public function omitting_gallery_media_ids_on_update_leaves_the_gallery_unchanged(): void
+    {
+        $product = Product::create(['title' => 'Camera', 'slug' => 'camera', 'status' => 'draft']);
+        $image = ProductImage::create(['product_id' => $product->id, 'media_id' => 901, 'sort_order' => 3]);
+
+        $this->patchJson("/api/v1/catalog/products/{$product->uuid}", ['title' => 'Camera Pro'])
+            ->assertOk()
+            ->assertJsonPath('title', 'Camera Pro')
+            ->assertJsonCount(1, 'images');
+
+        $this->assertDatabaseHas('product_images', [
+            'id' => $image->id,
+            'product_id' => $product->id,
+            'media_id' => 901,
+            'sort_order' => 3,
+        ]);
+    }
+
+    /** @test */
+    public function gallery_updates_preserve_normal_product_and_variant_updates(): void
+    {
+        $product = Product::create(['title' => 'Phone', 'slug' => 'phone', 'status' => 'draft']);
+        $variant = ProductVariant::create([
+            'product_id' => $product->id,
+            'sku' => 'PHONE-01',
+            'type' => 'color',
+            'is_default' => true,
+            'base_price' => 10000000,
+        ]);
+
+        $this->patchJson("/api/v1/catalog/products/{$product->uuid}", [
+            'title' => 'Phone Pro',
+            'gallery_media_ids' => [1001],
+            'variants' => [[
+                'id' => $variant->id,
+                'type' => 'color',
+                'base_price' => 12000000,
+                'is_default' => true,
+                'attributes' => ['color' => 'Black'],
+            ]],
+        ])->assertOk()
+            ->assertJsonPath('title', 'Phone Pro')
+            ->assertJsonPath('variants.0.base_price', 12000000)
+            ->assertJsonCount(1, 'images');
+
+        $this->assertDatabaseHas('products', ['id' => $product->id, 'title' => 'Phone Pro']);
+        $this->assertDatabaseHas('product_variants', [
+            'id' => $variant->id,
+            'sku' => 'PHONE-01',
+            'base_price' => 12000000,
+        ]);
+        $this->assertDatabaseHas('product_images', [
+            'product_id' => $product->id,
+            'media_id' => 1001,
+            'sort_order' => 0,
+        ]);
     }
 
     /** @test */

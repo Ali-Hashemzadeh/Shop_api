@@ -18,12 +18,32 @@ class UpdateProductAction
     {
         return DB::transaction(function () use ($uuid, $data): ProductDTO {
             $variantsData = $data['variants'] ?? null;
-            $productData = collect($data)->except(['variants'])->all();
+            $galleryMediaIds = $data['gallery_media_ids'] ?? null;
+            $productData = collect($data)->except(['variants', 'gallery_media_ids'])->all();
 
             $productDto = $this->catalog->updateProduct($uuid, $productData);
             // Variant plumbing (FK, SKU) uses the internal integer id; the UUID is only
             // the public handle. The updated DTO carries both.
             $productId = $productDto->id;
+
+            if ($galleryMediaIds !== null) {
+                $attachedMediaIds = [];
+
+                foreach ($productDto->images as $image) {
+                    $attachedMediaIds[$image->mediaId] = true;
+                }
+
+                foreach ($galleryMediaIds as $sortOrder => $mediaId) {
+                    $mediaId = (int) $mediaId;
+
+                    if (isset($attachedMediaIds[$mediaId])) {
+                        continue;
+                    }
+
+                    $this->catalog->addProductImage($productId, $mediaId, $sortOrder);
+                    $attachedMediaIds[$mediaId] = true;
+                }
+            }
 
             if ($variantsData !== null) {
                 $existingById = collect($productDto->variants)->keyBy('id');
