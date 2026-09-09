@@ -114,6 +114,7 @@
   <a href="#locations">Provinces &amp; Cities</a>
   <a href="#addresses">Addresses</a>
   <a href="#admin-users">Admin â€” Users</a>
+  <a href="#admin-delivery-users">Admin - Delivery Users</a>
 
   <div class="section-label">Media</div>
   <a href="#media">Media Library</a>
@@ -162,6 +163,7 @@
   <a href="#shipment-slots">Delivery Sessions</a>
   <a href="#shipment-read">Read a Shipment</a>
   <a href="#shipment-admin">Admin Workflow</a>
+  <a href="#shipment-delivery-workers">Delivery Workers</a>
   <a href="#shipment-frontend-guide">Frontend Guide</a>
   <a href="#shipment-working-periods">Working Periods</a>
 
@@ -405,6 +407,7 @@ curl -s -X POST http://localhost:8000/api/v1/media \
     <tr><td>inventory-batch</td><td class="opt">30 / min</td><td>IP address</td><td>POST /inventory/batch (unauthenticated, more expensive per call)</td></tr>
     <tr><td>uploads</td><td class="opt">20 / min</td><td>User ID (or IP for guests)</td><td>POST /media</td></tr>
     <tr><td>api</td><td class="opt">60 / min (auth) Â· 30 / min (guest)</td><td>User ID or IP</td><td>All authenticated endpoints; guest cart falls back to IP</td></tr>
+    <tr><td>delivery-confirm</td><td class="req">5 / min by default</td><td>User ID + shipment public code</td><td>POST /delivery/shipments/{publicCode}/mark-delivered and POST /admin/shipments/{publicCode}/mark-delivered. Configurable via <code>SHIPMENT_DELIVERY_CONFIRM_MAX_ATTEMPTS</code>.</td></tr>
   </table>
   <div class="note"><strong>Endpoint badges:</strong> endpoints with non-default limits show a <span class="badge rate">N/min</span> badge in their header. All other public reads are 120/min and all authenticated writes are 60/min.</div>
 
@@ -1002,18 +1005,69 @@ curl -s -X POST http://localhost:8000/api/v1/media \
       <table><tr><th>Param</th><th>Type</th><th>Description</th></tr>
         <tr><td>per_page</td><td class="opt">optional</td><td>Results per page. Default: 15.</td></tr>
         <tr><td>page</td><td class="opt">optional</td><td>Page number. Default: 1.</td></tr>
+        <tr><td>role</td><td class="opt">optional</td><td>Filter by role: <code>admin</code>, <code>customer</code>, or <code>delivery</code>. Use <code>?role=delivery</code> for the courier picker.</td></tr>
       </table>
       <div class="block-label">Response â€” 200 OK</div>
       <pre>{
   <span class="key">"data"</span>: [
-    { <span class="key">"id"</span>: <span class="num">1</span>, <span class="key">"name"</span>: <span class="str">"Admin"</span>, <span class="key">"last_name"</span>: <span class="null-val">null</span>, <span class="key">"email"</span>: <span class="null-val">null</span>, <span class="key">"phone"</span>: <span class="str">"09100000000"</span>, <span class="key">"created_at"</span>: <span class="str">"..."</span>, <span class="key">"updated_at"</span>: <span class="str">"..."</span> },
-    { <span class="key">"id"</span>: <span class="num">42</span>, <span class="key">"name"</span>: <span class="str">"Sara"</span>, <span class="key">"last_name"</span>: <span class="str">"Ahmadi"</span>, <span class="key">"email"</span>: <span class="null-val">null</span>, <span class="key">"phone"</span>: <span class="str">"09123456789"</span>, <span class="key">"created_at"</span>: <span class="str">"..."</span>, <span class="key">"updated_at"</span>: <span class="str">"..."</span> }
+    { <span class="key">"id"</span>: <span class="num">1</span>, <span class="key">"name"</span>: <span class="str">"Admin"</span>, <span class="key">"last_name"</span>: <span class="null-val">null</span>, <span class="key">"email"</span>: <span class="null-val">null</span>, <span class="key">"phone"</span>: <span class="str">"09100000000"</span>, <span class="key">"roles"</span>: [<span class="str">"admin"</span>], <span class="key">"created_at"</span>: <span class="str">"..."</span>, <span class="key">"updated_at"</span>: <span class="str">"..."</span> },
+    { <span class="key">"id"</span>: <span class="num">42</span>, <span class="key">"name"</span>: <span class="str">"Sara"</span>, <span class="key">"last_name"</span>: <span class="str">"Ahmadi"</span>, <span class="key">"email"</span>: <span class="null-val">null</span>, <span class="key">"phone"</span>: <span class="str">"09123456789"</span>, <span class="key">"roles"</span>: [<span class="str">"customer"</span>, <span class="str">"delivery"</span>], <span class="key">"created_at"</span>: <span class="str">"..."</span>, <span class="key">"updated_at"</span>: <span class="str">"..."</span> }
   ],
   <span class="key">"meta"</span>:  { <span class="key">"current_page"</span>: <span class="num">1</span>, <span class="key">"last_page"</span>: <span class="num">3</span>, <span class="key">"per_page"</span>: <span class="num">15</span>, <span class="key">"total"</span>: <span class="num">38</span>, <span class="key">"from"</span>: <span class="num">1</span>, <span class="key">"to"</span>: <span class="num">15</span> },
   <span class="key">"links"</span>: { <span class="key">"first"</span>: <span class="str">"..."</span>, <span class="key">"last"</span>: <span class="str">"..."</span>, <span class="key">"prev"</span>: <span class="null-val">null</span>, <span class="key">"next"</span>: <span class="str">"..."</span> }
 }</pre>
     </div>
   </div>
+
+
+  <h3 id="admin-delivery-users">Admin - Delivery Users</h3>
+  <p>A delivery worker is a normal shopper account that holds both <code>customer</code> and <code>delivery</code>. The <code>delivery</code> role is additive and only carries the courier-specific Shipment permissions. Admin accounts cannot be created through the user-creation endpoint.</p>
+  <div class="note"><strong>Login:</strong> admin-created delivery users do not receive a password or temporary secret. Their phone number is the credential: they sign in through the normal OTP flow (<code>POST /otp/request</code> then <code>POST /otp/verify</code>) and may set a password later via <code>POST /auth/set-password</code>.</div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/admin/users</span>
+      <span class="badge admin">Requires profile.create-any</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Creates a new customer or delivery-worker account. Creating <code>role=delivery</code> additionally requires <code>profile.assign-delivery</code>. The server always assigns <code>customer</code>; when <code>role=delivery</code> it also assigns <code>delivery</code>. <code>admin</code> is not an accepted role.</p>
+      <div class="block-label">Request Body</div>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr><td>name</td><td class="req">required string</td><td>User's first/display name.</td></tr>
+        <tr><td>last_name</td><td class="opt">optional string</td><td>Family name.</td></tr>
+        <tr><td>phone</td><td class="req">required string</td><td>Unique Iranian mobile number in <code>09xxxxxxxxx</code> format.</td></tr>
+        <tr><td>email</td><td class="opt">optional string</td><td>Must be unique when supplied.</td></tr>
+        <tr><td>role</td><td class="req">required string</td><td><code>customer</code> or <code>delivery</code>.</td></tr>
+      </table>
+      <pre>{
+  <span class="key">"name"</span>:      <span class="str">"Ali"</span>,
+  <span class="key">"last_name"</span>: <span class="str">"Ahmadi"</span>,
+  <span class="key">"phone"</span>:     <span class="str">"09121234567"</span>,
+  <span class="key">"email"</span>:     <span class="str">"ali@example.com"</span>,
+  <span class="key">"role"</span>:      <span class="str">"delivery"</span>
+}</pre>
+      <div class="block-label">Response - 201 Created</div>
+      <p>Returns <code>{message, data}</code>; <code>data</code> is the normal user resource and exposes <code>roles</code>. A delivery worker will have both <code>customer</code> and <code>delivery</code>.</p>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/admin/users/{user}/delivery-role</span>
+      <span class="badge admin">Requires profile.assign-delivery</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Promotes an existing account to delivery worker. The operation is additive and idempotent: it adds <code>delivery</code>, ensures <code>customer</code>, and preserves any other roles. Calling it again changes nothing.</p>
+      <div class="block-label">Request Body</div>
+      <pre>{}</pre>
+      <div class="warn"><strong>Phone required.</strong> A user with no phone number is rejected with <strong>422</strong> on <code>phone</code>, because the worker cannot receive assignment SMS or use the phone-based login flow.</div>
+    </div>
+  </div>
+
+  <div class="note"><strong>Courier picker:</strong> use <code>GET /admin/users?role=delivery</code> to populate the delivery-worker selector before calling Shipment's <code>/assign-delivery</code> action.</div>
 
   <div class="endpoint">
     <div class="endpoint-header">
@@ -3614,6 +3668,7 @@ if (canCancelOrders && order.status === 'pending') renderCancelButton();</pre>
   <span class="key">"id"</span>: <span class="str">"bds-Z9C3TR"</span>, <span class="key">"order_id"</span>: <span class="num">42</span>,
   <span class="key">"method_code"</span>: <span class="str">"post_standard"</span>, <span class="key">"method_type"</span>: <span class="str">"postal"</span>, <span class="key">"shipping_cost"</span>: <span class="num">850000</span>,
   <span class="key">"status"</span>: <span class="str">"handed_to_post"</span>, <span class="key">"status_label"</span>: <span class="str">"Handed to postal service"</span>,
+  <span class="key">"assigned_delivery_user_id"</span>: <span class="null-val">null</span>, <span class="key">"delivery_assigned_at"</span>: <span class="null-val">null</span>, <span class="key">"has_active_delivery_code"</span>: <span class="bool">false</span>,
   <span class="key">"tracking_number"</span>: <span class="str">"TRK-999"</span>, <span class="key">"delivery_slot"</span>: <span class="null-val">null</span>, <span class="key">"pickup_location"</span>: <span class="null-val">null</span>,
   <span class="key">"history"</span>: [ { <span class="key">"from_status"</span>: <span class="str">"ready_for_post"</span>, <span class="key">"to_status"</span>: <span class="str">"handed_to_post"</span>, <span class="key">"metadata"</span>: { <span class="key">"tracking_number"</span>: <span class="str">"TRK-999"</span> } } ]
 }</pre>
@@ -3628,9 +3683,11 @@ if (canCancelOrders && order.status === 'pending') renderCancelButton();</pre>
     <tr><td><code>/mark-ready-for-post</code></td><td>shipment.post.mark-ready</td><td>preparing â†’ ready_for_post</td><td><code>note?</code></td></tr>
     <tr><td><code>/hand-to-post</code></td><td>shipment.post.hand-over</td><td>ready_for_post â†’ handed_to_post (order â†’ shipped)</td><td><code>tracking_number</code>*, <code>carrier_name?</code>, <code>note?</code>, <code>postal_receipt_media_id?</code></td></tr>
     <tr><td><code>/mark-ready-for-dispatch</code></td><td>shipment.delivery.mark-ready</td><td>preparing â†’ ready_for_dispatch</td><td><code>note?</code></td></tr>
-    <tr><td><code>/mark-out-for-delivery</code></td><td>shipment.delivery.dispatch</td><td>ready_for_dispatch â†’ out_for_delivery (order â†’ shipped)</td><td><code>note?</code></td></tr>
-    <tr><td><code>/mark-delivered</code></td><td>shipment.delivery.complete</td><td>out_for_delivery â†’ delivered (order â†’ completed)</td><td><code>receiver_name?</code>, <code>note?</code>, <code>proof_media_id?</code></td></tr>
-    <tr><td><code>/mark-delivery-failed</code></td><td>shipment.delivery.fail</td><td>out_for_delivery â†’ delivery_failed</td><td><code>failure_reason</code>*, <code>note?</code></td></tr>
+    <tr><td><code>/assign-delivery</code></td><td>shipment.delivery.assign</td><td>Assign/reassign courier; local delivery only, not delivered/cancelled</td><td><code>delivery_user_id</code>*</td></tr>
+    <tr><td><code>/mark-out-for-delivery</code></td><td>shipment.delivery.dispatch</td><td>ready_for_dispatch or delivery_failed â†’ out_for_delivery (order â†’ shipped)</td><td><code>note?</code>; assignee required</td></tr>
+    <tr><td><code>/resend-delivery-code</code></td><td>shipment.delivery.resend-code</td><td>Stays out_for_delivery; replaces customer's active handoff code</td><td>none</td></tr>
+    <tr><td><code>/mark-delivered</code></td><td>shipment.delivery.complete</td><td>out_for_delivery â†’ delivered (order â†’ completed)</td><td><code>code</code>* for local delivery, <code>receiver_name?</code>, <code>note?</code>, <code>proof_media_id?</code></td></tr>
+    <tr><td><code>/mark-delivery-failed</code></td><td>shipment.delivery.fail</td><td>out_for_delivery â†’ delivery_failed; active code is invalidated</td><td><code>failure_reason</code>*, <code>note?</code></td></tr>
     <tr><td><code>/reschedule</code></td><td>shipment.delivery.reschedule</td><td>delivery_failed â†’ ready_for_dispatch (new slot)</td><td><code>delivery_slot_id</code>*, <code>note?</code></td></tr>
     <tr><td><code>/mark-ready-for-pickup</code></td><td>shipment.pickup.mark-ready</td><td>preparing â†’ ready_for_pickup</td><td><code>note?</code></td></tr>
     <tr><td><code>/confirm-pickup</code></td><td>shipment.pickup.complete</td><td>ready_for_pickup â†’ picked_up (order â†’ completed)</td><td><code>receiver_name?</code>, <code>note?</code></td></tr>
@@ -3690,6 +3747,7 @@ if (canCancelOrders && order.status === 'pending') renderCancelButton();</pre>
     </div>
     <div class="endpoint-body">
       <p>Same response shape as the customer-facing <a href="#shipment-read">Read a Shipment</a> endpoint, but accessible to any operator regardless of order ownership.</p>
+      <div class="note"><strong>Delivery assignment fields:</strong> the current Shipment resource exposes <code>assigned_delivery_user_id</code>, <code>delivery_assigned_at</code>, and <code>has_active_delivery_code</code>. The plaintext handoff code and its hash are never returned.</div>
     </div>
   </div>
 
@@ -3776,6 +3834,29 @@ if (canCancelOrders && order.status === 'pending') renderCancelButton();</pre>
     </div>
   </div>
 
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/admin/shipments/{publicCode}/assign-delivery</span>
+      <span class="badge admin">Requires shipment.delivery.assign</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Assigns or reassigns a delivery worker to a <code>local_delivery</code> shipment. Assignment belongs to the shipment, not the order. Delivered and cancelled shipments cannot be assigned.</p>
+      <div class="block-label">Request Body</div>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr><td>delivery_user_id</td><td class="req">required integer</td><td>Identity user id. Must be at least 1, belong to a real delivery worker, and that worker must have a phone number.</td></tr>
+      </table>
+      <pre>{ <span class="key">"delivery_user_id"</span>: <span class="num">42</span> }</pre>
+      <div class="note"><strong>Reassignment is supported.</strong> Assigning a different worker closes the previous open assignment and opens a new one. Assigning the current worker again is an idempotent no-op.</div>
+      <div class="block-label">Common 422 Errors</div>
+      <pre>{ <span class="key">"errors"</span>: { <span class="key">"delivery_user_id"</span>: [<span class="str">"The selected user is not a delivery worker."</span>] } }
+{ <span class="key">"errors"</span>: { <span class="key">"delivery_user_id"</span>: [<span class="str">"The selected delivery worker has no phone number."</span>] } }
+{ <span class="key">"errors"</span>: { <span class="key">"delivery_user_id"</span>: [<span class="str">"Only local delivery shipments can be assigned to a delivery worker."</span>] } }</pre>
+    </div>
+  </div>
+
   <div class="endpoint">
     <div class="endpoint-header">
       <span class="method post">POST</span>
@@ -3783,13 +3864,32 @@ if (canCancelOrders && order.status === 'pending') renderCancelButton();</pre>
       <span class="badge admin">Requires shipment.delivery.dispatch</span>
     </div>
     <div class="endpoint-body">
-      <p><code>local_delivery</code> only. <code>ready_for_dispatch â†’ out_for_delivery</code>; the order moves to <code>shipped</code>.</p>
+      <p><code>local_delivery</code> only. <code>ready_for_dispatch â†’ out_for_delivery</code>, or retries <code>delivery_failed â†’ out_for_delivery</code>; the order moves/remains at <code>shipped</code>. A delivery worker must already be assigned.</p>
+      <div class="note"><strong>Customer handoff code:</strong> entering <code>out_for_delivery</code> creates a fresh cryptographically-random numeric code inside the same transaction. Only its hash is stored; the plaintext is sent to the customer by SMS and is never returned by an API. If no worker is assigned, this action returns <strong>422</strong> on <code>assigned_delivery_user_id</code>.</div>
       <div class="block-label">Request Body</div>
       <table>
         <tr><th>Field</th><th>Type</th><th>Description</th></tr>
         <tr><td>note</td><td class="opt">optional string</td><td>Max 1000 chars.</td></tr>
       </table>
       <pre>{ <span class="key">"note"</span>: <span class="str">"Driver en route"</span> }</pre>
+    </div>
+  </div>
+
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/admin/shipments/{publicCode}/resend-delivery-code</span>
+      <span class="badge admin">Requires shipment.delivery.resend-code</span>
+    </div>
+    <div class="endpoint-body">
+      <p><code>local_delivery</code> only and only while <code>out_for_delivery</code>. Reissues the customer's handoff code when the original SMS was lost or never arrived.</p>
+      <div class="block-label">Request Body</div>
+      <pre>{}</pre>
+      <div class="note"><strong>The old code is retired.</strong> Only a hash is stored, so resend cannot recover the old plaintext; it mints a new code and sends it by SMS. The shipment remains <code>out_for_delivery</code>.</div>
+      <div class="block-label">Common 422 Errors</div>
+      <pre>{ <span class="key">"errors"</span>: { <span class="key">"shipment"</span>: [<span class="str">"Only local delivery shipments use a delivery code."</span>] } }
+{ <span class="key">"errors"</span>: { <span class="key">"shipment"</span>: [<span class="str">"A delivery code can only be resent while the shipment is out for delivery."</span>] } }</pre>
     </div>
   </div>
 
@@ -3800,19 +3900,22 @@ if (canCancelOrders && order.status === 'pending') renderCancelButton();</pre>
       <span class="badge admin">Requires shipment.delivery.complete</span>
     </div>
     <div class="endpoint-body">
-      <p><code>local_delivery</code> only. <code>out_for_delivery â†’ delivered</code>; the order moves to <code>completed</code>.</p>
+      <p><code>local_delivery</code> only. <code>out_for_delivery â†’ delivered</code>; the order moves to <code>completed</code>. Admins may complete any local-delivery shipment, but they do <strong>not</strong> bypass customer confirmation: the active handoff code is still required.</p>
       <div class="block-label">Request Body</div>
       <table>
         <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr><td>code</td><td class="req">required for local delivery</td><td>Customer handoff code. Request validation allows null for non-local flows, but the local-delivery action rejects a missing/wrong/stale code with 422.</td></tr>
         <tr><td>receiver_name</td><td class="opt">optional string</td><td>Max 255 chars. Who signed for the parcel.</td></tr>
         <tr><td>note</td><td class="opt">optional string</td><td>Max 1000 chars.</td></tr>
         <tr><td>proof_media_id</td><td class="opt">optional integer</td><td>Pre-uploaded via <code>POST /media</code> â€” id of a delivery-proof photo/signature.</td></tr>
       </table>
       <pre>{
+  <span class="key">"code"</span>:           <span class="str">"482913"</span>,
   <span class="key">"receiver_name"</span>:  <span class="str">"Sara Ahmadi"</span>,
-  <span class="key">"note"</span>:           <span class="str">"Left with receptionist"</span>,
+  <span class="key">"note"</span>:           <span class="str">"Delivered directly to customer"</span>,
   <span class="key">"proof_media_id"</span>: <span class="num">91</span>
 }</pre>
+      <div class="warn"><strong>Code failure:</strong> missing, wrong, stale, or previous-attempt codes all return the same generic <strong>422</strong> on <code>code</code>: <code>"The delivery code is incorrect."</code>. This route is also protected by <code>throttle:delivery-confirm</code>.</div>
     </div>
   </div>
 
@@ -3823,7 +3926,7 @@ if (canCancelOrders && order.status === 'pending') renderCancelButton();</pre>
       <span class="badge admin">Requires shipment.delivery.fail</span>
     </div>
     <div class="endpoint-body">
-      <p><code>local_delivery</code> only. <code>out_for_delivery â†’ delivery_failed</code>. The order status is untouched â€” recover via <code>/reschedule</code>.</p>
+      <p><code>local_delivery</code> only. <code>out_for_delivery â†’ delivery_failed</code>. The order status is untouched â€” recover via <code>/reschedule</code> or retry with <code>/mark-out-for-delivery</code>. Entering <code>delivery_failed</code> immediately invalidates the customer's current handoff code.</p>
       <div class="block-label">Request Body</div>
       <table>
         <tr><th>Field</th><th>Type</th><th>Description</th></tr>
@@ -3890,6 +3993,108 @@ if (canCancelOrders && order.status === 'pending') renderCancelButton();</pre>
       <pre>{ <span class="key">"receiver_name"</span>: <span class="str">"Sara Ahmadi"</span> }</pre>
     </div>
   </div>
+
+
+  <h3 id="shipment-delivery-workers">Delivery Worker API</h3>
+  <p>Couriers use a separate <code>/delivery/*</code> surface and never use <code>/admin/shipments</code>. A delivery worker is an authenticated user with both <code>customer</code> and <code>delivery</code>; Shipment grants the <code>delivery</code> role exactly <code>shipment.delivery.view-assigned</code> and <code>shipment.delivery.complete-assigned</code>.</p>
+  <div class="note"><strong>Structural assignment scoping:</strong> every courier lookup starts from <code>assigned_delivery_user_id = current user</code> plus <code>method_type = local_delivery</code>. Another worker's real shipment therefore returns <strong>404</strong>, exactly like a nonexistent shipment, rather than revealing its existence with 403.</div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/delivery/shipments</span>
+      <span class="badge auth">Requires shipment.delivery.view-assigned</span>
+      <span class="badge rate">throttle:api</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Paginated list of local-delivery shipments currently assigned to the authenticated courier, newest first.</p>
+      <div class="block-label">Query Parameters</div>
+      <table>
+        <tr><th>Param</th><th>Type</th><th>Description</th></tr>
+        <tr><td>per_page</td><td class="opt">optional integer</td><td>1-100. Default 15.</td></tr>
+        <tr><td>page</td><td class="opt">optional integer</td><td>Minimum 1.</td></tr>
+        <tr><td>status</td><td class="opt">optional string</td><td>One of <code>pending</code>, <code>preparing</code>, <code>ready_for_dispatch</code>, <code>out_for_delivery</code>, <code>delivered</code>, <code>delivery_failed</code>, <code>cancelled</code>.</td></tr>
+      </table>
+      <div class="block-label">Response - 200 OK</div>
+      <pre>{
+  <span class="key">"data"</span>: [
+    {
+      <span class="key">"id"</span>: <span class="str">"bds-A7K29P"</span>,
+      <span class="key">"status"</span>: <span class="str">"out_for_delivery"</span>,
+      <span class="key">"status_label"</span>: <span class="str">"Out for delivery"</span>,
+      <span class="key">"address"</span>: {
+        <span class="comment">/* frozen checkout address; newer snapshots include latitude, longitude, map_address */</span>
+      },
+      <span class="key">"delivery_slot"</span>: {
+        <span class="key">"slot_id"</span>: <span class="num">103</span>,
+        <span class="key">"date"</span>: <span class="str">"2026-09-10"</span>,
+        <span class="key">"starts_at"</span>: <span class="str">"16:00"</span>,
+        <span class="key">"ends_at"</span>: <span class="str">"18:00"</span>
+      },
+      <span class="key">"customer_name"</span>: <span class="str">"Sara Ahmadi"</span>,
+      <span class="key">"customer_phone"</span>: <span class="str">"09123456789"</span>,
+      <span class="key">"receiver_name"</span>: <span class="null-val">null</span>,
+      <span class="key">"failure_reason"</span>: <span class="null-val">null</span>,
+      <span class="key">"note"</span>: <span class="null-val">null</span>,
+      <span class="key">"assigned_at"</span>: <span class="str">"2026-09-10T12:30:00.000000Z"</span>,
+      <span class="key">"out_for_delivery_at"</span>: <span class="str">"2026-09-10T15:55:00.000000Z"</span>,
+      <span class="key">"delivered_at"</span>: <span class="null-val">null</span>
+    }
+  ],
+  <span class="key">"links"</span>: { <span class="comment">/* standard pagination links */</span> },
+  <span class="key">"meta"</span>: { <span class="comment">/* standard pagination meta */</span> }
+}</pre>
+      <div class="note"><strong>Narrow courier resource:</strong> this response intentionally contains no order totals, coupon/payment information, verification hash, handoff code, or admin-only shipment internals. The shipment public code in <code>id</code> is the courier's job handle.</div>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/delivery/shipments/{publicCode}</span>
+      <span class="badge auth">Requires shipment.delivery.view-assigned</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Reads one local-delivery job assigned to the authenticated courier. Response is the same courier resource shown above.</p>
+      <div class="warn"><strong>404 for another courier's shipment.</strong> The lookup is assignment-scoped before the public code is resolved, so the endpoint does not reveal whether somebody else's shipment exists.</div>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/delivery/shipments/{publicCode}/mark-delivered</span>
+      <span class="badge auth">Requires shipment.delivery.complete-assigned</span>
+      <span class="badge rate">delivery-confirm</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Completes the authenticated courier's assigned shipment after the customer reads out the handoff code. The shipment must be <code>local_delivery</code> and currently <code>out_for_delivery</code>.</p>
+      <div class="block-label">Request Body</div>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr><td>code</td><td class="req">required string</td><td>Customer's active handoff code. Max 16 characters. The server deliberately does not validate the configured code length separately.</td></tr>
+        <tr><td>receiver_name</td><td class="opt">optional string</td><td>Max 255 chars.</td></tr>
+        <tr><td>note</td><td class="opt">optional string</td><td>Max 1000 chars.</td></tr>
+      </table>
+      <pre>{
+  <span class="key">"code"</span>:          <span class="str">"482913"</span>,
+  <span class="key">"receiver_name"</span>: <span class="str">"Sara Ahmadi"</span>,
+  <span class="key">"note"</span>:          <span class="str">"Delivered directly to customer"</span>
+}</pre>
+      <div class="block-label">Response - 200 OK</div>
+      <p>Returns the same courier resource with <code>status="delivered"</code>, <code>receiver_name</code>/<code>note</code> applied, and <code>delivered_at</code> populated. The shared transition also moves the Order to <code>completed</code> and settles the delivery-slot reservation.</p>
+      <div class="block-label">Errors</div>
+      <table>
+        <tr><th>Status</th><th>When</th><th>Behavior</th></tr>
+        <tr><td>404</td><td class="opt">Not assigned to this courier / unknown code</td><td>The two cases are intentionally indistinguishable.</td></tr>
+        <tr><td>422</td><td class="opt">Not out for delivery</td><td><code>errors.code = ["This shipment is not out for delivery."]</code></td></tr>
+        <tr><td>422</td><td class="opt">Missing, wrong, stale, or old code</td><td><code>errors.code = ["The delivery code is incorrect."]</code></td></tr>
+        <tr><td>429</td><td class="opt">Too many confirmation attempts</td><td>Includes <code>Retry-After</code>. Default limit is 5 attempts/minute per caller + shipment.</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="note"><strong>Courier cannot dispatch or recover deliveries.</strong> There is intentionally no delivery-worker endpoint for mark-ready, dispatch, failure, reschedule, assignment, resend-code, or slot management. Those remain admin/operator responsibilities.</div>
 
   <h3 id="shipment-admin-slots">Admin â€” Delivery Slot Management</h3>
   <p>Capacity management for dated <code>local_delivery</code> sessions. Slots themselves are generated by the <code>shipment:generate-delivery-slots</code> command from the <a href="#shipment-working-periods">working periods</a> below â€” these endpoints only adjust an already-generated slot.</p>
