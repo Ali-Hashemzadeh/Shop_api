@@ -78,11 +78,19 @@ class PaymentController extends Controller
         }
 
         $orderUrl = null;
+
         if ($payment !== null && $home !== '') {
-            $orderPath = trim((string) config('frontend.order_path'), '/');
-            $orderUrl = $orderPath === ''
-                ? $home.'/'.$payment->order_id
-                : $home.'/'.$orderPath.'/'.$payment->order_id;
+            $order = $this->orders->findOrder($payment->order_id);
+
+            if ($order !== null) {
+                $orderIdentifier = $order->publicCode;
+
+                $orderPath = trim((string) config('frontend.order_path'), '/');
+
+                $orderUrl = $orderPath === ''
+                    ? $home.'/'.$orderIdentifier
+                    : $home.'/'.$orderPath.'/'.$orderIdentifier;
+            }
         }
 
         // The order's own public code comes across the module wall through the
