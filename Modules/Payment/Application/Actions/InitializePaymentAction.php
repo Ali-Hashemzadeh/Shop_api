@@ -59,7 +59,7 @@ class InitializePaymentAction
                     orderId: $orderId,
                     userId: $userId,
                     gateway: 'in_person',
-                    amount: (int) $order->totalAmount,
+                    amount: (int) $order->totalAmount * 10,
                     paymentId: $payment->id,
                     paymentPublicCode: $payment->public_code,
                     orderPublicCode: $order->publicCode,
