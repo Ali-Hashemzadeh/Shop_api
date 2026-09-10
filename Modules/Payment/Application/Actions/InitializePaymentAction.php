@@ -48,7 +48,7 @@ class InitializePaymentAction
                     'order_id' => $orderId,
                     'method_type' => PaymentMethodType::IN_PERSON->value,
                     'gateway' => null,
-                    'amount' => $order->totalAmount * 10,
+                    'amount' => $order->totalAmount,
                     'status' => PaymentStatus::PENDING_CASH->value,
                     'transaction_reference' => $transactionRef,
                 ]);
@@ -87,7 +87,7 @@ class InitializePaymentAction
 
         $redirectDto = $driver->requestPayment(
             orderId: $orderId,
-            amountInCents: $order->totalAmount,
+            amountInCents: $order->totalAmount * 10,
             callbackUrl: $callbackUrl,
             customerMetadata: [],
         );
