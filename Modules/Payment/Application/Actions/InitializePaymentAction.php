@@ -48,7 +48,7 @@ class InitializePaymentAction
                     'order_id' => $orderId,
                     'method_type' => PaymentMethodType::IN_PERSON->value,
                     'gateway' => null,
-                    'amount' => $order->totalAmount,
+                    'amount' => $order->totalAmount * 10,
                     'status' => PaymentStatus::PENDING_CASH->value,
                     'transaction_reference' => $transactionRef,
                 ]);
@@ -59,7 +59,7 @@ class InitializePaymentAction
                     orderId: $orderId,
                     userId: $userId,
                     gateway: 'in_person',
-                    amount: (int) $order->totalAmount * 10,
+                    amount: (int) $order->totalAmount,
                     paymentId: $payment->id,
                     paymentPublicCode: $payment->public_code,
                     orderPublicCode: $order->publicCode,
