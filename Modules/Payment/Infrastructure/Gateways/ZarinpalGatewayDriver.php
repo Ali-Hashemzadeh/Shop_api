@@ -71,13 +71,12 @@ class ZarinpalGatewayDriver implements PaymentGatewayDriverInterface
     {
         $response = Http::post($this->verifyUrl(), [
             'merchant_id' => config('payment.gateways.zarinpal.merchant_id'),
-            'amount' => $amountInCents * 10,
+            'amount' => $amountInCents,
             'authority' => $authority,
         ]);
         Log::info('Zarinpal payment verification response', [
             'authority' => $authority,
-            'amount' => $amountInCents * 10,
-            'amount_in_cents' => $amountInCents,
+            'amount' => $amountInCents,
             'http_status' => $response->status(),
             'response' => $response->json(),
         ]);
