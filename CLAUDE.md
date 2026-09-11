@@ -91,11 +91,19 @@ Modules/
 
 These are non-negotiable. Violating one is a bug even if tests pass.
 
-- **The Cents Rule (financial integrity).** All monetary values (prices, discounts,
-  taxes) are stored and processed as **raw integers** in the smallest currency unit
-  (rials). **Floats are forbidden** for any financial field. Eloquent casts money columns
-  to `integer`; the HTTP layer casts whole-number strings to `int` in
-  `prepareForValidation()` before the `integer` rule fires so form-encoded requests work.
+- **The Money Unit Rule (financial integrity).** Inside our own application, all monetary
+  values (prices, discounts, taxes, totals, fees) are stored and processed as **raw
+  integers in tomans**. **Floats are forbidden** for any financial field. External
+  applications and payment providers use **rials**, so every integration boundary must
+  explicitly convert application amounts from tomans to rials before sending them
+  externally, and convert rial amounts back to tomans before bringing them into the
+  application. Never apply an external-unit conversion to the persisted/application
+  amount itself. For example, a Zarinpal amount must be sent as `amount * 10` because
+  Zarinpal accepts rials while the application stores tomans. Keep conversion logic at
+  the integration boundary and make the variable/unit explicit (for example,
+  `$amountInRials`). Eloquent casts money columns to `integer`; the HTTP layer casts
+  whole-number strings to `int` in `prepareForValidation()` before the `integer` rule
+  fires so form-encoded requests work.
 - **Loose Media coupling.** Tables outside the Media module **must not** use cascading FKs
   to the `media` table. Store the reference as a plain
   `unsignedBigInteger('media_id')->nullable()` column. The DB does not track storage
@@ -194,7 +202,7 @@ Order items snapshot prices and images at checkout and are never refreshed or ba
 | **Inventory** | ✅ Complete | Stock tracking, reservation lifecycle, append-only ledger — 24 tests |
 | **Cart** | ✅ Complete | Guest + auth carts, stock-validated add/update, Catalog price enrichment — 15 tests |
 | **Order** | ✅ Implemented | `Modules/Order/` (singular). Provider registered in `bootstrap/providers.php`. Checkout from cart → order (`POST /api/v1/orders`), paginated my-orders (`GET /api/v1/orders`), owner-only cancel (`POST /api/v1/orders/{order}/cancel` → releases reserved stock), status lifecycle (pending/paid/processing/shipped/cancelled/failed), `orders:cancel-expired` + hourly `orders:sync-sales-counts` commands. Tests under `tests/Feature/Order/`. |
-| **Payment** | ✅ Implemented | `Modules/Payment/`. Provider registered. `POST /api/v1/payments/initialize` (online → Zarinpal `redirect_url`; in_person → `pending_cash` + marks order paid; **403 unless the order belongs to the caller**) and public `GET /api/v1/payments/zarinpal/callback` (verify/capture — stays on the backend domain; after verification it **renders the Blade page `payment::result`** instead of JSON, with buttons pointing at `config('frontend.url')`). Tests under `tests/Feature/Payment/`. |
+| **Payment** | ✅ Implemented | `Modules/Payment/`. Provider registered. `POST /api/v1/payments/initialize` (online → Zarinpal `redirect_url`; in_person → `pending_cash` + marks order paid; **403 unless the order belongs to the caller**) and public `GET /api/v1/payments/zarinpal/callback` (verify/capture — stays on the backend domain; after verification it **renders the Blade page `payment::result`** instead of JSON, with buttons pointing at `config('frontend.url')`). **Payment amounts inside the application are tomans; Zarinpal accepts rials, so both initialize and verify requests must send `amount * 10` (application tomans → external rials).** Tests under `tests/Feature/Payment/`. |
 | **Shipment** | ✅ Implemented | `Modules/Shipment/`. Provider registered. Four **config-backed** methods (`config/shipment.php`; no `shipment_methods` table): `post_standard`/`post_express`/`local_delivery`/`in_person_pickup`. Checkout uses `shipment_method_code` (Order stores an immutable `shipment_snapshot`; legacy `shipment_method_id` kept nullable for BC). Local-delivery cinema-session slots (`shipment:generate-delivery-slots`, scheduled daily) with capacity/reservations; held on pending order, confirmed on paid, released on cancel/expire. Operational `shipments` record created **only when the order becomes paid** (idempotent by `order_id`, at the shared `markAsPaid` path, which also commits inventory once). Method-specific status workflows (postal ends at `handed_to_post` → order `shipped`; local `delivered`/pickup `picked_up` → order `completed`). Delivery-worker assignment + customer handoff codes for local delivery (see key facts). Customer read, delivery-worker, and admin/operator endpoints under `/api/v1/shipment*`, `/api/v1/shipments/*`, `/api/v1/delivery/shipments*`, `/api/v1/admin/shipments*`. Tests under `tests/Feature/Shipment/` + `tests/Unit/Shipment/`. |
 
 | **Promotion** | ✅ Implemented | `Modules/Promotion/`. Provider registered **before Catalog** (Catalog resolves it for live pricing). Owns discounts, discount targets, coupons, coupon redemptions, campaigns. Automatic discounts (one winner per variant, never stacked) + order-level coupons (one per order, stacked after automatics). Admin API under `/api/v1/admin/promotions/*`; **no customer-facing routes of its own**. Tests under `tests/Feature/Promotion/` + `tests/Unit/Promotion/`. Full explainer: `DISCOUNT_ARCHITECTURE.html`. |
@@ -233,7 +241,7 @@ Order items snapshot prices and images at checkout and are never refreshed or ba
   Guessing is bounded by the `delivery-confirm` limiter, keyed by caller **and** shipment.
 
 ### Shipment — key facts
-- **Four fixed methods are configuration, never a DB table.** `ShipmentMethodRegistry` reads `config('shipment.methods')`; methods are keyed by stable **code**, prices are integer rials, pickup is free/address-less. Adapt via config/env only.
+- **Four fixed methods are configuration, never a DB table.** `ShipmentMethodRegistry` reads `config('shipment.methods')`; methods are keyed by stable **code**, prices are integer tomans, pickup is free/address-less. Adapt via config/env only.
 - **Order owns the money + immutable snapshot; Shipment owns fulfillment.** Checkout (`POST /api/v1/orders`) accepts `shipment_method_code`, `address_id?`, `delivery_slot_id?`, `notes?`. `OrderController` calls `ShipmentManagerInterface::validateSelection()` (422 with field errors on bad address/eligibility/slot), then `CreateOrderAction` snapshots the selection, reserves inventory, and (local delivery only) holds the slot under `lockForUpdate()`.
 - **Shipment activates at the shared paid path.** `EloquentOrderManager::markAsPaid()` is row-locked + idempotent: it commits the inventory reservation exactly once and calls `ShipmentManagerInterface::activateForPaidOrder()` (idempotent by unique `shipments.order_id`, confirms the held slot). Never tie activation to the Zarinpal callback alone — in-person payment also pays the order.
 - **Postal tracking ends at `handed_to_post`.** Do not add/expose `in_transit`/carrier `out_for_delivery`/`delivered` for postal shipments. `ShipmentStatus::toOrderStatus()` maps detailed status → order summary (`handed_to_post`/`out_for_delivery` → `shipped`; `delivered`/`picked_up` → `completed`).
@@ -250,7 +258,7 @@ Order items snapshot prices and images at checkout and are never refreshed or ba
 - **Catalog owns only `base_price`.** `product_variants.compare_at_price` is dropped; sending it is ignored.
   `order_items.compare_at_price` is legacy historical data — kept, still rendered, always `null` on new orders, never
   backfilled.
-- **Automatic discounts never stack.** Every matching rule is costed in rials; the largest reduction wins. Specificity
+- **Automatic discounts never stack.** Every matching rule is costed in tomans; the largest reduction wins. Specificity
   does **not** override savings (30% product beats 20% variant). Exact ties break by: most specific matched target
   (variant → product → category → brand) → higher `priority` → lowest discount id.
 - **Integer basis points only** (`2000` = 20%, `1250` = 12.5%, `10000` = 100%). `DiscountCalculator` multiplies before
@@ -448,7 +456,7 @@ Order items snapshot prices and images at checkout and are never refreshed or ba
 - **Dual identity:** authenticated users get a `user_id`-keyed cart; guests use a `session_id` (sent as `X-Session-Id` request header — auto-generated UUID if absent, echoed back as `X-Cart-Session-Id` response header).
 - **Cart identification middleware** (`cart.identify`) runs on all cart routes. It calls `auth('sanctum')` without requiring it — no 401 for guests.
 - **Stock validation** on every add/update via `InventoryManagerInterface::getStockBySku()`. The action re-throws Inventory exceptions as Cart-domain exceptions so the controller stays isolated.
-- **Price enrichment** on every `getCart()` via `CatalogManagerInterface::findVariantBySku()` — all prices are integers (rials, Cents Rule). `lineTotal` = `quantity × basePrice`.
+- **Price enrichment** on every `getCart()` via `CatalogManagerInterface::findVariantBySku()` — all prices are integers (tomans, Money Unit Rule). `lineTotal` = `quantity × basePrice`.
 - **No permissions required** — cart operations are self-service; ownership is enforced by the middleware.
 - **Contract:** `CartManagerInterface` — `findOrCreateCart`, `getCart`, `addItem`, `removeItem`, `updateQuantity`, `clearCart`.
 
@@ -479,7 +487,7 @@ API docs (Scramble) are served at **`/docs/api`** when running locally.
   - `actingAsAdmin()` / `actingAsCustomer()` — create a user, assign the role, `Sanctum::actingAs`.
   - `seedIdentityRolesAndPermissions()`, `seedCatalogPermissions()`, `seedMediaPermissions()`.
 - Every state-mutating change needs tests for: happy path, validation failure, 404,
-  invariant enforcement (Cents Rule, `is_default` single-true, slug uniqueness), and the
+  invariant enforcement (Money Unit Rule, `is_default` single-true, slug uniqueness), and the
   auth matrix (401 unauthenticated / 403 unauthorized / 200 public).
 - Run `composer test` (or a focused `--filter`) and keep the suite green before finishing.
 
@@ -509,7 +517,7 @@ API docs (Scramble) are served at **`/docs/api`** when running locally.
 ## 9. Definition of done
 
 - Module boundaries respected (no cross-module models/joins; only Contracts + DTOs).
-- Cents Rule and Loose-Media-Coupling honored.
+- Money Unit Rule and Loose-Media-Coupling honored.
 - Authorization is permission-based via policies/Form Requests; 401/403/public matrix correct.
 - Tests added/updated and `composer test` is fully green.
 - Pint clean.
