@@ -77,6 +77,7 @@ class ZarinpalGatewayDriver implements PaymentGatewayDriverInterface
         Log::info('Zarinpal payment verification response', [
             'authority' => $authority,
             'amount' => $amountInCents,
+            'amount_in_cents' => $amountInCents,
             'http_status' => $response->status(),
             'response' => $response->json(),
         ]);
