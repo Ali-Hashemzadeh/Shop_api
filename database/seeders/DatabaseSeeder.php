@@ -18,6 +18,7 @@ use Modules\Payment\Infrastructure\Persistence\Seeders\PaymentPermissionsSeeder;
 use Modules\Payment\Infrastructure\Persistence\Seeders\PaymentSampleDataSeeder;
 use Modules\Promotion\Infrastructure\Persistence\Seeders\PromotionPermissionsSeeder;
 use Modules\Promotion\Infrastructure\Persistence\Seeders\PromotionSampleDataSeeder;
+use Modules\Review\Infrastructure\Persistence\Seeders\ReviewPermissionsSeeder;
 use Modules\Shipment\Infrastructure\Persistence\Seeders\ShipmentPermissionsSeeder;
 use Modules\Shipment\Infrastructure\Persistence\Seeders\ShipmentSampleDataSeeder;
 use Modules\Shipment\Infrastructure\Persistence\Seeders\ShipmentScheduleSeeder;
@@ -54,6 +55,7 @@ class DatabaseSeeder extends Seeder
             PaymentSampleDataSeeder::class,
             // Runs last — activates a shipment per paid order and drives it to its state.
             ShipmentSampleDataSeeder::class,
+            ReviewPermissionsSeeder::class,
         ]);
     }
 }
