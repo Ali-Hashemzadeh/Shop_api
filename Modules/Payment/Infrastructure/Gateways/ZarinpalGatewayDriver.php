@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Modules\Payment\Infrastructure\Gateways;
 
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Modules\Payment\Domain\Contracts\PaymentGatewayDriverInterface;
 use Modules\Payment\Domain\DTOs\GatewayRedirectDTO;
 use RuntimeException;
@@ -72,6 +73,12 @@ class ZarinpalGatewayDriver implements PaymentGatewayDriverInterface
             'merchant_id' => config('payment.gateways.zarinpal.merchant_id'),
             'amount' => $amountInCents,
             'authority' => $authority,
+        ]);
+        Log::info('Zarinpal payment verification response', [
+            'authority' => $authority,
+            'amount' => $amountInCents,
+            'http_status' => $response->status(),
+            'response' => $response->json(),
         ]);
 
         $data = $response->json();
