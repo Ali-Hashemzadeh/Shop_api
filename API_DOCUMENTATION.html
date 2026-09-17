@@ -125,7 +125,10 @@
   <a href="#products">Products</a>
   <a href="#gallery">Product Gallery</a>
   <a href="#variants">Product Variants</a>
-  <a href="#wishlist">Likes &amp; Availability</a>
+
+  <div class="section-label">Wishlist &amp; Product Engagement</div>
+  <a href="#wishlist-likes">Like / Favorite Products</a>
+  <a href="#wishlist-availability">Notify Me When Available</a>
 
   <div class="section-label">Inventory</div>
   <a href="#inventory">Stock</a>
@@ -2290,11 +2293,15 @@ GET /api/v1/catalog/products?available=true</pre>
   </div>
 
 
-  <!-- WISHLIST: Likes & Availability -->
-  <h2 id="wishlist">Catalog &mdash; Likes &amp; Availability</h2>
-  <p>Two independent, per-customer features exposed under the Catalog prefix. <strong>Liking</strong> a product adds it to the customer's wishlist. <strong>"Notify me when available"</strong> subscribes the customer to a one-time restock alert for a specific <em>variant SKU</em>. The two are fully decoupled: liking a product never creates an availability subscription, and subscribing never likes the product.</p>
+  <!-- ============================ WISHLIST & PRODUCT ENGAGEMENT ============================ -->
+  <h2 id="wishlist">Wishlist &amp; Product Engagement</h2>
+  <p>New customer-facing engagement features, grouped here for discoverability. Two independent, per-customer capabilities: <strong>Product Likes / Favorites</strong> (save a product to a personal wishlist) and <strong>Notify Me When Available</strong> (subscribe to a one-time restock alert for a specific <em>variant SKU</em>). The two are fully decoupled: liking a product never creates an availability subscription, and subscribing never likes the product.</p>
+  <div class="note"><strong>These routes live under the <code>/catalog</code> URL prefix</strong> because Catalog owns the HTTP surface, but they are documented in their own section rather than mixed into the Catalog endpoint list. The routes themselves are unchanged.</div>
   <div class="note"><strong>Authentication required, and the server owns the user.</strong> Every endpoint below sits behind <code>auth:sanctum</code> (a guest gets <strong>401</strong>) and acts on <strong>the authenticated caller only</strong>. A <code>user_id</code> is never read from the request body &mdash; a customer can only ever touch their own likes and subscriptions. No special permission is needed; these are self-service like the cart.</div>
   <div class="note"><strong>Identifiers follow the existing Catalog conventions.</strong> Products are addressed by their public product code (<code>bdp-XXXXXX</code>, or a legacy hex code), exactly like the other product routes. Availability subscriptions are keyed by the exact variant <strong>SKU</strong> (e.g. <code>bdv-XXXXXX</code> or a legacy SKU), so a restock of a <em>different</em> variant of the same product never notifies a subscriber of this one.</div>
+
+  <h3 id="wishlist-likes">Product Likes / Favorites</h3>
+  <p>Customers can save products as favorites. The like state is per-customer and read back on every product response as <code>is_liked</code> (see <a href="#wishlist-like-field">Product response field</a> below).</p>
 
   <div class="endpoint">
     <div class="endpoint-header">
@@ -2362,6 +2369,18 @@ GET /api/v1/catalog/products?available=true</pre>
     </div>
   </div>
 
+  <div class="note" id="wishlist-like-field"><strong>Product response field &mdash; <code>is_liked</code> (user-specific).</strong>
+    <ul>
+      <li>Every <a href="#products">Product</a> object carries <code>"is_liked"</code> (boolean).</li>
+      <li>It is <strong>true</strong> when the authenticated caller has this product in their favorites, and <strong>false</strong> otherwise.</li>
+      <li>Guests have no personal like state, so <code>is_liked</code> is always <code>false</code> for them.</li>
+      <li>It is calculated from the authenticated user's favorites, resolved server-side in a single batched query per page (no N+1), and appears on the product list, product detail, and category/campaign product lists. It is read-only and never accepted from client input.</li>
+    </ul>
+  </div>
+
+  <h3 id="wishlist-availability">Notify Me When Available</h3>
+  <p>Customers can request a notification when a specific product variant becomes available again. <strong>The subscription is SKU / variant based, not product based</strong> &mdash; a restock of a different variant of the same product never notifies a subscriber of this one. It is a one-time alert: when the SKU's available stock transitions from <code>0</code> to positive, the customer receives one in-app notification <strong>and</strong> one SMS, after which the subscription is consumed.</p>
+
   <div class="endpoint">
     <div class="endpoint-header">
       <span class="method post">POST</span>
@@ -2400,12 +2419,14 @@ GET /api/v1/catalog/products?available=true</pre>
     </div>
   </div>
 
-  <div class="note"><strong>Read-back on product &amp; variant responses (user-specific).</strong>
+  <div class="note"><strong>Variant response field &mdash; <code>availability_notification_requested</code> (user-specific).</strong>
     <ul>
-      <li>Every <a href="#products">Product</a> object carries <code>"is_liked"</code> (boolean) &mdash; <code>true</code> when the authenticated caller has liked it; <code>false</code> for guests.</li>
-      <li>Every <a href="#variants">Variant</a> object carries <code>"availability_notification_requested"</code> (boolean) &mdash; <code>true</code> when the caller has an active restock subscription for that SKU; <code>false</code> for guests.</li>
+      <li>Every <a href="#variants">Variant</a> object carries <code>"availability_notification_requested"</code> (boolean).</li>
+      <li>It belongs to the authenticated user and indicates whether that user has an active restock subscription for this SKU.</li>
+      <li>It is <strong>true</strong> when the caller has an active subscription for the SKU, and <strong>false</strong> otherwise (including for guests).</li>
+      <li>It is resolved server-side in a single batched query per page (no N+1) and appears on the variant detail and product read endpoints. It is read-only and never accepted from client input.</li>
     </ul>
-    Both are resolved server-side for the authenticated user in a single batched query per page (no N+1), and appear on the product list, product detail, category/campaign product lists, and variant detail endpoints. They are read-only and never accepted from client input.</div>
+  </div>
 
   <!-- INVENTORY -->
   <h2 id="inventory">Inventory &mdash; Stock</h2>
