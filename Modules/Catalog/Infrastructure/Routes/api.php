@@ -3,10 +3,13 @@
 use App\Support\PublicCodeEntity;
 use App\Support\PublicCodeGenerator;
 use Illuminate\Support\Facades\Route;
+use Modules\Catalog\Infrastructure\Http\Controllers\AvailabilityNotificationController;
 use Modules\Catalog\Infrastructure\Http\Controllers\BrandsController;
 use Modules\Catalog\Infrastructure\Http\Controllers\CampaignsController;
 use Modules\Catalog\Infrastructure\Http\Controllers\CategoriesController;
+use Modules\Catalog\Infrastructure\Http\Controllers\LikedProductsController;
 use Modules\Catalog\Infrastructure\Http\Controllers\ProductGalleryController;
+use Modules\Catalog\Infrastructure\Http\Controllers\ProductLikeController;
 use Modules\Catalog\Infrastructure\Http\Controllers\ProductsController;
 use Modules\Catalog\Infrastructure\Http\Controllers\ProductVariantsController;
 
@@ -82,5 +85,15 @@ Route::middleware('api')->prefix('api/v1/catalog')->group(function () use ($prod
         Route::post('/products/{productUuid}/variants', [ProductVariantsController::class, 'store'])->where('productUuid', $productCode);
         Route::patch('/variants/{variantId}', [ProductVariantsController::class, 'update']);
         Route::delete('/variants/{variantId}', [ProductVariantsController::class, 'destroy']);
+
+        // ── Wishlist: product likes (self-service, authentication only) ─────────
+        // The caller is always the authenticated user; a user_id is never accepted.
+        Route::get('/liked-products', [LikedProductsController::class, 'index']);
+        Route::post('/products/{uuid}/like', [ProductLikeController::class, 'store'])->where('uuid', $productCode);
+        Route::delete('/products/{uuid}/like', [ProductLikeController::class, 'destroy'])->where('uuid', $productCode);
+
+        // ── Wishlist: "notify me when available", keyed to the exact variant SKU ─
+        Route::post('/variants/sku/{sku}/availability-notification', [AvailabilityNotificationController::class, 'store']);
+        Route::delete('/variants/sku/{sku}/availability-notification', [AvailabilityNotificationController::class, 'destroy']);
     });
 });

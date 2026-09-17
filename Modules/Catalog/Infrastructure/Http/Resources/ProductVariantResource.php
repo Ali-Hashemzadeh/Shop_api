@@ -5,6 +5,7 @@ namespace Modules\Catalog\Infrastructure\Http\Resources;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Modules\Catalog\Domain\DTOs\ProductVariantDTO;
+use Modules\Catalog\Infrastructure\Http\Concerns\WishlistStateKeys;
 
 /** @mixin ProductVariantDTO */
 class ProductVariantResource extends JsonResource
@@ -14,6 +15,11 @@ class ProductVariantResource extends JsonResource
         /** @var ProductVariantDTO $dto */
         $dto = $this->resource;
         $discount = $dto->automaticDiscount;
+
+        // User-specific "notify me when available" state for this exact SKU.
+        // Pre-resolved per page by the controller (see InteractsWithWishlistState);
+        // false for guests and for endpoints that do not annotate.
+        $subscribedSkus = $request->attributes->get(WishlistStateKeys::SUBSCRIBED_ATTR, []);
 
         return [
             'id' => $dto->id,
@@ -43,6 +49,8 @@ class ProductVariantResource extends JsonResource
             'effective_max_quantity' => $dto->availableStock !== null
                 ? min(max(0, $dto->availableStock), $dto->maxQuantityPerOrder ?? PHP_INT_MAX)
                 : $dto->maxQuantityPerOrder,
+            // Whether the authenticated customer has an active restock alert for this SKU.
+            'availability_notification_requested' => isset($subscribedSkus[$dto->sku]),
         ];
     }
 }

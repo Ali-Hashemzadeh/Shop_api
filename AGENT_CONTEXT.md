@@ -201,6 +201,7 @@ replaces no primary key, foreign key, relation, cron input, internal query, or a
       * `reserveStock(sku, quantity, orderId): bool` — throws `InsufficientStockException` when available < requested.
       * `commitReservation(sku, quantity, orderId): bool` — deducts from physical + reserved (order fulfilled).
       * `releaseReservation(sku, quantity, orderId): bool` — decrements reserved only (order cancelled).
+  * **Integration event — `Domain/Events/InventoryRestockedEvent`** (primitives only: `eventId`, `sku`, `previousAvailableQuantity`, `newAvailableQuantity`). Fired when *available* stock (`quantity − reserved_quantity`) crosses **`<= 0 → > 0`**, detected inside the transaction in both `adjustStock` (physical restock) and `releaseReservation` (reservation freed), and on no other movement (top-up, sell-down, or no-op stays silent). Dispatched inside the mutation transaction; consumers use `ShouldHandleEventsAfterCommit`, so a rolled-back restock announces nothing. Consumed by the Wishlist restock-alert listener in the Notification module (see the Wishlist section).
   * **DTO:** `InventoryStockDTO` — `sku`, `availableQuantity` (quantity − reserved_quantity), `physicalQuantity`, `reservedQuantity`.
   * **Exceptions:** `StockNotFoundException`, `InsufficientStockException` (both in `Domain/Exceptions/`).
   * **CRITICAL CONCURRENCY RULE:** Every mutation in `EloquentInventoryManager` wraps in `DB::transaction()` and acquires a row-level pessimistic lock via `lockForUpdate()` to prevent concurrent checkout race conditions / oversell.
@@ -329,7 +330,7 @@ replaces no primary key, foreign key, relation, cron input, internal query, or a
 * **Responsibility:** Store in-app notifications, expose the customer notification API, and fan a notification out across channels. It owns **no business copy and no event policy** — the caller supplies type/title/message/data and the channel list.
   * **Tables:** `notifications` (`user_id` plain reference — no FK, no join to Identity; `type`, `title`, `message`, JSON `data`, nullable `read_at`, indexes `[user_id, created_at]` + `[user_id, read_at]`), `notification_deliveries` (external-delivery audit: `notification_id` **nullable** — SMS-only notifications have no in-app row — `channel`, `status`, `provider`, `provider_reference`, `sent_at`, `failed_at`, `error`).
   * **Tables (cont.):** `notification_recipient_preferences` (`user_id` plain reference, `notification_type`, `channel`, `enabled`, unique on the triple, lookup index on `[notification_type, channel, enabled]`) — **who wants which notification on which channel**. Deliberately generic; the first and currently only use is `admin_order_paid` + `sms`. Absence of a row means *not selected*, so a fresh deployment texts nobody until an admin picks somebody.
-  * **Enums:** `NotificationChannel` (database, sms — no email/push), `DeliveryStatus` (pending, sent, failed, **skipped**), `NotificationTemplate` (internal SMS template constants: payment_success, order_cancelled, **admin_order_paid**, shipment_preparing, **shipment_ready_for_pickup**, **shipment_handed_to_post**, **shipment_out_for_delivery**, shipment_delivered, shipment_assigned_delivery, plus legacy shipment_sent / shipment_sent_delivery_code — `SmsPayloadDTO` takes the enum, never a raw string), `NotificationType` (payment_success, payment_failed, order_cancelled, shipment_preparing, **shipment_ready_for_pickup**, **shipment_handed_to_post**, **shipment_out_for_delivery**, shipment_delivered, shipment_assigned_delivery, admin_order_paid, plus legacy shipment_sent).
+  * **Enums:** `NotificationChannel` (database, sms — no email/push), `DeliveryStatus` (pending, sent, failed, **skipped**), `NotificationTemplate` (internal SMS template constants: payment_success, order_cancelled, **admin_order_paid**, shipment_preparing, **shipment_ready_for_pickup**, **shipment_handed_to_post**, **shipment_out_for_delivery**, shipment_delivered, shipment_assigned_delivery, **product_available**, plus legacy shipment_sent / shipment_sent_delivery_code — `SmsPayloadDTO` takes the enum, never a raw string), `NotificationType` (payment_success, payment_failed, order_cancelled, shipment_preparing, **shipment_ready_for_pickup**, **shipment_handed_to_post**, **shipment_out_for_delivery**, shipment_delivered, shipment_assigned_delivery, admin_order_paid, **product_available**, plus legacy shipment_sent).
   * **Legacy `shipment_sent`:** the type and its two templates stay **defined** but are never emitted. Notification rows written before the split still carry `type: "shipment_sent"` and history is never rewritten, so clients must keep rendering it; the templates stay mapped in `config/sms.php` only so an existing `.env` remains valid.
   * **Admin SMS recipients:** `RecipientPreferenceRepositoryInterface` + `EloquentRecipientPreferenceRepository` (internal to the module — *not* a cross-module contract; nothing outside Notification reads or writes preferences). `SyncAdminSmsRecipientsAction::list()/handle()` returns `AdminSmsRecipientDTO` rows (userId, name, lastName, phone, enabled). Admin-ness is asked of `IdentityManagerInterface::isAdmin()` — **never** `exists:users,id`, which is both a cross-module query and the wrong question. A non-admin id is 422 on `user_ids.{i}` **before** any write; the replacement itself is one transaction and idempotent, and de-selection flips `enabled` to false rather than deleting the row.
   * **SMS is optional, never mandatory.** If the active provider has no template id configured for a template name (or no credentials), the send is **skipped**: no exception, no HTTP call, an info log, an `SmsResultDTO::skipped()`, and a `skipped` delivery row. A recipient with no phone on file is likewise skipped. `failed` is reserved for real attempts that did not succeed (transport error, provider rejection) and for caller misuse (SMS channel requested with no payload), so unconfigured templates never look like delivery incidents.
@@ -354,6 +355,7 @@ replaces no primary key, foreign key, relation, cron input, internal query, or a
 | `ShipmentAssignedToDeliveryEvent` | `AssignShipmentDeliveryAction`, on a **real** change of assignee only | `SendShipmentAssignedToDeliveryNotifications` | **delivery worker** db+sms (`shipment_assigned_delivery`: `ShipmentId`, `OrderId`, `DeliveryDate`, `DeliveryTime`). Never the customer's full address; never the handoff code. |
 | `DeliveryVerificationCodeIssuedEvent` | `ResendDeliveryVerificationCodeAction` | `SendDeliveryVerificationCodeSms` | customer **sms only** (`shipment_out_for_delivery` — the same template as the dispatch, because a resend repeats that one message with a fresh code rather than announcing a new event; storing it would mean writing the code down) |
 | `ShipmentDeliveredEvent` | `ShipmentTransitionService` → `delivered` | `SendShipmentDeliveredNotifications` | customer db+sms |
+| `InventoryRestockedEvent` (Inventory) | `EloquentInventoryManager` when available stock crosses `<= 0 → > 0` (`adjustStock`/`releaseReservation`) | `SendProductAvailableNotifications` | **each subscribed** customer db+sms (`product_available`: `ProductName`; in-app `data` = `{product_code, sku}`). Subscribers come from Wishlist's atomic `claimPendingSubscribersForSku()` (one-shot, dedup-by-consumption), product name/code from `CatalogManagerInterface::findVariantBySku()`. A restock with no subscribers is a no-op. |
 
   * **Transaction safety + idempotency:** every listener implements `ShouldHandleEventsAfterCommit`, so a rolled-back business transaction notifies nobody. `markAsPaid`'s existing already-paid early return means repeat gateway callbacks never reach the dispatch — no duplicate notifications.
   * **Deliberately silent:** the shared `CancelOrderAction::releaseAndCancel` primitive (checkout uses it to retire a superseded pending order), TTL expiry (`orders:cancel-expired`), and the `picked_up` shipment status. Not implemented anywhere: email, push, marketing.
@@ -476,6 +478,64 @@ replaces no primary key, foreign key, relation, cron input, internal query, or a
     guarantee, moderation transitions incl. the pending prohibition, reply overwrite, rating-summary correctness, and
     Catalog sort/filter integration.
 
+### Module: Wishlist (`Modules/Wishlist/`) — Product Likes & Availability Subscriptions ✅
+
+  * **Position in the graph:** a **pure leaf**. Wishlist imports no other module's models, contracts, or events and
+    deals only in primitives (`userId:int`, `productId:int`, `sku:string`). The arrows point *into* it:
+    `Catalog → Wishlist` (endpoint backing + `is_liked`/availability enrichment) and `Notification → Wishlist`
+    (claim restock subscribers). This is what keeps the graph acyclic — Catalog already exposes `is_liked` on its
+    own resources and `/liked-products` from its own `ProductResource`, so making Wishlist depend back on Catalog
+    would have formed a cycle; instead all public-code↔id resolution and product hydration happen on the Catalog
+    side, and Wishlist stays a leaf like Promotion.
+  * **Two decoupled features, two tables (loose refs, no FKs — like `reviews`/`notifications`):**
+    `product_likes` (`user_id`, `product_id`, `unique(user_id, product_id)`, `index(user_id, id)`) and
+    `availability_subscriptions` (`user_id`, `sku`, nullable `notified_at`, `unique(user_id, sku)`,
+    `index(sku, notified_at)`). Liking never creates a subscription and subscribing never likes. Because modules
+    never cross-FK, a deleted product/user leaves like/subscription rows inert (no cascade anywhere in the codebase);
+    the liked-products page drops any like whose product no longer resolves as published.
+  * **Contract:** `WishlistManagerInterface` — `like`/`unlike`/`isLiked`/`likedProductIds` (batch)/
+    `paginateLikedProductIds`; `requestAvailabilityNotification`/`cancelAvailabilityNotification`/
+    `hasActiveAvailabilitySubscription`/`activeSubscribedSkus` (batch)/`claimPendingSubscribersForSku`.
+  * **Availability subscriptions are one-shot.** `notified_at` is null while active and stamped when the restock
+    alert fires. Subscribe is `updateOrCreate(notified_at = null)` — idempotent while active and reactivating a
+    previously consumed row; cancel deletes. `activeSubscribedSkus` and `hasActiveAvailabilitySubscription` only
+    count rows with `notified_at IS NULL`.
+  * **Concurrency + idempotency by atomic claim.** `claimPendingSubscribersForSku()` selects active rows for the SKU
+    under `lockForUpdate()`, stamps them consumed, and returns the user ids in one transaction. A retried/duplicated
+    `InventoryRestockedEvent` or a second worker finds nothing left to claim → each subscription yields exactly one
+    notification. No separate processed-events table (unlike Analytics) is required because consumption *is* the dedup.
+  * **Catalog-side surface (Catalog owns HTTP, calls Wishlist):**
+    Actions `LikeProductAction`/`UnlikeProductAction` (resolve `{uuid}` → product, 404 unknown) and
+    `RequestAvailabilityNotificationAction`/`CancelAvailabilityNotificationAction` (resolve SKU → published variant,
+    404 unknown/draft). Controllers `ProductLikeController`, `LikedProductsController`, `AvailabilityNotificationController`.
+    Endpoints (all `auth:sanctum` + `throttle:api`, self-service, caller-scoped, no permission): `POST`/`DELETE
+    /api/v1/catalog/products/{uuid}/like` → `{liked}`; `GET /api/v1/catalog/liked-products` (paginated `ProductResource`);
+    `POST`/`DELETE /api/v1/catalog/variants/sku/{sku}/availability-notification` → `{availability_notification_requested}`.
+  * **User-specific read-back, batched (no N+1):** `ProductResource.is_liked` and
+    `ProductVariantResource.availability_notification_requested`. The controller pre-resolves the page's liked ids +
+    subscribed SKUs in one batch call each (via the `InteractsWithWishlistState` trait), stashes them on the request
+    (`WishlistStateKeys`), and the resources read them. Optional auth (`auth('sanctum')->user()`, Cart's pattern) so
+    public reads still work for guests (both flags `false`). `ProductVariantDTO` gained `productPublicCode` so the
+    restock listener can build a deep link without a second lookup.
+  * **Restock wiring (event-driven, never polled):** `Modules\Inventory\Domain\Events\InventoryRestockedEvent`
+    (primitives: `eventId`, `sku`, `previousAvailableQuantity`, `newAvailableQuantity`) fires from
+    `EloquentInventoryManager` when available stock (`quantity − reserved_quantity`) crosses `<= 0 → > 0`, detected in
+    both `adjustStock` and `releaseReservation` (never on top-ups, sell-downs, or no-ops). Dispatched inside the
+    Inventory transaction; `Modules\Notification\...\SendProductAvailableNotifications` (`ShouldHandleEventsAfterCommit`,
+    registered on the event) claims subscribers via Wishlist, resolves product name/code via
+    `CatalogManagerInterface::findVariantBySku()`, and sends through `NotificationManagerInterface` on DATABASE + SMS.
+    `NotificationType::PRODUCT_AVAILABLE` / `NotificationTemplate::PRODUCT_AVAILABLE` (config key
+    `SMS_SMSIR_PRODUCT_AVAILABLE_TEMPLATE_ID`); SMS best-effort (skip/fail never throws, never rolls back the restock);
+    in-app payload `{product_code, sku}`; Persian copy "محصول موجود شد" / "محصول «{name}» دوباره موجود شده است.".
+  * **Permissions:** none — likes and availability requests are self-service (authentication only), like the cart.
+    `WishlistServiceProvider` binds the contract + loads migrations (no routes, no seeder); registered **before**
+    Catalog in `bootstrap/providers.php`.
+  * **Tests:** `tests/Feature/Wishlist/` (ProductLikesTest 10, AvailabilitySubscriptionTest 9, RestockNotificationTest 7)
+    + `tests/Feature/Inventory/RestockEventTest` (6) — **32 tests**: auth/ownership matrix, idempotent like/subscribe,
+    exact-SKU scoping, guest 401, 404 matrix, `is_liked`/availability read-back, no-N+1 enrichment, restock transition
+    conditions, dual-channel delivery, no-duplicate-on-repeat-event, SMS-failure isolation, after-commit (rollback → no
+    notification).
+
 ---
 
 
@@ -495,5 +555,6 @@ replaces no primary key, foreign key, relation, cron input, internal query, or a
 | Promotion | ✅ Complete | 120 passing (24 unit + 96 feature across 6 classes) |
 | Analytics | ✅ Complete & Hardened | 41 passing across 9 feature test classes |
 | Review | ✅ Complete | 35 passing across 4 feature test classes |
+| Wishlist | ✅ Complete | 32 passing (ProductLikesTest, AvailabilitySubscriptionTest, RestockNotificationTest, RestockEventTest) |
 
-**Full suite: 808 tests, 806 passing.** Two unrelated pre-existing failures remain — `ProfileTest::authenticated_user_can_update_profile` and `Analytics\FinancialAnalyticsSafetyTest::payment_failed_and_cancelled_events_do_not_mutate_payment_stats` — both verified to fail identically on a clean tree and out of scope.
+**Full suite: 845 tests, 842 passing.** Three unrelated pre-existing failures remain — `ProfileTest::authenticated_user_can_update_profile`, `Payment\PaymentTest::callback_page_links_use_configured_frontend_url_and_real_order` (the callback now builds the order URL from the public code while that one assertion still expects the numeric id), and `Analytics\FinancialAnalyticsSafetyTest::payment_failed_and_cancelled_events_do_not_mutate_payment_stats` — all three verified to fail identically on a clean tree (wishlist changes stashed) and out of scope.

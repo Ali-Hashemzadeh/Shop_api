@@ -125,6 +125,7 @@
   <a href="#products">Products</a>
   <a href="#gallery">Product Gallery</a>
   <a href="#variants">Product Variants</a>
+  <a href="#wishlist">Likes &amp; Availability</a>
 
   <div class="section-label">Inventory</div>
   <a href="#inventory">Stock</a>
@@ -2289,8 +2290,125 @@ GET /api/v1/catalog/products?available=true</pre>
   </div>
 
 
-  <!-- â•â•â• INVENTORY â•â•â• -->
-  <h2 id="inventory">Inventory â€” Stock</h2>
+  <!-- WISHLIST: Likes & Availability -->
+  <h2 id="wishlist">Catalog &mdash; Likes &amp; Availability</h2>
+  <p>Two independent, per-customer features exposed under the Catalog prefix. <strong>Liking</strong> a product adds it to the customer's wishlist. <strong>"Notify me when available"</strong> subscribes the customer to a one-time restock alert for a specific <em>variant SKU</em>. The two are fully decoupled: liking a product never creates an availability subscription, and subscribing never likes the product.</p>
+  <div class="note"><strong>Authentication required, and the server owns the user.</strong> Every endpoint below sits behind <code>auth:sanctum</code> (a guest gets <strong>401</strong>) and acts on <strong>the authenticated caller only</strong>. A <code>user_id</code> is never read from the request body &mdash; a customer can only ever touch their own likes and subscriptions. No special permission is needed; these are self-service like the cart.</div>
+  <div class="note"><strong>Identifiers follow the existing Catalog conventions.</strong> Products are addressed by their public product code (<code>bdp-XXXXXX</code>, or a legacy hex code), exactly like the other product routes. Availability subscriptions are keyed by the exact variant <strong>SKU</strong> (e.g. <code>bdv-XXXXXX</code> or a legacy SKU), so a restock of a <em>different</em> variant of the same product never notifies a subscriber of this one.</div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/catalog/products/{uuid}/like</span>
+      <span class="badge">Authenticated</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Like a product for the authenticated customer. Idempotent &mdash; liking an already-liked product returns the same success and creates no duplicate.</p>
+      <table>
+        <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
+        <tr><td>uuid</td><td class="req">required (path)</td><td>Public product code (<code>bdp-XXXXXX</code> or legacy hex).</td></tr>
+      </table>
+      <div class="block-label">Response &mdash; 200 OK</div>
+      <pre>{ <span class="key">"liked"</span>: <span class="bool">true</span> }</pre>
+      <div class="block-label">Errors</div>
+      <table>
+        <tr><th>Status</th><th>When</th></tr>
+        <tr><td>401</td><td>Unauthenticated (guest).</td></tr>
+        <tr><td>404</td><td>No product with that code.</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method delete">DELETE</span>
+      <span class="endpoint-path">/catalog/products/{uuid}/like</span>
+      <span class="badge">Authenticated</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Remove the caller's like. Idempotent &mdash; unliking something not liked still returns success. Only the caller's own like is affected; it can never remove another user's.</p>
+      <div class="block-label">Response &mdash; 200 OK</div>
+      <pre>{ <span class="key">"liked"</span>: <span class="bool">false</span> }</pre>
+      <div class="block-label">Errors</div>
+      <table>
+        <tr><th>Status</th><th>When</th></tr>
+        <tr><td>401</td><td>Unauthenticated (guest).</td></tr>
+        <tr><td>404</td><td>No product with that code.</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/catalog/liked-products</span>
+      <span class="badge">Authenticated</span>
+    </div>
+    <div class="endpoint-body">
+      <p>The authenticated customer's liked products, newest-like first, paginated. Returns ordinary <a href="#products">Product</a> objects (same representation, live pricing, and enrichment as any product listing) &mdash; <code>is_liked</code> is <code>true</code> for every row. A like whose product is no longer published is silently dropped from the page.</p>
+      <table>
+        <tr><th>Query</th><th>Type</th><th>Description</th></tr>
+        <tr><td>per_page</td><td class="opt">optional integer</td><td>Items per page, clamped 1&ndash;100. Default 15.</td></tr>
+        <tr><td>page</td><td class="opt">optional integer</td><td>Page number.</td></tr>
+      </table>
+      <div class="block-label">Response &mdash; 200 OK</div>
+      <pre>{
+  <span class="key">"data"</span>: [ <span class="comment">/* Product objects, each with "is_liked": true */</span> ],
+  <span class="key">"links"</span>: { <span class="comment">/* first, last, prev, next */</span> },
+  <span class="key">"meta"</span>:  { <span class="key">"current_page"</span>: <span class="num">1</span>, <span class="key">"per_page"</span>: <span class="num">15</span>, <span class="key">"total"</span>: <span class="num">3</span>, <span class="key">"last_page"</span>: <span class="num">1</span> }
+}</pre>
+      <div class="block-label">Errors</div>
+      <table><tr><th>Status</th><th>When</th></tr><tr><td>401</td><td>Unauthenticated (guest).</td></tr></table>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/catalog/variants/sku/{sku}/availability-notification</span>
+      <span class="badge">Authenticated</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Subscribe the caller to a one-time "back in stock" alert for this exact variant SKU. Idempotent &mdash; pressing it again while already subscribed changes nothing. When the SKU's available stock later transitions from <code>0</code> to positive, the customer receives one in-app notification <strong>and</strong> one SMS, after which the subscription is consumed (to be alerted again after a future sell-out, subscribe again).</p>
+      <table>
+        <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
+        <tr><td>sku</td><td class="req">required (path)</td><td>The exact variant SKU.</td></tr>
+      </table>
+      <div class="block-label">Response &mdash; 200 OK</div>
+      <pre>{ <span class="key">"availability_notification_requested"</span>: <span class="bool">true</span> }</pre>
+      <div class="block-label">Errors</div>
+      <table>
+        <tr><th>Status</th><th>When</th></tr>
+        <tr><td>401</td><td>Unauthenticated (guest).</td></tr>
+        <tr><td>404</td><td>No such SKU, or its product is not purchasable (not published).</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method delete">DELETE</span>
+      <span class="endpoint-path">/catalog/variants/sku/{sku}/availability-notification</span>
+      <span class="badge">Authenticated</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Cancel the caller's availability alert for this SKU. Idempotent, and scoped to the caller's own subscription.</p>
+      <div class="block-label">Response &mdash; 200 OK</div>
+      <pre>{ <span class="key">"availability_notification_requested"</span>: <span class="bool">false</span> }</pre>
+      <div class="block-label">Errors</div>
+      <table><tr><th>Status</th><th>When</th></tr><tr><td>401</td><td>Unauthenticated (guest).</td></tr></table>
+    </div>
+  </div>
+
+  <div class="note"><strong>Read-back on product &amp; variant responses (user-specific).</strong>
+    <ul>
+      <li>Every <a href="#products">Product</a> object carries <code>"is_liked"</code> (boolean) &mdash; <code>true</code> when the authenticated caller has liked it; <code>false</code> for guests.</li>
+      <li>Every <a href="#variants">Variant</a> object carries <code>"availability_notification_requested"</code> (boolean) &mdash; <code>true</code> when the caller has an active restock subscription for that SKU; <code>false</code> for guests.</li>
+    </ul>
+    Both are resolved server-side for the authenticated user in a single batched query per page (no N+1), and appear on the product list, product detail, category/campaign product lists, and variant detail endpoints. They are read-only and never accepted from client input.</div>
+
+  <!-- INVENTORY -->
+  <h2 id="inventory">Inventory &mdash; Stock</h2>
   <p>Inventory tracks stock levels per SKU. The SKU is the exact same string from the Catalog Variant â€” always match it precisely.</p>
 
   <div class="note">

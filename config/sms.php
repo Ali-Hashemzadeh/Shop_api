@@ -42,6 +42,7 @@ return [
                 'shipment_out_for_delivery' => env('SMS_SMSIR_SHIPMENT_OUT_FOR_DELIVERY_TEMPLATE_ID'),
                 'shipment_delivered' => env('SMS_SMSIR_SHIPMENT_DELIVERED_TEMPLATE_ID'),
                 'shipment_assigned_delivery' => env('SMS_SMSIR_SHIPMENT_ASSIGNED_DELIVERY_TEMPLATE_ID'),
+                'product_available' => env('SMS_SMSIR_PRODUCT_AVAILABLE_TEMPLATE_ID'),
 
                 // Legacy, no longer sent: `shipment_sent` covered both postal handoff
                 // and local dispatch before they were split. Kept mapped so an

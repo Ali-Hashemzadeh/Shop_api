@@ -329,6 +329,42 @@ class EloquentCatalogManager implements CatalogManagerInterface
         }
     }
 
+    public function getPublishedProductsByIds(array $ids): array
+    {
+        $ids = array_values(array_unique(array_map('intval', array_filter($ids))));
+
+        if ($ids === []) {
+            return [];
+        }
+
+        $products = Product::query()
+            ->where('status', 'published')
+            ->whereIn('id', $ids)
+            ->with(['images', 'variants'])
+            ->get();
+
+        if ($products->isEmpty()) {
+            return [];
+        }
+
+        // Same page-wide batching discipline as paginateProducts(): one media
+        // fetch, one Inventory stock batch, one Promotion pricing call for the
+        // whole set — never one lookup per product.
+        $mediaMap = $this->buildMediaMap(
+            $products->flatMap(fn (Product $p) => $this->productMediaIds($p))->unique()->values()->all()
+        );
+        $stockMap = $this->availableStockMap(
+            $products->flatMap(fn (Product $p) => $p->variants->pluck('sku'))->all()
+        );
+        $discountMap = $this->discountMapForProducts($products);
+
+        return $products
+            ->mapWithKeys(fn (Product $p): array => [
+                $p->id => $this->hydrateProduct($p, $mediaMap, $stockMap, $discountMap),
+            ])
+            ->all();
+    }
+
     public function createProduct(array $data): ProductDTO
     {
         // createWithPublicCode: the `uuid` public code is minted by the model hook
@@ -442,6 +478,7 @@ class EloquentCatalogManager implements CatalogManagerInterface
             $discountMap[$variant->id] ?? null,
             (int) $variant->product_id,
             $categoryIds,
+            $variant->product?->uuid,
         );
     }
 
@@ -492,6 +529,7 @@ class EloquentCatalogManager implements CatalogManagerInterface
                 $discountMap[$variant->id] ?? null,
                 (int) $variant->product_id,
                 $ancestors[$variant->product?->category_id] ?? [],
+                $variant->product?->uuid,
             ),
         ])->all();
     }
@@ -870,6 +908,7 @@ class EloquentCatalogManager implements CatalogManagerInterface
                 $discountMap[$v->id] ?? null,
                 (int) $product->id,
                 $categoryIds,
+                $product->uuid,
             ))
             ->all();
 

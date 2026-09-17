@@ -112,6 +112,18 @@ interface CatalogManagerInterface
      */
     public function getCampaignProducts(string $slug, array $filters = [], int $perPage = 15): ?LengthAwarePaginator;
 
+    /**
+     * Hydrate a set of *published* products by internal id, keyed by id, with the
+     * same media/stock/pricing enrichment a listing gets. Unknown, unpublished, or
+     * missing ids are simply absent from the result. One batched call — used to
+     * turn Wishlist's liked-product ids into full product representations without
+     * an N+1.
+     *
+     * @param  list<int>  $ids
+     * @return array<int, ProductDTO>
+     */
+    public function getPublishedProductsByIds(array $ids): array;
+
     public function createProduct(array $data): ProductDTO;
 
     public function addProductImage(int $productId, int $mediaId, int $sortOrder = 0): ProductImageDTO;

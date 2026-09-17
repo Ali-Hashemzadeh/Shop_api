@@ -8,6 +8,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Routing\Controller;
 use Modules\Catalog\Domain\Contracts\CatalogManagerInterface;
+use Modules\Catalog\Infrastructure\Http\Concerns\InteractsWithWishlistState;
 use Modules\Catalog\Infrastructure\Http\Requests\IndexProductsRequest;
 use Modules\Catalog\Infrastructure\Http\Resources\ProductResource;
 use Modules\Catalog\Infrastructure\Http\Resources\PublicCampaignResource;
@@ -25,6 +26,8 @@ use Modules\Promotion\Domain\Contracts\PromotionManagerInterface;
  */
 class CampaignsController extends Controller
 {
+    use InteractsWithWishlistState;
+
     public function __construct(
         private readonly CatalogManagerInterface $catalog,
         private readonly PromotionManagerInterface $promotion,
@@ -78,6 +81,8 @@ class CampaignsController extends Controller
         if ($paginator === null) {
             return response()->json(['message' => 'Campaign not found.'], 404);
         }
+
+        $this->annotateProductWishlistState($request, $paginator->getCollection());
 
         return ProductResource::collection($paginator);
     }

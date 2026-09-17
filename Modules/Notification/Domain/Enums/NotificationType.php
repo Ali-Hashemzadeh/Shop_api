@@ -42,4 +42,11 @@ enum NotificationType: string
 
     /** Admin-facing: a new paid order landed. In-app only. */
     case ADMIN_ORDER_PAID = 'admin_order_paid';
+
+    /**
+     * Customer-facing: a variant the customer subscribed to is back in stock.
+     * Raised once per consumed availability subscription (one-shot). Carries the
+     * product's public code and the SKU so the frontend can deep-link.
+     */
+    case PRODUCT_AVAILABLE = 'product_available';
 }

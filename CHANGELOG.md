@@ -2,6 +2,49 @@
 
 ## [Unreleased]
 
+### Feature — Wishlist: product likes + "notify me when available" (event-driven restock alerts)
+
+**A new leaf module `Modules/Wishlist` owns two independent, per-customer features — product likes and
+one-shot variant-availability subscriptions — while Catalog keeps the HTTP surface and Inventory/Notification
+wire up restock alerts through an integration event.** Likes and availability are fully decoupled: liking a
+product never subscribes it for restock, and subscribing never likes it.
+
+- **Wishlist is a pure leaf.** It imports no other module's models, contracts, or events — it deals only in
+  primitives (`userId:int`, `productId:int`, `sku:string`). `product_likes` (`unique(user_id, product_id)`) and
+  `availability_subscriptions` (`unique(user_id, sku)`, `index(sku, notified_at)`) use loose references with no
+  FKs, like `reviews`/`notifications` elsewhere. `WishlistManagerInterface` is the only entry point.
+- **Catalog owns the customer-facing endpoints** (routes under `/api/v1/catalog/*`, Catalog → Wishlist):
+  `POST`/`DELETE /catalog/products/{uuid}/like` → `{ "liked": bool }`; `GET /catalog/liked-products` (paginated,
+  ordinary `ProductResource` with live pricing); `POST`/`DELETE /catalog/variants/sku/{sku}/availability-notification`
+  → `{ "availability_notification_requested": bool }`. All authenticated, self-service (no permission), acting on
+  the caller only — a `user_id` is never accepted. Nonexistent product/SKU → 404; a draft (non-purchasable)
+  product's SKU cannot be subscribed.
+- **Per-user read-back, no N+1.** `ProductResource` gains `is_liked` and `ProductVariantResource` gains
+  `availability_notification_requested`, resolved for the authenticated caller in one batch query per page
+  (stashed on the request, read by the resources). Present on product list/detail, category & campaign lists,
+  and variant detail; `false` for guests; never client-writable.
+- **Event-driven restock, never polled.** Inventory publishes a new integration event
+  `InventoryRestockedEvent` (primitives only: `eventId`, `sku`, `previousAvailableQuantity`,
+  `newAvailableQuantity`) when a SKU's *available* stock (`quantity − reserved_quantity`) crosses from `<= 0`
+  to `> 0` — detected in both `adjustStock` and `releaseReservation`, and on no other movement. Dispatched
+  inside the Inventory transaction; the listener is `ShouldHandleEventsAfterCommit`, so a rolled-back restock
+  notifies nobody.
+- **Notification owns the listener** (`SendProductAvailableNotifications`, registered on the event), reusing the
+  existing `NotificationManagerInterface` + `SmsChannel`/`SmsManagerInterface`. New `NotificationType::PRODUCT_AVAILABLE`
+  and `NotificationTemplate::PRODUCT_AVAILABLE` (config-mapped via `SMS_SMSIR_PRODUCT_AVAILABLE_TEMPLATE_ID`).
+  Subscribers get an in-app notification **and** a best-effort SMS (missing template → skipped, provider failure
+  → failed delivery row; never throws, never rolls back the restock). The in-app payload carries `product_code`
+  + `sku`.
+- **One-shot + idempotent + concurrency-safe.** Subscribers are claimed atomically —
+  `WishlistManagerInterface::claimPendingSubscribersForSku()` stamps `notified_at` under `lockForUpdate()` before
+  sending — so each subscription yields exactly one notification even under a retried/duplicated event or
+  concurrent workers. Re-subscribing after a notification reactivates the same row. No separate processed-events
+  table is needed.
+- **Tests.** `tests/Feature/Wishlist/{ProductLikesTest,AvailabilitySubscriptionTest,RestockNotificationTest}`
+  and `tests/Feature/Inventory/RestockEventTest` (32 tests) cover the like/availability auth & ownership matrix,
+  idempotency, exact-SKU scoping, the restock transition conditions, dual-channel delivery, no-duplicate on
+  repeat events, SMS-failure isolation, and after-commit behavior.
+
 ### Feature — Review: product ratings & comments (one entity, both jobs)
 
 **A new Review module (`Modules/Review`) adds star ratings and comments to products.** One entity —

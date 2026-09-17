@@ -56,4 +56,12 @@ enum NotificationTemplate: string
 
     /** Sent to the courier, not the customer: "this delivery is yours". */
     case SHIPMENT_ASSIGNED_DELIVERY = 'shipment_assigned_delivery';
+
+    /**
+     * Customer-facing: a subscribed variant is back in stock. Parameters:
+     * `ProductName`. Best-effort like every other template — when no provider
+     * template id is configured the SMS is skipped, and the in-app notification
+     * still lands.
+     */
+    case PRODUCT_AVAILABLE = 'product_available';
 }

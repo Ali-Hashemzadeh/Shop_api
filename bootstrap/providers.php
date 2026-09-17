@@ -14,6 +14,7 @@ use Modules\Promotion\Infrastructure\Providers\PromotionServiceProvider;
 use Modules\Review\Infrastructure\Providers\ReviewServiceProvider;
 use Modules\Shipment\Infrastructure\Providers\ShipmentServiceProvider;
 use Modules\Sms\Infrastructure\Providers\SmsServiceProvider;
+use Modules\Wishlist\Infrastructure\Providers\WishlistServiceProvider;
 
 return [
     AppServiceProvider::class,
@@ -21,6 +22,10 @@ return [
     // Promotion is a leaf dependency (it imports no other business module), and
     // Catalog resolves it for live pricing — so it registers first.
     PromotionServiceProvider::class,
+    // Wishlist is a leaf (it imports no other business module). Catalog resolves
+    // WishlistManagerInterface to annotate is_liked / availability state and to
+    // back the like + availability endpoints, so it registers before Catalog.
+    WishlistServiceProvider::class,
     CatalogServiceProvider::class,
     MediaServiceProvider::class,
     InventoryServiceProvider::class,

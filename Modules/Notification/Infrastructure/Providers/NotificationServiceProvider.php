@@ -5,10 +5,12 @@ namespace Modules\Notification\Infrastructure\Providers;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
+use Modules\Inventory\Domain\Events\InventoryRestockedEvent;
 use Modules\Notification\Application\Listeners\SendDeliveryVerificationCodeSms;
 use Modules\Notification\Application\Listeners\SendOrderCancelledNotifications;
 use Modules\Notification\Application\Listeners\SendOrderPaidNotifications;
 use Modules\Notification\Application\Listeners\SendPaymentFailedNotification;
+use Modules\Notification\Application\Listeners\SendProductAvailableNotifications;
 use Modules\Notification\Application\Listeners\SendShipmentAssignedToDeliveryNotifications;
 use Modules\Notification\Application\Listeners\SendShipmentDeliveredNotifications;
 use Modules\Notification\Application\Listeners\SendShipmentHandedToPostNotifications;
@@ -76,5 +78,8 @@ class NotificationServiceProvider extends ServiceProvider
         Event::listen(ShipmentDeliveredEvent::class, SendShipmentDeliveredNotifications::class);
         Event::listen(ShipmentAssignedToDeliveryEvent::class, SendShipmentAssignedToDeliveryNotifications::class);
         Event::listen(DeliveryVerificationCodeIssuedEvent::class, SendDeliveryVerificationCodeSms::class);
+        // Inventory publishes a restock (available 0 → positive); Wishlist owns the
+        // subscriptions, Notification delivers to the subscribed customers.
+        Event::listen(InventoryRestockedEvent::class, SendProductAvailableNotifications::class);
     }
 }

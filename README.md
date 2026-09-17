@@ -218,6 +218,15 @@ One entity — `Review` — that serves as both star rating and comment in a sin
 - **Endpoints:** public `GET /api/v1/reviews?subject_type=&subject_id=` (approved-only regardless of any `status` param; sorts `newest|highest|lowest`); writes `POST /api/v1/reviews`, `PATCH /api/v1/reviews/{uuid}` (owner-only, 403 policy); admin `GET /api/v1/admin/reviews`, `PATCH /api/v1/admin/reviews/{uuid}/status` (approved/rejected only — nothing re-enters `pending`), `POST /api/v1/admin/reviews/{uuid}/reply` (single overwritable reply).
 - **Authorization:** permission-based — `review.create` (customer + admin); `review.view-admin`, `review.moderate` (admin only). Public code: `bdr-XXXXXX`.
 
+### Wishlist (Complete)
+Two independent, per-customer features — product **likes** and one-shot **"notify me when available"** subscriptions. A pure leaf module: it imports no other module and deals only in primitives, so the dependency graph stays acyclic (Catalog owns the HTTP surface and calls `WishlistManagerInterface`; Notification calls it to claim restock subscribers).
+
+- **Two decoupled tables, loose refs (no FKs):** `product_likes` (`unique(user_id, product_id)`) and `availability_subscriptions` (`unique(user_id, sku)`, nullable `notified_at`). Liking never subscribes, and subscribing never likes. A deleted product/user leaves rows inert (no cascade anywhere in the codebase); the liked-products page drops a like whose product is no longer published.
+- **Availability is one-shot, SKU-specific.** The subscription identifies the exact variant SKU, so a restock of a sibling variant never notifies the wrong customer. After the alert fires, `notified_at` is stamped; re-subscribing reactivates the row.
+- **Per-user read-back, no N+1:** `ProductResource.is_liked` and `ProductVariantResource.availability_notification_requested`, resolved for the authenticated caller in one batch query per page; `false` for guests.
+- **Restock is event-driven, never polled.** Inventory publishes `InventoryRestockedEvent` (primitives only) when available stock (`quantity − reserved_quantity`) crosses `0 → positive` (in `adjustStock`/`releaseReservation`). Notification's `SendProductAvailableNotifications` listener (`ShouldHandleEventsAfterCommit`) reuses `NotificationManagerInterface` + `SmsChannel` to send an in-app notification and a best-effort SMS (`product_available`). Subscribers are claimed atomically (`lockForUpdate`), so a retried/duplicated event or concurrent workers never double-notify, and the subscription is consumed. A rolled-back restock notifies nobody.
+- **Endpoints** (all `auth:sanctum`, self-service, caller-scoped — no `user_id` from the client, no permission): `POST`/`DELETE /api/v1/catalog/products/{uuid}/like` → `{ "liked": bool }`; `GET /api/v1/catalog/liked-products` (paginated, ordinary `ProductResource`); `POST`/`DELETE /api/v1/catalog/variants/sku/{sku}/availability-notification` → `{ "availability_notification_requested": bool }`.
+
 ---
 
 ## API Overview
@@ -268,6 +277,9 @@ Base prefix: `/api/v1`
 | `POST` | `/catalog/products/{uuid}/variants` | Add variant to product |
 | `PATCH` | `/catalog/variants/{variantId}` | Update variant |
 | `DELETE` | `/catalog/variants/{variantId}` | Delete variant |
+| `GET` | `/catalog/liked-products` | Current customer's liked products (paginated) — self-service |
+| `POST` / `DELETE` | `/catalog/products/{uuid}/like` | Like / unlike a product → `{ "liked": bool }` — self-service |
+| `POST` / `DELETE` | `/catalog/variants/sku/{sku}/availability-notification` | Request / cancel a one-shot restock alert for a SKU → `{ "availability_notification_requested": bool }` — self-service |
 
 ### Inventory — Public (no auth)
 

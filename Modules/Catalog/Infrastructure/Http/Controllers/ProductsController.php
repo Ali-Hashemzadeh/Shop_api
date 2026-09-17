@@ -4,6 +4,7 @@ namespace Modules\Catalog\Infrastructure\Http\Controllers;
 
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Routing\Controller;
 use Modules\Catalog\Application\Actions\CreateProductAction;
@@ -11,6 +12,7 @@ use Modules\Catalog\Application\Actions\DeleteProductAction;
 use Modules\Catalog\Application\Actions\UpdateProductAction;
 use Modules\Catalog\Domain\Contracts\CatalogManagerInterface;
 use Modules\Catalog\Domain\Models\Product;
+use Modules\Catalog\Infrastructure\Http\Concerns\InteractsWithWishlistState;
 use Modules\Catalog\Infrastructure\Http\Requests\IndexAdminProductsRequest;
 use Modules\Catalog\Infrastructure\Http\Requests\IndexProductsRequest;
 use Modules\Catalog\Infrastructure\Http\Requests\StoreProductRequest;
@@ -20,6 +22,7 @@ use Modules\Catalog\Infrastructure\Http\Resources\ProductResource;
 class ProductsController extends Controller
 {
     use AuthorizesRequests;
+    use InteractsWithWishlistState;
 
     public function __construct(
         private readonly CreateProductAction $createAction,
@@ -35,7 +38,7 @@ class ProductsController extends Controller
         return response()->json(new ProductResource($dto), 201);
     }
 
-    public function show(string $uuid): JsonResponse
+    public function show(Request $request, string $uuid): JsonResponse
     {
         $dto = $this->catalog->findProduct($uuid);
 
@@ -43,10 +46,12 @@ class ProductsController extends Controller
             return response()->json(['message' => 'Product not found.'], 404);
         }
 
+        $this->annotateProductWishlistState($request, [$dto]);
+
         return response()->json(new ProductResource($dto));
     }
 
-    public function showAdmin(string $uuid): JsonResponse
+    public function showAdmin(Request $request, string $uuid): JsonResponse
     {
         $this->authorize('viewAdmin', Product::class);
 
@@ -56,16 +61,20 @@ class ProductsController extends Controller
             return response()->json(['message' => 'Product not found.'], 404);
         }
 
+        $this->annotateProductWishlistState($request, [$dto]);
+
         return response()->json(new ProductResource($dto));
     }
 
-    public function showBySlug(string $slug): JsonResponse
+    public function showBySlug(Request $request, string $slug): JsonResponse
     {
         $dto = $this->catalog->findProductBySlug($slug);
 
         if ($dto === null) {
             return response()->json(['message' => 'Product not found.'], 404);
         }
+
+        $this->annotateProductWishlistState($request, [$dto]);
 
         return response()->json(new ProductResource($dto));
     }
@@ -100,9 +109,10 @@ class ProductsController extends Controller
             'available' => $request->has('available') ? $request->string('available')->toString() === 'true' : null,
         ], fn ($v) => $v !== null);
 
-        return ProductResource::collection(
-            $this->catalog->getProducts($filters, $request->integer('per_page', 15))
-        );
+        $paginator = $this->catalog->getProducts($filters, $request->integer('per_page', 15));
+        $this->annotateProductWishlistState($request, $paginator->getCollection());
+
+        return ProductResource::collection($paginator);
     }
 
     public function indexAdmin(IndexAdminProductsRequest $request): AnonymousResourceCollection
@@ -120,9 +130,10 @@ class ProductsController extends Controller
             'sort' => $request->string('sort')->trim()->toString() ?: null,
         ], fn ($v) => $v !== null);
 
-        return ProductResource::collection(
-            $this->catalog->getProductsAdmin($filters, $request->integer('per_page', 15))
-        );
+        $paginator = $this->catalog->getProductsAdmin($filters, $request->integer('per_page', 15));
+        $this->annotateProductWishlistState($request, $paginator->getCollection());
+
+        return ProductResource::collection($paginator);
     }
 
     public function indexByCategory(int $categoryId, IndexProductsRequest $request): AnonymousResourceCollection
@@ -136,8 +147,9 @@ class ProductsController extends Controller
             'available' => $request->has('available') ? $request->string('available')->toString() === 'true' : null,
         ], fn ($v) => $v !== null);
 
-        return ProductResource::collection(
-            $this->catalog->getProductsByCategory($categoryId, $filters, $request->integer('per_page', 15))
-        );
+        $paginator = $this->catalog->getProductsByCategory($categoryId, $filters, $request->integer('per_page', 15));
+        $this->annotateProductWishlistState($request, $paginator->getCollection());
+
+        return ProductResource::collection($paginator);
     }
 }

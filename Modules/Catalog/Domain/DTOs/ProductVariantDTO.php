@@ -30,6 +30,10 @@ class ProductVariantDTO
         public readonly ?AutomaticDiscountResultDTO $automaticDiscount = null,
         public readonly ?int $productId = null,
         public readonly array $categoryIds = [],
+        // The owning product's public code (`bdp-XXXXXX`, stored in products.uuid).
+        // Carried so cross-module consumers (e.g. the restock notification) can
+        // build a customer-facing deep link without a second Catalog lookup.
+        public readonly ?string $productPublicCode = null,
     ) {}
 
     /**
@@ -53,6 +57,7 @@ class ProductVariantDTO
         ?AutomaticDiscountResultDTO $automaticDiscount = null,
         ?int $productId = null,
         array $categoryIds = [],
+        ?string $productPublicCode = null,
     ): self {
         return new self(
             id: $variant->id,
@@ -69,6 +74,7 @@ class ProductVariantDTO
             automaticDiscount: $automaticDiscount,
             productId: $productId ?? ($variant->product_id ? (int) $variant->product_id : null),
             categoryIds: $categoryIds,
+            productPublicCode: $productPublicCode,
         );
     }
 }
