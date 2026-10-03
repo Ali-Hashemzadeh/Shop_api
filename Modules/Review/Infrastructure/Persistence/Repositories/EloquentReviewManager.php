@@ -10,6 +10,7 @@ use Modules\Media\Domain\Contracts\MediaManagerInterface;
 use Modules\Media\Domain\DTOs\MediaDTO;
 use Modules\Review\Application\Actions\CreateOrUpdateReviewAction;
 use Modules\Review\Application\Actions\ModerateReviewAction;
+use Modules\Review\Application\Actions\PublishAiReviewAction;
 use Modules\Review\Application\Actions\ReplyToReviewAction;
 use Modules\Review\Domain\Contracts\ReviewManagerInterface;
 use Modules\Review\Domain\DTOs\ReviewDTO;
@@ -69,6 +70,28 @@ class EloquentReviewManager implements ReviewManagerInterface
             $rating,
             $body,
             $galleryMediaIds,
+        );
+
+        return $this->hydrate($review);
+    }
+
+    public function createAiReview(
+        string $subjectType,
+        int $subjectId,
+        string $authorName,
+        int $rating,
+        ?string $title,
+        string $body,
+        int $aiGenerationId,
+    ): ReviewDTO {
+        $review = app(PublishAiReviewAction::class)->handle(
+            ReviewSubjectType::from($subjectType),
+            $subjectId,
+            $authorName,
+            $rating,
+            $title,
+            $body,
+            $aiGenerationId,
         );
 
         return $this->hydrate($review);

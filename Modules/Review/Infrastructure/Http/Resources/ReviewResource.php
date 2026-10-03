@@ -24,7 +24,12 @@ class ReviewResource extends JsonResource
             'id' => $dto->uuid,
             'subject_type' => $dto->subjectType,
             'subject_id' => $dto->subjectId,
+            // Present (non-null) only for published AI reviews; the customer
+            // shape is deliberately identical for authored and AI reviews and
+            // never exposes the AI provenance flag.
+            'author_name' => $dto->authorName,
             'rating' => $dto->rating,
+            'title' => $dto->title,
             'body' => $dto->body,
             'gallery_urls' => $dto->galleryUrls,
             'verified_purchase' => $dto->verifiedPurchase,

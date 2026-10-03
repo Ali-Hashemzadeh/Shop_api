@@ -25,7 +25,7 @@ class ReviewDTO
         public readonly string $uuid,
         public readonly string $subjectType,
         public readonly int $subjectId,
-        public readonly int $userId,
+        public readonly ?int $userId,
         public readonly ?int $rating,
         public readonly string $body,
         public readonly array $galleryUrls,
@@ -34,6 +34,13 @@ class ReviewDTO
         public readonly ?string $sellerReply,
         public readonly ?Carbon $sellerReplyAt,
         public readonly Carbon $createdAt,
+        // Author persona for a published AI review (null for authored reviews,
+        // where the frontend resolves the customer's own name). `title` is a
+        // short headline used only by AI reviews today.
+        public readonly ?string $authorName = null,
+        public readonly ?string $title = null,
+        // Backend-only provenance; never surfaced on the customer resource.
+        public readonly bool $isAiGenerated = false,
     ) {}
 
     /**
@@ -48,7 +55,7 @@ class ReviewDTO
                 ? $review->subject_type->value
                 : (string) $review->subject_type,
             subjectId: (int) $review->subject_id,
-            userId: (int) $review->user_id,
+            userId: $review->user_id !== null ? (int) $review->user_id : null,
             rating: $review->rating,
             body: (string) $review->body,
             galleryUrls: $galleryUrls,
@@ -61,6 +68,9 @@ class ReviewDTO
                 ? Carbon::parse($review->seller_reply_at)
                 : null,
             createdAt: Carbon::parse($review->created_at),
+            authorName: $review->author_name,
+            title: $review->title,
+            isAiGenerated: (bool) $review->is_ai_generated,
         );
     }
 }

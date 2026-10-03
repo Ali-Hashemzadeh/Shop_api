@@ -16,11 +16,15 @@ class Review extends Model
         'subject_type',
         'subject_id',
         'user_id',
+        'author_name',
         'rating',
+        'title',
         'body',
         'gallery_media_ids',
         'verified_purchase',
         'status',
+        'is_ai_generated',
+        'ai_generation_id',
         'seller_reply',
         'seller_reply_at',
     ];
@@ -32,6 +36,8 @@ class Review extends Model
         'rating' => 'integer',
         'gallery_media_ids' => 'array',
         'verified_purchase' => 'boolean',
+        'is_ai_generated' => 'boolean',
+        'ai_generation_id' => 'integer',
         'seller_reply_at' => 'datetime',
     ];
 

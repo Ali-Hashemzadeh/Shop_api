@@ -10,6 +10,7 @@ use Modules\Media\Infrastructure\Providers\MediaServiceProvider;
 use Modules\Notification\Infrastructure\Providers\NotificationServiceProvider;
 use Modules\Order\Infrastructure\Providers\OrderServiceProvider;
 use Modules\Payment\Infrastructure\Providers\PaymentServiceProvider;
+use Modules\ProductReviewAI\Infrastructure\Providers\ProductReviewAIServiceProvider;
 use Modules\Promotion\Infrastructure\Providers\PromotionServiceProvider;
 use Modules\Review\Infrastructure\Providers\ReviewServiceProvider;
 use Modules\Shipment\Infrastructure\Providers\ShipmentServiceProvider;
@@ -37,4 +38,7 @@ return [
     NotificationServiceProvider::class,
     AnalyticsServiceProvider::class,
     ReviewServiceProvider::class,
+    // ProductReviewAI resolves Catalog (product context) and the Review contract
+    // (publishing approved drafts), so it registers after both.
+    ProductReviewAIServiceProvider::class,
 ];

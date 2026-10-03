@@ -48,6 +48,26 @@ interface ReviewManagerInterface
     ): ReviewDTO;
 
     /**
+     * Publish an approved AI-generated review as an ordinary review.
+     *
+     * This is the ONLY boundary through which the ProductReviewAI module writes
+     * into the review store — it never touches the Review model. The resulting
+     * row has no `user_id` (there is no fake account), carries the AI persona in
+     * `author_name`, is created already `approved`, and records its provenance
+     * (`is_ai_generated`, `ai_generation_id`) for audit while remaining
+     * indistinguishable from an authored review on the customer surface.
+     */
+    public function createAiReview(
+        string $subjectType,
+        int $subjectId,
+        string $authorName,
+        int $rating,
+        ?string $title,
+        string $body,
+        int $aiGenerationId,
+    ): ReviewDTO;
+
+    /**
      * Admin moderation: move a review to `approved` or `rejected`. Any current
      * status may be re-decided (approved ↔ rejected), but nothing transitions
      * into `pending` — that state is system-only, set on create/edit.

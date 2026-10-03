@@ -16,6 +16,9 @@ use Modules\Order\Infrastructure\Persistence\Seeders\OrderPermissionsSeeder;
 use Modules\Order\Infrastructure\Persistence\Seeders\OrderSampleDataSeeder;
 use Modules\Payment\Infrastructure\Persistence\Seeders\PaymentPermissionsSeeder;
 use Modules\Payment\Infrastructure\Persistence\Seeders\PaymentSampleDataSeeder;
+use Modules\ProductReviewAI\Infrastructure\Persistence\Seeders\AiPromptSeeder;
+use Modules\ProductReviewAI\Infrastructure\Persistence\Seeders\ProductReviewAIPermissionsSeeder;
+use Modules\ProductReviewAI\Infrastructure\Persistence\Seeders\ReviewSourceSeeder;
 use Modules\Promotion\Infrastructure\Persistence\Seeders\PromotionPermissionsSeeder;
 use Modules\Promotion\Infrastructure\Persistence\Seeders\PromotionSampleDataSeeder;
 use Modules\Review\Infrastructure\Persistence\Seeders\ReviewPermissionsSeeder;
@@ -62,6 +65,11 @@ class DatabaseSeeder extends Seeder
             // Runs last — activates a shipment per paid order and drives it to its state.
             ShipmentSampleDataSeeder::class,
             ReviewPermissionsSeeder::class,
+            // AI product reviews: admin-only capability, the registered external
+            // sources, and the two-stage prompt templates.
+            ProductReviewAIPermissionsSeeder::class,
+            ReviewSourceSeeder::class,
+            AiPromptSeeder::class,
         ]);
     }
 }
