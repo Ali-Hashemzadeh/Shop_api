@@ -2,6 +2,166 @@
 
 ## [Unreleased]
 
+### Feature — Dynamic Post shipping calculation
+
+**Postal shipping cost is now computed from a database-driven Post tariff engine owned by the Shipment module,
+instead of a single static per-method price.** Checkout asks Shipment to price the parcel; the resolved cost flows
+into `orders.shipping_cost`, the order total, and finally `shipments.shipping_cost` at activation. The Shipment
+module remains the sole owner of shipping calculation — Order/Cart supply only the parcel weight.
+
+- **Distance is database-driven, never hardcoded.** New `province_neighbors` table (owned by Identity, which owns the
+  "shipping location matrices") + `ProvinceNeighbor` model. `IdentityManagerInterface::getProvinceDistanceType()`
+  classifies a delivery as `same_province` / `neighbor` / `non_neighbor` (adjacency matched in either direction).
+  Shipment asks Identity across the module wall rather than joining provinces itself.
+- **Idempotent, production-safe neighbour seeder.** `ProvinceNeighborSeeder` resolves provinces **by name** (never by a
+  hardcoded id), writes both directions with `firstOrCreate`, skips absent provinces, and is safe to run repeatedly.
+  Wired into `IdentityModuleSeeder` after `LocationSeeder`.
+- **Tariffs and formula constants live in the database.** New `post_tariffs` table (weight brackets, half-open
+  `[weight_from, weight_to)`, per-distance `base_price` + open-ended `extra_weight_price`, optional effective window)
+  and `shipping_parameters` table (carrier + key/value/type — `island_extra_per_kg`, `fragile_percentage`,
+  `large_province_percentage`, `tehran_percentage`). Seeded idempotently by `PostTariffSeeder` /
+  `ShippingParameterSeeder` (`firstOrCreate`, so operator-tuned values survive a re-seed).
+- **Shipment-owned calculator.** `ShippingCostCalculatorInterface` (`Domain/Contracts`) + `PostShippingCalculator`
+  (`Infrastructure/Shipping/Post`) bound in `ShipmentServiceProvider`. It classifies distance, finds the matching
+  tariff, adds per-kg extra weight, then the flat island surcharge and each configurable percentage (large / Tehran-
+  Alborz / fragile). All arithmetic is integer **tomans** (Money Unit Rule); fragile reuses the standard tariff plus
+  the fragile percentage. Repositories: `PostTariffRepository`, `ShippingParameterRepository`.
+- **Weight capture (Catalog).** New nullable `product_variants.weight_grams` (whole grams — never decimal kilograms),
+  exposed on `ProductVariantDTO`/`ProductVariantResource` (`weight_grams`) and accepted on variant + nested-product
+  create/update requests. Cart now sums it into `CartDTO.totalWeightGrams` (`total_weight_grams` on the cart response).
+- **Safe fallback (mid-migration).** `ShipmentManagerInterface::resolveShippingCostForSelection()` prices postal
+  methods dynamically but falls back to the static configured price when no origin is set, the destination province is
+  unknown, the parcel has no weight, or no tariff matches (logged, never a failed checkout). Local delivery and pickup
+  always keep their static price. Activation by seeding tariffs + variant weights + `SHIPPING_ORIGIN_PROVINCE_ID`.
+- **Config:** new `config/shipping.php` (`SHIPPING_ORIGIN_PROVINCE_ID`, `SHIPPING_POST_CARRIER`,
+  `SHIPPING_DEFAULT_PACKAGE_TYPE`, and env-backed `SHIPPING_{ISLAND,LARGE,TEHRAN_ALBORZ}_PROVINCE_IDS` group membership).
+- **Tests (+24):** `Identity/ProvinceNeighborTest` (7), `Shipment/PostShippingCalculatorTest` (10),
+  `Shipment/DynamicPostShippingTest` (5 — end-to-end wiring + fallbacks + regression), `Cart/CartWeightTest` (2).
+- **Admin management deferred** (per scope): tariffs/parameters/neighbours are managed via idempotent seeders for now;
+  an admin CRUD surface is a documented follow-up.
+
+### Feature — Product Review AI module (AI-assisted product-review drafting)
+
+**A new admin-only `Modules/ProductReviewAI` module drafts Persian, customer-style product reviews from real external
+marketplace reviews and runs them through an approval workflow.** Approved drafts are published as ordinary product
+reviews — there is no separate storefront section — while the backend keeps full provenance and audit.
+
+- **New module** `Modules/ProductReviewAI/` (registered last in `bootstrap/providers.php`; depends on the Catalog and
+  Review contracts only). Adapter architecture for external sources (`ReviewSourceInterface` + `DigikalaSource`, resolved
+  by code through `ReviewSourceFactory` — no `if source == digikala`) and a replaceable AI provider
+  (`AIProviderInterface` + `AvalAIProvider`, OpenAI-compatible, default model `deepseek-v4.1-flash`, via `AIProviderFactory`).
+- **Real integrations, fail-loud.** Live Digikala JSON APIs (no HTML scraping) and the AvalAI gateway. Missing
+  configuration (e.g. `AVALAI_API_KEY`, Digikala base URL) never falls back to fake data or silently degrades — the run
+  is marked `failed` with a reason and every failure is recorded in the generation log.
+- **Two-stage AI, queued.** `GenerateProductAIReviewsJob` (Laravel queue; scraping + AI never run in the HTTP request):
+  collect ~100 external reviews → stage-1 analysis (positives/negatives/profiles/features, JSON) → stage-2 generation
+  (first-person Persian reviews with varied personalities and AI-chosen ratings — not all 5-star — JSON) → save drafts.
+- **Database (8 new tables):** `review_sources`, `external_product_mappings` (unique product+source),
+  `external_reviews`, `ai_prompts` (versioned; unique name+version), `ai_review_generations` (stores model +
+  prompt version + analysis + failure reason — never deleted), `ai_generated_reviews` (drafts, with
+  `published_review_id` back-link), `ai_generated_review_versions` (append-only edit history),
+  `ai_review_generation_logs` (full request/response + moderation ledger). Loose cross-module refs only (no FK to
+  Catalog/Identity/Review).
+- **Cross-module change — Review module (additive, AI metadata support):** one migration makes `reviews.user_id`
+  nullable and adds `author_name`, `title`, `is_ai_generated`, `ai_generation_id`; a new
+  `ReviewManagerInterface::createAiReview()` publishes an approved, user-less, AI-flagged review (the only write
+  ProductReviewAI performs into reviews). `ReviewResource` now exposes `author_name` + `title` (null for authored
+  reviews); the AI-provenance flag stays backend-only. Existing Review behaviour and tests are unchanged.
+- **API (all `auth:sanctum` + `product-review-ai.manage`, admin only — never support/customer):** source search,
+  product mappings (GET/POST), `generate` (returns `{warning, existing_ai_reviews}` unless confirmed; **202** when
+  queued), `regenerate` (keeps history), list generations, view a generation + its drafts, edit a draft (saves version
+  history), approve (publishes a normal review), reject, and read-only prompt browsing (`GET /api/v1/admin/ai-prompts[/{id}]`,
+  filter `name`/`active`). Prompts are never client-supplied — the pipeline auto-resolves the active prompt; the endpoints
+  are for viewing only.
+- **Observability.** Every external + AI call logs its target URL and the response (success and failure) via `Log::`
+  (`ProductReviewAI Digikala request` / `ProductReviewAI AvalAI request|response`), on top of the per-run
+  `ai_review_generation_logs` (which also stores the raw AI output). Digikala's v2 discovery search returns a
+  widget-based layout — `searchProducts()` extracts products from `data.widgets[*].data.products` (with flat fallbacks).
+- **Permission:** new `product-review-ai.manage`, seeded to `admin` only. Seeders also register the Digikala source and
+  the v1 two-stage prompts.
+- **Tests:** `tests/Feature/ProductReviewAI/` — 27 tests (Digikala parsing incl. the widget-based v2 layout via faked
+  HTTP, generation queueing, full pipeline JSON parsing, AI-failure handling + logging, mapping/warning flow,
+  approval→normal-review publishing + provenance, edit history, reject, prompt browsing, source+AI URL/response logging,
+  and the 401/403 auth matrix). Interfaces are mocked with test doubles — no production fake drivers. Full suite: 908
+  passing (the 3 pre-existing unrelated failures are unchanged).
+- **Config/env:** `config/product_review_ai.php` + `AVALAI_*`, `DIGIKALA_*`, `PRODUCT_REVIEW_AI_*` keys in `.env.example`.
+
+### Feature — Ticket message attachments (built on the existing Media system)
+
+**Ticket messages can now carry file attachments, reusing the Media module end-to-end — no new upload, storage, or
+attachment system.** Supported on ticket creation (first message), customer replies, staff replies, and internal notes.
+
+- **Data model follows the Review precedent.** A message stores `ticket_messages.media_ids` (JSON array of pre-uploaded
+  Media ids, loose coupling, no FK) — the same shape as `reviews.gallery_media_ids`. Assets are still uploaded via the
+  existing `POST /api/v1/media`; the ticket endpoints only accept `media_ids`.
+- **Ownership is enforced (closes an IDOR).** Media now tracks its uploader: a new nullable
+  `media.uploaded_by_user_id` (loose Identity ref, recorded from `auth()->id()` on upload) plus
+  `MediaManagerInterface::ownedByUser(array $ids, int $userId): bool`. A caller may attach only media they uploaded — a
+  missing or foreign-owned id returns **422 on `media_ids`**. The check runs in the shared `ValidatesMediaOwnership`
+  request trait via the Media contract; Ticket never queries the media table.
+- **Requests extended:** `StoreTicketRequest`, `ReplyTicketRequest`, `StaffReplyRequest`, `InternalNoteRequest` accept an
+  optional `media_ids` array (each an existing, caller-owned media id).
+- **Responses** render attachments through the **existing `MediaResource`** (`{id, url, mime_type, file_size,
+  original_name}`) under `attachments` on each message. Detail views batch-resolve all attachments in one
+  `getMediaCollection()` call (no N+1); reply/note endpoints return the hydrated message.
+- **Internal-note attachments stay private** — the whole internal-note message is already filtered out of customer
+  responses, so its attachments are never exposed.
+- **No new permission.** Uploading continues to require the existing `media.upload`; the project's deliberate posture
+  (customers are not granted `media.upload` by role) is unchanged — grant it per-user/role to enable customer or support
+  uploads.
+- **Tests:** `tests/Feature/Ticket/TicketAttachmentTest.php` (7) — customer create/reply with attachment, support reply,
+  internal-note attachment hidden from customer, foreign-media 422, nonexistent-media 422, no-attachment regression. Suite
+  baseline **884 tests (881 green)**; the three pre-existing unrelated failures are unchanged.
+
+### Feature — Ticket: customer support tickets (conversation, references, assignment, notifications)
+
+**A new module `Modules/Ticket` provides a full support-ticket system — customer/support/admin surfaces,
+a message thread with staff-private internal notes, loose cross-module references, a new `support` role, and
+event-driven notifications — without coupling to Order/Payment/Shipment/Catalog.**
+
+- **Independent by construction.** Ticket depends only on the Identity contract and dispatches primitives-only
+  integration events; the Notification module listens. Four tables, all owned by the module: `tickets`,
+  `ticket_messages`, `ticket_references`, `ticket_categories`. `user_id`/`assigned_to` are loose Identity
+  references (no FK). The public handle is `ticket_number` = `bdk-XXXXXX` (new `PublicCodeEntity::Ticket = 'k'`,
+  built through `HasPublicCode`); the integer id stays the structural key.
+- **References are loose enum-typed pointers, never resolved for display, but ownership-gated at creation.**
+  `ticket_references` stores a `reference_type` (`order`/`payment`/`shipment`/`product`/`variant`), the quoted
+  public `reference_code`, and an optional `snapshot` — with **no FK** to any other module. A customer may only
+  reference their **own** entities: Ticket publishes `TicketReferenceValidatorInterface` and each owning module
+  registers a validator under the `ticket.reference_validators` container tag that answers "does this code belong
+  to the caller?" from **its own tables** (Order/Shipment via `user_id`; Payment via its `order_id` → the Order
+  contract, since payments carry no `user_id`). `StoreTicketRequest` rejects any owned-type reference the caller
+  does not own (422). `product`/`variant` are public and need no validator. Ticket still imports no other
+  module's model — the check is entirely contract- and container-tag-driven.
+- **Internal notes never leak to customers.** `ticket_messages.type` is one of
+  `customer_reply`/`admin_reply`/`internal_note`/`system_message`; the customer read path filters
+  `internal_note` out at the query layer, not in the resource.
+- **New `support` Spatie role** (created in `TicketPermissionsSeeder`, additive like `delivery` — an agent keeps
+  `customer`, grant/revoke never `syncRoles`). Permissions: customer (`ticket.create`, `ticket.view-own`,
+  `ticket.reply-own`, `ticket.close-own`), support (`ticket.view-assigned`, `ticket.reply-admin`,
+  `ticket.change-status`, `ticket.add-internal-note`), admin (`ticket.view-admin`, `ticket.assign`,
+  `ticket.manage-categories`, `ticket.manage-support-users`).
+- **Identity contract extended (additive):** `isSupportUser`, `getSupportUserIds`, `getSupportUserSummaries`,
+  `grantSupportRole`, `revokeSupportRole`. Ticket never touches the User model — a ticket can be assigned only
+  to a user `isSupportUser()` confirms (otherwise 422 on `user_id`), and support-user management goes through the
+  contract.
+- **Endpoints (all `auth:sanctum` + `throttle:api`).** Customer: `GET/POST /api/v1/tickets`,
+  `GET /api/v1/tickets/{ticketNumber}`, `POST .../messages`, `POST .../close`, `GET /api/v1/ticket-categories`.
+  Support (assignee-scoped — a non-assignee ticket is **404, never 403**): `GET /api/v1/support/tickets`,
+  `GET .../{n}`, `POST .../messages`, `PATCH .../status`, `POST .../notes`. Admin: `GET /api/v1/admin/tickets`
+  (filters), `GET .../{n}`, `POST .../messages`, `POST .../notes`, `PATCH .../status`, `POST .../assign`,
+  `GET/POST/PATCH/DELETE /api/v1/admin/ticket-categories*`, `GET /api/v1/admin/support-users`,
+  `POST`/`DELETE /api/v1/admin/users/{id}/roles/support`. Status accepts the constant form (`IN_PROGRESS`).
+- **Notifications through the existing pipeline.** New primitives-only events `TicketCreated`,
+  `TicketReplyCreated`, `TicketAssigned`, `TicketStatusChanged` (dispatched inside the write transaction) are
+  consumed by listeners in the Notification module (`ShouldHandleEventsAfterCommit`): ticket created → support
+  team, staff reply → customer, customer reply → assignee, assignment → assignee, status change → customer. New
+  `NotificationType`/`NotificationTemplate::TICKET_*` cases + `config/sms.php` `ticket_*` template ids; SMS is
+  best-effort (skipped when unconfigured). Ticket never calls `NotificationManagerInterface`.
+- **Tests:** `tests/Feature/Ticket/` — 30 tests across TicketTest, SupportTicketTest, AdminTicketTest,
+  TicketNotificationTest. Suite baseline **875 tests (872 green)**; the three pre-existing unrelated failures are
+  unchanged.
+
 ### Feature — Wishlist: product likes + "notify me when available" (event-driven restock alerts)
 
 **A new leaf module `Modules/Wishlist` owns two independent, per-customer features — product likes and

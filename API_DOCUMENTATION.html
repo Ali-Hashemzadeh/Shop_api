@@ -199,6 +199,30 @@
   <a href="#admin-review-moderate">Admin &#8212; Moderate</a>
   <a href="#admin-review-reply">Admin &#8212; Seller Reply</a>
   <a href="#reviews-frontend-guide">Frontend Guide</a>
+
+  <div class="section-label">Ticket / Support System</div>
+  <a href="#tickets-overview">Overview &amp; Concepts</a>
+  <a href="#ticket-categories">Ticket Categories</a>
+  <a href="#ticket-create">Create Ticket</a>
+  <a href="#ticket-list">My Tickets</a>
+  <a href="#ticket-detail">View Ticket</a>
+  <a href="#ticket-reply">Reply</a>
+  <a href="#ticket-close">Close</a>
+  <a href="#support-tickets">Support &#8212; Assigned Tickets</a>
+  <a href="#admin-tickets">Admin &#8212; All Tickets</a>
+  <a href="#admin-ticket-assign">Admin &#8212; Assign</a>
+  <a href="#admin-support-users">Admin &#8212; Support Users</a>
+
+  <div class="section-label">Product Review AI</div>
+  <a href="#product-review-ai">Overview &amp; Workflow</a>
+  <a href="#prai-search">Search External Products</a>
+  <a href="#prai-mappings">Product Mappings</a>
+  <a href="#prai-generate">Generate Drafts</a>
+  <a href="#prai-generations">List Generations</a>
+  <a href="#prai-generation-show">View Generation</a>
+  <a href="#prai-draft-edit">Edit Draft</a>
+  <a href="#prai-draft-approve">Approve / Reject</a>
+  <a href="#prai-prompts">Prompts (read-only)</a>
 </nav>
 
 <main>
@@ -1795,6 +1819,7 @@ GET /api/v1/catalog/products?available=true</pre>
       <span class="key">"discount"</span>:     <span class="null-val">null</span>,
       <span class="key">"attributes"</span>:    { <span class="key">"Ø±Ù†Ú¯"</span>: <span class="str">"Ù…Ø´Ú©ÛŒ ØªÛŒØªØ§Ù†ÛŒÙˆÙ…ÛŒ"</span>, <span class="key">"Ø­Ø§ÙØ¸Ù‡"</span>: <span class="str">"Û²ÛµÛ¶ Ú¯ÛŒÚ¯Ø§Ø¨Ø§ÛŒØª"</span> },
       <span class="key">"image_url"</span>:     <span class="null-val">null</span>,
+      <span class="key">"weight_grams"</span>: <span class="num">218</span>,   <span class="comment">// shipping weight in grams; null when unset. Accepted on variant create/update.</span>
       <span class="key">"stock"</span>:         <span class="num">42</span>
     },
     {
@@ -2618,6 +2643,7 @@ GET /api/v1/catalog/products?available=true</pre>
   <span class="key">"total_price"</span>:    <span class="num">267000000</span>,
  . qq{  <span class="key">"regular_total_price"</span>:    <span class="num">267000000</span>,
   <span class="key">"automatic_discount_total"</span>: <span class="num">0</span>,
+  <span class="key">"total_weight_grams"</span>: <span class="num">1654</span>,   <span class="comment">// sum of variant weight_grams Ã— quantity (0 when no item has a weight)</span>
 } .   <span class="key">"items"</span>: [
     {
       <span class="key">"id"</span>:               <span class="num">55</span>,
@@ -3745,6 +3771,8 @@ if (canCancelOrders && order.status === 'pending') renderCancelButton();</pre>
     <tr><td><code>in_person_pickup</code></td><td>pickup</td><td>â€”</td><td>â€”</td><td>no</td><td>shipment <code>picked_up</code> â†’ order <code>completed</code></td></tr>
   </table>
   <div class="note"><strong>Postal tracking ends at <code>handed_to_post</code>.</strong> Once the parcel is handed to the postal service the app has no reliable carrier lifecycle, so it never claims <code>in_transit</code> / <code>out_for_delivery</code> / <code>delivered</code> for postal shipments. Show the customer the tracking number and tell them to track via the postal service.</div>
+
+  <div class="note"><strong>Dynamic Post pricing.</strong> The static per-method price shown by <code>GET /shipment/methods</code> is a baseline. At checkout the two postal methods (<code>post_standard</code>, <code>post_express</code>) are re-priced by a database-driven Post tariff engine owned by the Shipment module, using the parcel weight (sum of each variant's <code>weight_grams</code> Ã— quantity) and the distance between the store's origin province and the destination province (<code>same_province</code> / <code>neighbor</code> / <code>non_neighbor</code>), plus configurable island / large-province / Tehran&ndash;Alborz / fragile surcharges. The resolved amount (integer <strong>tomans</strong>) is written to the order's <code>shipping_cost</code>/<code>total_amount</code> and to the shipment's <code>shipping_cost</code>. When the store has not yet configured an origin, tariffs, or product weights, postal checkout transparently falls back to the static price. Local delivery and pickup always use their static price. Set a variant's weight via <code>weight_grams</code> on the Catalog variant endpoints (it also appears on variant read responses).</div>
 
   <h3 id="shipment-methods">List Methods</h3>
   <div class="endpoint">
@@ -5608,6 +5636,295 @@ await fetch(`/api/v1/admin/reviews/${reviewCode}/reply`, {
     <tr><td><code>rejected</code></td><td>Admin verdict</td><td>no</td><td>no</td></tr>
   </table>
   <p>Deeper architecture (module boundaries, sync pipeline diagrams): see <code>REVIEW_ARCHITECTURE.html</code> in the repo root.</p>
+
+
+  <h2 id="tickets-overview">Ticket / Support System</h2>
+  <p>A full customer-support ticketing system with three audiences &#8212; <strong>customers</strong> (open, view, reply, close their own tickets), <strong>support agents</strong> (act on tickets assigned to them), and <strong>admins</strong> (see everything, assign, manage agents &amp; categories). All endpoints require <code>auth:sanctum</code> and use the <code>60/min &middot; per user</code> limiter.</p>
+  <ul>
+    <li><strong>Ticket number.</strong> Every ticket carries a server-owned public code <code>bdk-XXXXXX</code> (e.g. <code>bdk-Q8M2XC</code>) in <code>ticket_number</code>. It is the handle for every ticket route &#8212; never a numeric id, never client-supplied.</li>
+    <li><strong>Message types.</strong> The conversation is a list of messages typed <code>customer_reply</code>, <code>admin_reply</code>, <code>system_message</code> (status/assignment audit), or <code>internal_note</code>. <strong>Internal notes are staff-private and are never returned on any customer response.</strong></li>
+    <li><strong>References.</strong> A ticket may attach loose pointers to other entities (an order, product, payment&hellip;) as <code>{ type, code }</code>. Types: <code>order</code>, <code>payment</code>, <code>shipment</code>, <code>product</code>, <code>variant</code>. <strong>Ownership is enforced:</strong> you may only reference your own <code>order</code>/<code>payment</code>/<code>shipment</code> &#8212; quoting a code that does not exist or belongs to someone else returns <strong>422</strong> on <code>references.{i}.code</code>. <code>product</code>/<code>variant</code> are public and accepted as-is. Codes are stored, not resolved into live entity data.</li>
+    <li><strong>Attachments.</strong> Any message (create, reply, or internal note) may include <code>media_ids</code> &mdash; an array of ids from files you <strong>pre-uploaded</strong> via <code>POST /api/v1/media</code> (which needs the <code>media.upload</code> permission). <strong>You may only attach media you uploaded yourself</strong>; a missing or foreign-owned id returns <strong>422</strong> on <code>media_ids</code>. Each message in a response carries an <code>attachments</code> array of media objects (<code>{ id, url, mime_type, file_size, original_name }</code>). Internal-note attachments are never visible to the customer.</li>
+    <li><strong>Statuses:</strong> <code>open</code>, <code>in_progress</code>, <code>waiting_for_customer</code>, <code>answered</code>, <code>closed</code>, <code>cancelled</code> (last two terminal). <strong>Priorities:</strong> <code>low</code>, <code>normal</code>, <code>high</code>, <code>urgent</code>.</li>
+    <li><strong>Support role &amp; permissions.</strong> Agents hold the <code>support</code> role. Permissions: customer &#8212; <code>ticket.create</code>, <code>ticket.view-own</code>, <code>ticket.reply-own</code>, <code>ticket.close-own</code>; support &#8212; <code>ticket.view-assigned</code>, <code>ticket.reply-admin</code>, <code>ticket.change-status</code>, <code>ticket.add-internal-note</code>; admin &#8212; <code>ticket.view-admin</code>, <code>ticket.assign</code>, <code>ticket.manage-categories</code>, <code>ticket.manage-support-users</code>.</li>
+    <li><strong>Access model.</strong> Customers see only their own tickets and support agents only their assigned tickets &#8212; a ticket outside your scope resolves to <strong>404</strong> (never 403). Admins see all.</li>
+  </ul>
+
+  <h3 id="ticket-categories">Ticket Categories</h3>
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/api/v1/ticket-categories</span>
+      <span class="badge">Auth</span>
+    </div>
+    <div class="endpoint-body">
+      <p>The active categories a customer may file a ticket under &#8212; the picker for the create form.</p>
+      <div class="block-label">Response &#8212; 200 OK</div>
+      <pre>{
+  <span class="key">"data"</span>: [
+    { <span class="key">"id"</span>: 3, <span class="key">"name"</span>: <span class="str">"&#1662;&#1585;&#1583;&#1575;&#1582;&#1578;"</span>, <span class="key">"code"</span>: <span class="str">"payment"</span>, <span class="key">"is_active"</span>: <span class="bool">true</span>, <span class="key">"sort_order"</span>: 3 }
+  ]
+}</pre>
+      <div class="note">Admins manage the full set at <code>GET/POST /api/v1/admin/ticket-categories</code>, <code>PATCH/DELETE /api/v1/admin/ticket-categories/{id}</code> (<code>ticket.manage-categories</code>). The <code>code</code> is immutable once created &#8212; tickets store it, not the id.</div>
+    </div>
+  </div>
+
+  <h3 id="ticket-create">Create Ticket</h3>
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/api/v1/tickets</span>
+      <span class="badge">Auth</span>
+      <span class="badge">ticket.create</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Opens a ticket, its first message, and any references in one transaction. Notifies the support team.</p>
+      <div class="block-label">Request Body</div>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr><td>subject</td><td class="req">required</td><td>string, max 255</td></tr>
+        <tr><td>category</td><td>optional</td><td>an active category <code>code</code></td></tr>
+        <tr><td>priority</td><td class="req">required</td><td><code>low</code> | <code>normal</code> | <code>high</code> | <code>urgent</code></td></tr>
+        <tr><td>message</td><td class="req">required</td><td>string &#8212; the first message body</td></tr>
+        <tr><td>references</td><td>optional</td><td>array of <code>{ type, code }</code></td></tr>
+        <tr><td>media_ids</td><td>optional</td><td>array of pre-uploaded, caller-owned media ids (attachments)</td></tr>
+      </table>
+      <pre>{
+  <span class="key">"subject"</span>: <span class="str">"Payment problem"</span>,
+  <span class="key">"category"</span>: <span class="str">"payment"</span>,
+  <span class="key">"priority"</span>: <span class="str">"normal"</span>,
+  <span class="key">"message"</span>: <span class="str">"Screenshot attached"</span>,
+  <span class="key">"references"</span>: [ { <span class="key">"type"</span>: <span class="str">"order"</span>, <span class="key">"code"</span>: <span class="str">"bdo-Q8M2XC"</span> } ],
+  <span class="key">"media_ids"</span>: [ 10, 11 ]
+}</pre>
+      <div class="block-label">Response &#8212; 201 Created</div>
+      <pre>{
+  <span class="key">"data"</span>: {
+    <span class="key">"ticket_number"</span>: <span class="str">"bdk-K92XMQ"</span>,
+    <span class="key">"user_id"</span>: 42, <span class="key">"assigned_to"</span>: <span class="bool">null</span>,
+    <span class="key">"subject"</span>: <span class="str">"Payment problem"</span>, <span class="key">"category"</span>: <span class="str">"payment"</span>,
+    <span class="key">"priority"</span>: <span class="str">"normal"</span>, <span class="key">"status"</span>: <span class="str">"open"</span>,
+    <span class="key">"messages"</span>: [ { <span class="key">"id"</span>: 1, <span class="key">"user_id"</span>: 42, <span class="key">"message"</span>: <span class="str">"Screenshot attached"</span>, <span class="key">"type"</span>: <span class="str">"customer_reply"</span>, <span class="key">"attachments"</span>: [ { <span class="key">"id"</span>: 10, <span class="key">"url"</span>: <span class="str">"https://&hellip;/storage/uploads/x.jpg"</span>, <span class="key">"mime_type"</span>: <span class="str">"image/jpeg"</span> } ], <span class="key">"created_at"</span>: <span class="str">"..."</span> } ],
+    <span class="key">"references"</span>: [ { <span class="key">"id"</span>: 1, <span class="key">"type"</span>: <span class="str">"order"</span>, <span class="key">"reference_code"</span>: <span class="str">"bdo-Q8M2XC"</span>, <span class="key">"reference_id"</span>: <span class="bool">null</span>, <span class="key">"snapshot"</span>: <span class="bool">null</span> } ]
+  }
+}</pre>
+    </div>
+  </div>
+
+  <h3 id="ticket-list">My Tickets</h3>
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/api/v1/tickets</span>
+      <span class="badge">Auth</span>
+      <span class="badge">ticket.view-own</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Paginated list of the caller's own tickets, most-recently-active first. Optional <code>?status=</code> filter, <code>per_page</code> (1&#8211;100). Returns the standard <code>{ data, links, meta }</code> envelope; list rows omit <code>messages</code>/<code>references</code> (null).</p>
+    </div>
+  </div>
+
+  <h3 id="ticket-detail">View Ticket</h3>
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/api/v1/tickets/{ticket_number}</span>
+      <span class="badge">Auth</span>
+      <span class="badge">ticket.view-own</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Full ticket with its conversation (<strong>internal notes excluded</strong>) and references. A ticket the caller does not own &#8212; or an unknown number &#8212; returns <strong>404</strong>.</p>
+    </div>
+  </div>
+
+  <h3 id="ticket-reply">Reply</h3>
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/api/v1/tickets/{ticket_number}/messages</span>
+      <span class="badge">Auth</span>
+      <span class="badge">ticket.reply-own</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Adds a customer message. Body: <code>{ "message": "...", "media_ids": [3] }</code> (<code>media_ids</code> optional, caller-owned). Replying on a ticket that was <code>answered</code>/<code>waiting_for_customer</code> reopens it; a <code>closed</code>/<code>cancelled</code> ticket returns <strong>422</strong>. Returns the created message (with its <code>attachments</code>) under <code>data</code> (201).</p>
+    </div>
+  </div>
+
+  <h3 id="ticket-close">Close</h3>
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/api/v1/tickets/{ticket_number}/close</span>
+      <span class="badge">Auth</span>
+      <span class="badge">ticket.close-own</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Sets the ticket to <code>closed</code> and stamps <code>closed_at</code>. Idempotent. Returns the updated ticket.</p>
+    </div>
+  </div>
+
+  <h3 id="support-tickets">Support &#8212; Assigned Tickets</h3>
+  <p>Agents act only on tickets assigned to them. Any ticket outside that scope (or unknown) is <strong>404</strong> &#8212; never 403.</p>
+  <div class="endpoint">
+    <div class="endpoint-header"><span class="method get">GET</span><span class="endpoint-path">/api/v1/support/tickets</span><span class="badge">ticket.view-assigned</span></div>
+    <div class="endpoint-body"><p>Paginated queue of the agent's assigned tickets. Filters: <code>status</code>, <code>priority</code>.</p></div>
+  </div>
+  <div class="endpoint">
+    <div class="endpoint-header"><span class="method get">GET</span><span class="endpoint-path">/api/v1/support/tickets/{ticket_number}</span><span class="badge">ticket.view-assigned</span></div>
+    <div class="endpoint-body"><p>Full conversation including <code>internal_note</code> messages.</p></div>
+  </div>
+  <div class="endpoint">
+    <div class="endpoint-header"><span class="method post">POST</span><span class="endpoint-path">/api/v1/support/tickets/{ticket_number}/messages</span><span class="badge">ticket.reply-admin</span></div>
+    <div class="endpoint-body"><p>Reply to the customer (<code>admin_reply</code>). Body <code>{ "message": "...", "media_ids": [5] }</code> (<code>media_ids</code> optional, uploaded by the acting staff member). Flips the ticket to <code>answered</code> and notifies the customer.</p></div>
+  </div>
+  <div class="endpoint">
+    <div class="endpoint-header"><span class="method patch">PATCH</span><span class="endpoint-path">/api/v1/support/tickets/{ticket_number}/status</span><span class="badge">ticket.change-status</span></div>
+    <div class="endpoint-body"><p>Body <code>{ "status": "in_progress" }</code>. Accepts the constant form too (<code>IN_PROGRESS</code> &rarr; <code>in_progress</code>). Records a system message and notifies the customer.</p></div>
+  </div>
+  <div class="endpoint">
+    <div class="endpoint-header"><span class="method post">POST</span><span class="endpoint-path">/api/v1/support/tickets/{ticket_number}/notes</span><span class="badge">ticket.add-internal-note</span></div>
+    <div class="endpoint-body"><p>Adds a staff-private <code>internal_note</code>. Body <code>{ "message": "...", "media_ids": [6] }</code> (<code>media_ids</code> optional, uploaded by the acting staff member). <strong>Never visible to the customer &mdash; its attachments included &mdash; and raises no customer notification.</strong></p></div>
+  </div>
+
+  <h3 id="admin-tickets">Admin &#8212; All Tickets</h3>
+  <p>The same reply / status / note endpoints as support, but under <code>/api/v1/admin/tickets/{ticket_number}</code> with no assignee scoping (<code>ticket.view-admin</code> / <code>ticket.reply-admin</code> / <code>ticket.change-status</code> / <code>ticket.add-internal-note</code>).</p>
+  <div class="endpoint">
+    <div class="endpoint-header"><span class="method get">GET</span><span class="endpoint-path">/api/v1/admin/tickets</span><span class="badge">ticket.view-admin</span></div>
+    <div class="endpoint-body"><p>Every ticket. Filters: <code>status</code>, <code>priority</code>, <code>category</code>, <code>assigned_to</code>, <code>per_page</code>.</p></div>
+  </div>
+
+  <h3 id="admin-ticket-assign">Admin &#8212; Assign</h3>
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/api/v1/admin/tickets/{ticket_number}/assign</span>
+      <span class="badge">ticket.assign</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Assigns (or reassigns) the ticket to a support agent. Body <code>{ "user_id": 25 }</code>. The target <strong>must hold the <code>support</code> role</strong> &#8212; any other id returns <strong>422</strong> on <code>user_id</code>. Assigning an open ticket moves it to <code>in_progress</code> and notifies the agent. Idempotent for the current assignee.</p>
+    </div>
+  </div>
+
+  <h3 id="admin-support-users">Admin &#8212; Support Users</h3>
+  <div class="endpoint">
+    <div class="endpoint-header"><span class="method get">GET</span><span class="endpoint-path">/api/v1/admin/support-users</span><span class="badge">ticket.manage-support-users</span></div>
+    <div class="endpoint-body">
+      <p>The agents available for the "assign to" picker.</p>
+      <pre>{ <span class="key">"data"</span>: [ { <span class="key">"id"</span>: 25, <span class="key">"name"</span>: <span class="str">"Sara"</span>, <span class="key">"last_name"</span>: <span class="bool">null</span>, <span class="key">"phone"</span>: <span class="str">"0912..."</span> } ] }</pre>
+    </div>
+  </div>
+  <div class="endpoint">
+    <div class="endpoint-header"><span class="method post">POST</span><span class="endpoint-path">/api/v1/admin/users/{user_id}/roles/support</span><span class="badge">ticket.manage-support-users</span></div>
+    <div class="endpoint-body"><p>Grants the <code>support</code> role (additive &#8212; keeps existing roles). Idempotent.</p></div>
+  </div>
+  <div class="endpoint">
+    <div class="endpoint-header"><span class="method delete">DELETE</span><span class="endpoint-path">/api/v1/admin/users/{user_id}/roles/support</span><span class="badge">ticket.manage-support-users</span></div>
+    <div class="endpoint-body"><p>Removes the <code>support</code> role, leaving other roles intact. Idempotent.</p></div>
+  </div>
+  <div class="note"><strong>Notifications.</strong> Ticket flows fan out through the existing Notification/SMS pipeline: ticket created &rarr; support team, staff reply &rarr; customer, customer reply &rarr; assignee, assignment &rarr; assignee, status change &rarr; customer. SMS is best-effort (skipped when the provider has no matching template id).</div>
+
+  <h2 id="product-review-ai">Product Review AI</h2>
+  <p>An <strong>admin-only</strong> tool that drafts Persian, customer-style product reviews from real marketplace
+  reviews, then routes them through an admin approval workflow. Approved drafts are published as <strong>ordinary
+  product reviews</strong> (see the Reviews section) &#8212; there is no separate "AI reviews" section on the storefront.
+  The backend keeps full provenance: which generation, which AI model, which prompt version, and which admin approved.</p>
+  <div class="note"><strong>Permission.</strong> Every endpoint requires <code>product-review-ai.manage</code> (admin only &#8212; never customer, never support). Unauthenticated &rarr; <strong>401</strong>; authenticated without the permission &rarr; <strong>403</strong>.</div>
+  <div class="note"><strong>Real integrations, fail-loud.</strong> External collection uses the live Digikala API; drafting uses the AvalAI provider (OpenAI-compatible, default model <code>deepseek-v4.1-flash</code>). If a required key/URL is missing, the run does not silently fall back or fabricate data &#8212; it is marked <code>failed</code> with a reason and every failure is written to the generation log.</div>
+  <div class="note"><strong>Async.</strong> Generation runs in a queued job (<code>GenerateProductAIReviewsJob</code>) &#8212; scraping and AI calls never happen inside the HTTP request. The generate/regenerate endpoints return <strong>202</strong> with the run; poll the generation to see <code>pending &rarr; processing &rarr; completed|failed</code>.</div>
+
+  <p><strong>Workflow:</strong> search a source &rarr; save a mapping (admin confirms which external product) &rarr; generate drafts &rarr; review/edit drafts &rarr; approve (publishes a normal review) or reject.</p>
+
+  <h3 id="prai-search">Admin &#8212; Search External Products</h3>
+  <div class="endpoint">
+    <div class="endpoint-header"><span class="method get">GET</span><span class="endpoint-path">/api/v1/admin/products/{product}/ai-reviews/search</span><span class="badge">product-review-ai.manage</span></div>
+    <div class="endpoint-body">
+      <p><code>{product}</code> is the product public code (<code>bdp-XXXXXX</code> or legacy hex). Query params: <code>source_code</code> (e.g. <code>digikala</code>), <code>q</code>. Selection is never automatic &#8212; the admin picks the correct match.</p>
+      <pre>{ <span class="key">"data"</span>: [ { <span class="key">"external_id"</span>: <span class="str">"123"</span>, <span class="key">"title"</span>: <span class="str">"گوشی سامسونگ S25"</span>, <span class="key">"url"</span>: <span class="str">"https://www.digikala.com/product/dkp-123/"</span> } ] }</pre>
+    </div>
+  </div>
+
+  <h3 id="prai-mappings">Admin &#8212; Product Mappings</h3>
+  <div class="endpoint">
+    <div class="endpoint-header"><span class="method get">GET</span><span class="endpoint-path">/api/v1/admin/products/{product}/ai-reviews/mappings</span><span class="badge">product-review-ai.manage</span></div>
+    <div class="endpoint-body"><p>Lists the external-product mappings saved for this product.</p></div>
+  </div>
+  <div class="endpoint">
+    <div class="endpoint-header"><span class="method post">POST</span><span class="endpoint-path">/api/v1/admin/products/{product}/ai-reviews/mappings</span><span class="badge">product-review-ai.manage</span></div>
+    <div class="endpoint-body">
+      <p>Saves (upserts) the confirmed mapping. Body: <code>source_code</code> (required), <code>external_id</code> (required), <code>external_url</code> (optional), <code>metadata</code> (optional object). Returns <strong>201</strong>.</p>
+      <pre>{ <span class="key">"id"</span>: 4, <span class="key">"product_id"</span>: 10, <span class="key">"source_code"</span>: <span class="str">"digikala"</span>, <span class="key">"external_id"</span>: <span class="str">"123"</span>, <span class="key">"external_url"</span>: <span class="str">"https://www.digikala.com/product/dkp-123/"</span> }</pre>
+    </div>
+  </div>
+
+  <h3 id="prai-generate">Admin &#8212; Generate Drafts</h3>
+  <div class="endpoint">
+    <div class="endpoint-header"><span class="method post">POST</span><span class="endpoint-path">/api/v1/admin/products/{product}/ai-reviews/generate</span><span class="badge">product-review-ai.manage</span></div>
+    <div class="endpoint-body">
+      <p>Body: <code>count</code> (optional, default 3), <code>source_code</code> (optional, default <code>digikala</code>), <code>confirm</code> (optional boolean). Requires a saved mapping (else <strong>422</strong>).</p>
+      <p>If the product already has approved AI reviews and <code>confirm</code> is not set, no run starts and the response is a warning:</p>
+      <pre>{ <span class="key">"warning"</span>: <span class="bool">true</span>, <span class="key">"existing_ai_reviews"</span>: 5 }</pre>
+      <p>Otherwise a run is queued (<strong>202</strong>):</p>
+      <pre>{ <span class="key">"id"</span>: 7, <span class="key">"product_id"</span>: 10, <span class="key">"model"</span>: <span class="str">"deepseek-v4.1-flash"</span>, <span class="key">"count_requested"</span>: 3, <span class="key">"status"</span>: <span class="str">"pending"</span>, <span class="key">"prompt_name"</span>: <span class="str">"review_generation"</span>, <span class="key">"prompt_version"</span>: 1 }</pre>
+    </div>
+  </div>
+  <div class="endpoint">
+    <div class="endpoint-header"><span class="method post">POST</span><span class="endpoint-path">/api/v1/admin/products/{product}/ai-reviews/regenerate</span><span class="badge">product-review-ai.manage</span></div>
+    <div class="endpoint-body"><p>Starts a fresh run unconditionally. Old generations are never deleted &#8212; history is kept. Returns <strong>202</strong> with the new run.</p></div>
+  </div>
+
+  <h3 id="prai-generations">Admin &#8212; List Generations</h3>
+  <div class="endpoint">
+    <div class="endpoint-header"><span class="method get">GET</span><span class="endpoint-path">/api/v1/admin/products/{product}/ai-reviews/generations</span><span class="badge">product-review-ai.manage</span></div>
+    <div class="endpoint-body"><p>Paginated (<code>{data, links, meta}</code>) run history, newest first. A <code>failed</code> run carries a <code>failure_reason</code>.</p></div>
+  </div>
+
+  <h3 id="prai-generation-show">Admin &#8212; View a Generation + its Drafts</h3>
+  <div class="endpoint">
+    <div class="endpoint-header"><span class="method get">GET</span><span class="endpoint-path">/api/v1/admin/ai-reviews/{generation}</span><span class="badge">product-review-ai.manage</span></div>
+    <div class="endpoint-body">
+      <p><code>{generation}</code> is a numeric generation id.</p>
+      <pre>{ <span class="key">"generation"</span>: { <span class="key">"id"</span>: 7, <span class="key">"status"</span>: <span class="str">"completed"</span>, <span class="key">"model"</span>: <span class="str">"deepseek-v4.1-flash"</span>, <span class="key">"analysis"</span>: { <span class="key">"positive_points"</span>: [], <span class="key">"negative_points"</span>: [] } },
+  <span class="key">"reviews"</span>: [ { <span class="key">"id"</span>: 31, <span class="key">"name"</span>: <span class="str">"علی رضایی"</span>, <span class="key">"rating"</span>: 5, <span class="key">"title"</span>: <span class="str">"..."</span>, <span class="key">"body"</span>: <span class="str">"..."</span>, <span class="key">"status"</span>: <span class="str">"pending"</span>, <span class="key">"published_review_id"</span>: <span class="bool">null</span> } ] }</pre>
+    </div>
+  </div>
+
+  <h3 id="prai-draft-edit">Admin &#8212; Edit a Draft</h3>
+  <div class="endpoint">
+    <div class="endpoint-header"><span class="method patch">PATCH</span><span class="endpoint-path">/api/v1/admin/ai-reviews/{draft}</span><span class="badge">product-review-ai.manage</span></div>
+    <div class="endpoint-body">
+      <p><code>{draft}</code> is a numeric draft id. Editable: <code>name</code>, <code>rating</code> (1&#8211;5), <code>title</code>, <code>body</code>. Each edit snapshots the prior content into version history and moves the draft to <code>edited</code>. An approved (published) draft cannot be edited &rarr; <strong>422</strong>.</p>
+    </div>
+  </div>
+
+  <h3 id="prai-draft-approve">Admin &#8212; Approve / Reject a Draft</h3>
+  <div class="endpoint">
+    <div class="endpoint-header"><span class="method post">POST</span><span class="endpoint-path">/api/v1/admin/ai-reviews/{draft}/approve</span><span class="badge">product-review-ai.manage</span></div>
+    <div class="endpoint-body">
+      <p>Publishes the draft as a normal, already-approved product review (no user account; the AI persona name is stored on the review). The draft records <code>published_review_id</code>. Only <code>pending</code>/<code>edited</code> drafts can be approved.</p>
+    </div>
+  </div>
+  <div class="endpoint">
+    <div class="endpoint-header"><span class="method post">POST</span><span class="endpoint-path">/api/v1/admin/ai-reviews/{draft}/reject</span><span class="badge">product-review-ai.manage</span></div>
+    <div class="endpoint-body"><p>Marks the draft <code>rejected</code> (kept for audit, never published). An already-approved draft cannot be rejected here &rarr; <strong>422</strong>.</p></div>
+  </div>
+
+  <h3 id="prai-prompts">Admin &#8212; Prompts (read-only)</h3>
+  <p>Prompts are authored in the database / seeders and auto-resolved server-side &#8212; <strong>you never send a prompt name to any endpoint</strong>. These read endpoints let you browse the active prompt text and versions. Editing a prompt is a new version at the data layer, so history is never rewritten.</p>
+  <div class="endpoint">
+    <div class="endpoint-header"><span class="method get">GET</span><span class="endpoint-path">/api/v1/admin/ai-prompts</span><span class="badge">product-review-ai.manage</span></div>
+    <div class="endpoint-body">
+      <p>Paginated list, newest version first per name. Filters: <code>name</code> (e.g. <code>review_generation</code>, <code>review_analysis</code>), <code>active</code> (bool), <code>per_page</code>.</p>
+      <pre>{ <span class="key">"data"</span>: [ { <span class="key">"id"</span>: 2, <span class="key">"name"</span>: <span class="str">"review_generation"</span>, <span class="key">"model"</span>: <span class="str">"deepseek-v4.1-flash"</span>, <span class="key">"version"</span>: 1, <span class="key">"system_prompt"</span>: <span class="str">"..."</span>, <span class="key">"user_prompt"</span>: <span class="str">"..."</span>, <span class="key">"active"</span>: <span class="bool">true</span> } ], <span class="key">"meta"</span>: { }, <span class="key">"links"</span>: { } }</pre>
+    </div>
+  </div>
+  <div class="endpoint">
+    <div class="endpoint-header"><span class="method get">GET</span><span class="endpoint-path">/api/v1/admin/ai-prompts/{prompt}</span><span class="badge">product-review-ai.manage</span></div>
+    <div class="endpoint-body"><p><code>{prompt}</code> is a numeric id. Returns the full prompt (system + user templates).</p></div>
+  </div>
+
+  <div class="note"><strong>Logging &amp; debugging visibility.</strong> Every external and AI call logs its target <strong>URL</strong> and the <strong>response</strong> (success and failure) to the application log (<code>ProductReviewAI Digikala request</code> / <code>ProductReviewAI AvalAI request|response</code>). Inside a run, the same is captured in <code>ai_review_generation_logs</code> (per-stage request/response, including the raw AI output), visible via the generation detail endpoint.</div>
+
+  <div class="note"><strong>Model &amp; prompt history.</strong> Every generation stores the AI <code>model</code> and the prompt <code>name</code>/<code>version</code> it used. Prompts are versioned (<code>ai_prompts</code>), so editing a prompt is a new version and never rewrites past runs. Every external/AI request+response and every approval/rejection is recorded in <code>ai_review_generation_logs</code> for full debugging visibility.</div>
 
 
 </main>

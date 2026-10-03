@@ -73,6 +73,7 @@ replaces no primary key, foreign key, relation, cron input, internal query, or a
 | Address | `bda-XXXXXX` | `addresses.public_code` | new |
 | Category | `bdc-XXXXXX` | `categories.public_code` | new |
 | Review | `bdr-XXXXXX` | `reviews.uuid` | new; column name historical like Product |
+| Ticket | `bdk-XXXXXX` | `tickets.ticket_number` | new; `k` because `t` is Payment |
 
 * **Immutable and server-owned.** Never accepted from client input, never a writable field, never regenerated
   on update, never reused after deletion. The four new columns are **nullable at the DB level** (matching the
@@ -123,6 +124,7 @@ replaces no primary key, foreign key, relation, cron input, internal query, or a
       * `isDeliveryUser(int $userId): bool` — the smallest primitive Shipment needs before assigning a delivery. Shipment asks this question instead of reading roles or importing the `User` model. Paired with `getUserSummary()->phone` for the "must be reachable" half of the rule.
       * `getDeliveryUserIds(): array` — sibling of `getAdminUserIds()`; ids only. Used by `ShipmentSampleDataSeeder` to find a demo courier without touching Identity's tables.
       * `getOwnedAddressSnapshot(int $userId, int $addressId): ?AddressSnapshotDTO` — a frozen copy of one address, **only** when it belongs to that user; `null` covers both "missing" and "someone else's" so an id cannot be probed for existence. Province/city names are resolved inside Identity, and the DTO carries `latitude`/`longitude`/`map_address` alongside the postal fields. `AddressSnapshotDTO::toArray()` owns the frozen snapshot shape. This replaced Shipment's raw `DB::table('addresses')` lookup — the shipment address snapshot now crosses the wall as a DTO.
+      * `getProvinceDistanceType(?int $originProvinceId, ?int $destinationProvinceId): string` — classifies shipping distance as `same_province`/`neighbor`/`non_neighbor` using the new `province_neighbors` table (migration `2026_09_25_000002`; `ProvinceNeighbor` model; adjacency matched in either direction; null id → `non_neighbor`). Identity owns provinces ("shipping location matrices"), so the Shipment Post calculator asks this instead of joining across the wall. Adjacency is seeded idempotently **by province name** via `ProvinceNeighborSeeder` (in `IdentityModuleSeeder`, after `LocationSeeder`; both directions, `firstOrCreate`, skips absent provinces).
       * Concrete: `EloquentIdentityManager` (bound in `IdentityServiceProvider::register()`). Internally calls `User::find()->hasRole('admin')` / `User::findOrFail()->…` — all Spatie internals stay inside Identity.
   * **Route structure:** user-facing address routes registered under `prefix('addresses')` (plural). Customer `GET /addresses/{publicCode}` uses the exact normalized `bda-XXXXXX` code; PATCH/DELETE/default-shipping, checkout `address_id`, and admin address routes remain numeric. Admin user management uses `prefix('admin/users')`. Profile self-service uses `prefix('profile')`.
   * **Known fix applied:** `UpdateAddressRequest` had `city_id` as `required` instead of `sometimes` — corrected so PATCH requests can update partial fields without supplying city.
@@ -134,7 +136,8 @@ replaces no primary key, foreign key, relation, cron input, internal query, or a
 ### 📁 2. Media Module (Status: Active & Complete)
 * **Responsibility:** Lightweight, high-performance physical file uploads and tracking ledger.
   * **Key Interfaces & Artifacts:**
-      * `Modules\Media\Domain\Contracts\MediaManagerInterface`: The only entry point used by other modules to handle files. Methods: `upload(UploadedFile, string $folder): MediaDTO`, `getMedia(int): ?MediaDTO`, `getMediaCollection(array): Collection`, `delete(int): bool`.
+      * `Modules\Media\Domain\Contracts\MediaManagerInterface`: The only entry point used by other modules to handle files. Methods: `upload(UploadedFile, string $folder): MediaDTO`, `getMedia(int): ?MediaDTO`, `getMediaCollection(array): Collection`, `ownedByUser(array $ids, int $userId): bool`, `delete(int): bool`.
+      * **Ownership tracking:** `media.uploaded_by_user_id` (nullable loose Identity ref, no FK) is recorded from `auth()->id()` on upload (null for seeder/CLI). `ownedByUser()` returns true only when **every** id exists and belongs to the user — the boundary a consumer (e.g. Ticket attachments) uses to reject attaching another user's media without ever touching the media table. A missing or foreign-owned id fails the check.
       * `Modules\Media\Domain\DTOs\MediaDTO`: The immutable object returned containing the absolute accessible public URL via `Storage::url()`.
       * `Modules\Media\Infrastructure\Persistence\Repositories\LocalMediaManager`: Concrete implementation executing local disk file saves and tracking log generation.
   * **HTTP Endpoints (added):**
@@ -153,7 +156,7 @@ replaces no primary key, foreign key, relation, cron input, internal query, or a
       * `categories`: Supports nesting (`parent_id`) and holds a loose asset reference (`media_id`).
       * `products`: High-level presentation shell with operational tracking (`status: draft, published`) and a main thumbnail (`primary_media_id`). Carries a unique, server-generated `uuid` that is the **public identifier** in the API (routes + response `id`); the integer primary key stays internal and remains the FK target for variants/images.
       * `product_images`: Pivot table supporting **multiple gallery images per product** with a custom display sequence mapping (`sort_order`, `media_id`).
-      * `product_variants`: Houses concrete purchasable inventory details tracking unique `sku`, the regular-price currency integer `base_price` (**the only price Catalog stores** — `compare_at_price` was dropped when the Promotion module took over promotional pricing), attributes JSON arrays, a **per-variant image** (`media_id`), and a **`is_default` boolean** marking exactly one variant per product as the storefront fallback. The single-true invariant is enforced at the application layer.
+      * `product_variants`: Houses concrete purchasable inventory details tracking unique `sku`, the regular-price currency integer `base_price` (**the only price Catalog stores** — `compare_at_price` was dropped when the Promotion module took over promotional pricing), a nullable **`weight_grams`** (whole grams — shipping weight, added by migration `2026_09_25_000001`; read by the Shipment Post tariff engine and summed into the cart's `total_weight_grams`; `null` = no weight captured), attributes JSON arrays, a **per-variant image** (`media_id`), and a **`is_default` boolean** marking exactly one variant per product as the storefront fallback. The single-true invariant is enforced at the application layer.
   * **Domain Models (Step 3):**
       * `Category`, `Product`, `ProductImage`, `ProductVariant` models declared with clean internal relationships. `ProductVariant` casts `is_default` → boolean, `base_price` → integer (Cents Rule), `attributes` → array. Read responses additionally carry the live `effective_price` + `discount` computed by the Promotion module — never stored on the variant.
   * **DTOs & Contracts (Step 4):**
@@ -324,7 +327,15 @@ replaces no primary key, foreign key, relation, cron input, internal query, or a
   * **Endpoints:** customer `GET /shipment/methods`, `GET /shipment/delivery-slots`, `GET /shipments/{publicCode}`, `GET /orders/{order}/shipment`; delivery worker `GET /delivery/shipments`, `GET /delivery/shipments/{publicCode}`, `POST /delivery/shipments/{publicCode}/mark-delivered`; admin `GET /admin/shipments[/{publicCode}]` + business actions (`start-preparing`, `mark-ready-for-post`, `hand-to-post`, `mark-ready-for-dispatch`, `assign-delivery`, `mark-out-for-delivery`, `mark-delivered`, `resend-delivery-code`, `mark-delivery-failed`, `reschedule`, `mark-ready-for-pickup`, `confirm-pickup`) + slot mgmt (`GET/PATCH /admin/shipment/delivery-slots[/{slot}]`, `.../close`, `.../open`, `POST .../generate`). All under `throttle:api`. No generic "set status" endpoint. The literal `generate` route is declared **before** the `{slot}` routes so it is never read as a slot id.
   * **Permissions:** `shipment.view-own`, `shipment.view-admin`, `shipment.start-preparing`, `shipment.post.{mark-ready,hand-over}`, `shipment.delivery.{mark-ready,dispatch,complete,fail,reschedule}`, `shipment.pickup.{mark-ready,complete}`, `shipment.slot.{view-admin,manage,close,reserve-capacity}`, plus `shipment.delivery.{assign,view-assigned,complete-assigned,resend-code}` (admin gets all; customer gets `view-own`). **The `delivery` role gets exactly two: `shipment.delivery.view-assigned` and `shipment.delivery.complete-assigned`** — never `view-admin`, `dispatch`, `mark-ready`, `complete`, `fail`, `reschedule`, `start-preparing`, `resend-code`, or any slot permission. A courier carries parcels; they do not run fulfillment. `shipment.view-own` is not granted to `delivery` either — it arrives with the `customer` role every courier also holds. Permission-based, 403-before-validation on admin action Form Requests.
   * **Seeders honour the new invariants rather than working around them.** `ShipmentSampleDataSeeder` assigns the demo courier (found via `IdentityManagerInterface::getDeliveryUserIds()`) through the real `AssignShipmentDeliveryAction` before any dispatch, and closes demo deliveries through the real `MarkShipmentDeliveredAction` with the real handoff code — captured from `ShipmentOutForDeliveryEvent` exactly as a customer reads it off their SMS. The capture listener is registered once per run and never removed (removing it would take the real notification listeners with it). `DefaultUsersSeeder` creates a demo courier with `customer + delivery` and phone `09120009001`.
-  * **Test suite:** `tests/Feature/Shipment/` (ShipmentMethods, ShipmentSlot, ShipmentPaymentIntegration, ShipmentWorkflow, ShipmentAuthorization, AdminDeliverySlot, AdminShipmentIndex, DeliverySlotSorting, DeliveryWorkingPeriodApi, GenerateDeliverySlotsApi, LocalDeliveryServiceArea, ShipmentNotification, **DeliveryAssignment** (11), **DeliveryWorkerApi** (7), **DeliveryVerificationCode** (16)) + `tests/Unit/Shipment/ShipmentWorkflowTest`. `ShipmentTestCase` gained `createDeliveryUser()`, `assignDriver()`, `captureDeliveryCode()` and `dispatchLocalDelivery()` — tests learn the code the way the customer does, by catching it in flight; a test that dug it out of the database would be testing a leak.
+  * **Test suite:** `tests/Feature/Shipment/` (ShipmentMethods, ShipmentSlot, ShipmentPaymentIntegration, ShipmentWorkflow, ShipmentAuthorization, AdminDeliverySlot, AdminShipmentIndex, DeliverySlotSorting, DeliveryWorkingPeriodApi, GenerateDeliverySlotsApi, LocalDeliveryServiceArea, ShipmentNotification, **DeliveryAssignment** (11), **DeliveryWorkerApi** (7), **DeliveryVerificationCode** (16), **PostShippingCalculator** (10), **DynamicPostShipping** (5)) + `tests/Unit/Shipment/ShipmentWorkflowTest`. `ShipmentTestCase` gained `createDeliveryUser()`, `assignDriver()`, `captureDeliveryCode()` and `dispatchLocalDelivery()` — tests learn the code the way the customer does, by catching it in flight; a test that dug it out of the database would be testing a leak.
+  * **Dynamic Post shipping calculation (Shipment owns shipping cost).** Postal cost is computed by a database-driven tariff engine; local delivery and pickup keep their static `config('shipment.methods.*.price')`.
+      * **Tables:** `post_tariffs` (`service_type`, `package_type`, half-open weight bracket `[weight_from, weight_to)` in grams, `distance_type`, integer-toman `base_price` + open-ended `extra_weight_price`, optional `effective_from/until`) and `shipping_parameters` (`carrier`+`key`/`value`/`type`+`description`, unique per carrier+key). Provinces' adjacency lives in Identity's new `province_neighbors` table (see Identity).
+      * **Engine:** `ShippingCostCalculatorInterface` (`Domain/Contracts`) → `PostShippingCalculator` (`Infrastructure/Shipping/Post`, bound in `ShipmentServiceProvider`). Reads through `PostTariffRepository` + `ShippingParameterRepository`; classifies distance via `IdentityManagerInterface::getProvinceDistanceType()`. Input `ShippingCostRequestDTO`, output `ShippingCostBreakdownDTO`. Flow: distance → tariff bracket → per-kg extra weight (open bracket only) → flat island per-kg surcharge → percentage surcharges (large / Tehran-Alborz / fragile), each on the post-weight subtotal. **Integer tomans only.** Fragile reuses the standard tariff + `fragile_percentage`. No matching tariff → `ShippingTariffNotFoundException` (fail-loud).
+      * **Enums:** `DistanceType` (same_province/neighbor/non_neighbor — the shared vocabulary with Identity), `PackageType` (standard/fragile).
+      * **Integration seam:** `ShipmentManagerInterface::resolveShippingCostForSelection(ShipmentSelectionDTO, int $totalWeightGrams): int`. `EloquentShipmentManager` prices postal dynamically and **falls back to the static method price** (logged, never a failed checkout) when origin/destination/weight/tariff are missing. `CreateOrderAction` sums cart variant weights, calls this, and writes the result to `orders.shipping_cost`, the order total, and `shipment_snapshot.shipping_cost` → `activateForPaidOrder()` persists it to `shipments.shipping_cost`.
+      * **Config (`config/shipping.php`):** `SHIPPING_ORIGIN_PROVINCE_ID` (null disables dynamic pricing), `SHIPPING_POST_CARRIER`, `SHIPPING_DEFAULT_PACKAGE_TYPE`, and env-backed surcharge-group membership `SHIPPING_{ISLAND,LARGE,TEHRAN_ALBORZ}_PROVINCE_IDS`.
+      * **Seeders (idempotent, additive):** `ShippingParameterSeeder` + `PostTariffSeeder` (`firstOrCreate`, so operator-tuned values survive re-seed), wired into `DatabaseSeeder`. **Admin CRUD deferred** — managed via seeders for now.
+      * **Weight** is Catalog's nullable `product_variants.weight_grams` (grams), read via `getVariantsBySkus()` and summed into `CartDTO.totalWeightGrams`.
 
 ### 📣 9. Notification Module (Status: Active & Complete — business events wired)
 * **Responsibility:** Store in-app notifications, expose the customer notification API, and fan a notification out across channels. It owns **no business copy and no event policy** — the caller supplies type/title/message/data and the channel list.
@@ -443,6 +454,12 @@ replaces no primary key, foreign key, relation, cron input, internal query, or a
     (pre-uploaded Media ids — no inline uploads); server-computed `verified_purchase`; `status` pending/approved/rejected,
     default pending; `seller_reply`/`seller_reply_at`; timestamps). **Unique index on `(user_id, subject_type,
     subject_id)`** — one review per user per subject.
+  * **AI-review columns (added for ProductReviewAI, additive):** `user_id` is now **nullable**, plus `author_name`,
+    `title`, `is_ai_generated` (default false), `ai_generation_id` (loose ref). A published AI review has `user_id=null`
+    (no fake account) — NULLs are distinct in the composite unique index, so many AI reviews may attach to one product
+    while the one-per-user rule still holds for authored reviews. The only write path is
+    `ReviewManagerInterface::createAiReview()`; `ReviewResource` exposes `author_name`/`title` (null for authored reviews)
+    but never `is_ai_generated` (backend-only provenance).
   * **Verified-purchase gating is validation, not an Action correction.** Purchase status is resolved server-side through
     `hasPurchasedProduct()` (realized statuses only — the same set `sales_count` uses) before rules run. Purchaser ⇒
     `rating` required integer 1–5, photos optional (each id checked against MediaManagerInterface), body required.
@@ -536,6 +553,144 @@ replaces no primary key, foreign key, relation, cron input, internal query, or a
     conditions, dual-channel delivery, no-duplicate-on-repeat-event, SMS-failure isolation, after-commit (rollback → no
     notification).
 
+### Module: Ticket (`Modules/Ticket/`) — Customer Support Tickets ✅
+  * **Position in the graph:** depends only on the **Identity contract** (support-user primitives) and dispatches its own
+    primitives-only integration events; the Notification module listens. Ticket imports no Order/Payment/Shipment/Catalog
+    model, contract, or DTO. The arrow is `Ticket → Identity` and `Notification → Ticket` (events).
+  * **Public code:** `ticket_number` = `bdk-XXXXXX` (`PublicCodeEntity::Ticket = 'k'`; `t` belongs to Payment) via
+    `HasPublicCode`, server-owned, all `{ticketNumber}` routes constrained by `PublicCodeGenerator::routePattern()`. The
+    integer id stays the structural key for messages/references. (The prompt's `TKT-10001` was overridden to honour the
+    repo-wide public-code law in §2b.)
+  * **Tables (own module only):**
+    - `tickets` — `ticket_number`, loose `user_id` (customer) + `assigned_to` (support agent, both no FK), `subject`,
+      `category` (stores a `ticket_categories.code`, not an id), `priority`, `status`, `last_message_at`, `closed_at`.
+    - `ticket_messages` — `ticket_id` (cascade, own module), loose `user_id` (nullable → system message), `message`, `type`,
+      and optional `media_ids` JSON (attachments — see below).
+    - `ticket_references` — `ticket_id` (cascade), enum `reference_type`, nullable `reference_id`, `reference_code`
+      (the quoted public code), optional `snapshot` JSON. **No FK to any other module and never resolved for display**
+      (a reference to a deleted entity is inert), **but ownership-gated at creation** — see the reference-ownership
+      contract below.
+  * **Reference ownership (cross-module, contract-driven).** A customer must not attach another user's entity. Ticket
+    cannot decide this itself (it imports no Order/Payment/Shipment model), so it **publishes**
+    `Domain/Contracts/TicketReferenceValidatorInterface` (`type()`, `ownedByUser(code, userId)`). Each owning module
+    registers a validator under the container tag `ticket.reference_validators` and answers from **its own tables**:
+    `OrderTicketReferenceValidator` (`orders.public_code` + `user_id`), `ShipmentTicketReferenceValidator`
+    (`shipments.public_code` + `user_id`), `PaymentTicketReferenceValidator` (payments have no `user_id`, so it reads its
+    own `order_id` then defers to `OrderManagerInterface::findOrder()->userId` — no cross-module join, no Order model
+    import). `StoreTicketRequest::withValidator()` resolves the tagged collection and rejects any owned-type reference the
+    caller does not own (422 on `references.{i}.code`). Types with **no** registered validator (`product`/`variant` —
+    public, owned by nobody) are accepted as informational. The dependency arrow is `Order/Payment/Shipment → Ticket`
+    (they implement Ticket's published contract), and Ticket resolves the tag lazily at request time so provider load
+    order is irrelevant.
+    - `ticket_categories` — `name`, unique `code`, `is_active`, `sort_order`. Seeded with defaults (idempotent by code).
+  * **Enums:** `TicketStatus` (open/in_progress/waiting_for_customer/answered/closed/cancelled — closed/cancelled terminal),
+    `TicketPriority` (low/normal/high/urgent), `TicketMessageType` (customer_reply/admin_reply/internal_note/system_message;
+    `customerVisible()` excludes internal_note), `TicketReferenceType` (order/payment/shipment/product/variant).
+  * **Message visibility:** `internal_note` is **never** returned on a customer surface — `EloquentTicketManager` filters it
+    out of `findForCustomer()` at the query layer (not in the resource), so a private note cannot leak.
+  * **Attachments (existing Media system, no bespoke storage).** A message may carry pre-uploaded Media assets as
+    `ticket_messages.media_ids` JSON — loose coupling, no FK, exactly like `reviews.gallery_media_ids`. Supported on ticket
+    create (first message), customer reply, staff reply, and internal notes. **Ownership is enforced:** a caller may attach
+    only media they uploaded, checked via `MediaManagerInterface::ownedByUser($ids, $userId)` in the shared
+    `ValidatesMediaOwnership` request trait (422 on `media_ids` for a missing or foreign-owned id) — Ticket never queries the
+    media table. Attachments are batch-resolved to `MediaDTO`s (one `getMediaCollection()` call per detail view, no N+1) and
+    rendered through the existing `MediaResource`; reply/note actions return a hydrated `TicketMessageDTO`. Internal-note
+    attachments are invisible to customers because the whole message is filtered out. Uploading requires the existing
+    `media.upload` permission (Media tracks the uploader in `media.uploaded_by_user_id`); no new permission was added.
+  * **`support` role:** a new Spatie role created in `TicketPermissionsSeeder`, carrying only the four agent permissions.
+    Additive like `delivery` — an agent keeps `customer`; grant/revoke never `syncRoles`. Permissions: customer
+    (`ticket.create`, `ticket.view-own`, `ticket.reply-own`, `ticket.close-own`), support (`ticket.view-assigned`,
+    `ticket.reply-admin`, `ticket.change-status`, `ticket.add-internal-note`), admin (`ticket.view-admin`, `ticket.assign`,
+    `ticket.manage-categories`, `ticket.manage-support-users`). Admin gets all; customer gets the customer bundle.
+  * **Identity boundary (contract extended, additive):** `isSupportUser`, `getSupportUserIds`, `getSupportUserSummaries`,
+    `grantSupportRole`, `revokeSupportRole` on `IdentityManagerInterface`. Ticket never imports the User model — assignment
+    validity is `isSupportUser()` (a random/customer id → 422 on `user_id`), the support-user list and role grant/revoke go
+    through the contract.
+  * **HTTP surface (all `auth:sanctum` + `throttle:api`):**
+    - Customer: `GET/POST /api/v1/tickets`, `GET /api/v1/tickets/{ticketNumber}`, `POST .../messages`, `POST .../close`,
+      `GET /api/v1/ticket-categories` (active list). Own-scoped structurally → 404 for a foreign ticket.
+    - Support: `GET /api/v1/support/tickets`, `GET .../{n}`, `POST .../messages`, `PATCH .../status`, `POST .../notes`.
+      **Assignee-scoped: a non-assignee (or unknown) ticket is 404, never 403** — structural scoping like the delivery driver.
+      Status accepts the constant form (`IN_PROGRESS`) and normalizes to `in_progress`.
+    - Admin: `GET /api/v1/admin/tickets` (filters status/priority/category/assigned_to), `GET .../{n}`, `POST .../messages`,
+      `POST .../notes`, `PATCH .../status`, `POST .../assign`; `GET/POST/PATCH/DELETE /api/v1/admin/ticket-categories*`;
+      `GET /api/v1/admin/support-users`; `POST`/`DELETE /api/v1/admin/users/{id}/roles/support`.
+    - Reply/status/note Actions are **shared** by support and admin; only the row scoping (assignee vs. any) differs.
+  * **Integration events (primitives only, `Domain/Events/`, dispatched inside the write transaction; listeners are
+    `ShouldHandleEventsAfterCommit` in the Notification module):** `TicketCreatedEvent` → notify support team (db+sms),
+    `TicketReplyCreatedEvent` (`fromStaff`) → staff reply notifies customer (db+sms), customer reply notifies assignee
+    (db); internal notes never raise it. `TicketAssignedEvent` → notify assignee (db+sms). `TicketStatusChangedEvent` →
+    notify customer (db only). `NotificationType`/`NotificationTemplate::TICKET_{CREATED,REPLY,ASSIGNED}` + status-changed
+    type; SMS best-effort/skipped (`config/sms.php` `ticket_*` keys). Ticket never calls `NotificationManagerInterface`.
+  * **Tests:** `tests/Feature/Ticket/` — **39 tests** (TicketTest 14, SupportTicketTest 7, AdminTicketTest 7,
+    TicketNotificationTest 4, TicketAttachmentTest 7): create/list/view/reply/close, ownership 404 matrix, references (own
+    order + public product OK, **foreign-order 422, nonexistent-order 422**, invalid type 422), auth matrix (401/403),
+    support scoping + internal-note invisibility, assignment + non-support-user 422, support role grant/revoke, the
+    event→notification→SMS wiring, and **attachments** (customer/support create+reply+note with media, foreign-media 422,
+    nonexistent-media 422, internal-note attachments hidden from customer, no-attachment regression).
+
+### Module: ProductReviewAI (`Modules/ProductReviewAI/`) — AI-Assisted Product Review Drafting ✅
+
+  * **Responsibility:** admin-only generation of Persian, customer-style product reviews from **real external marketplace
+    reviews**, through an approval workflow. It owns external sources, review collection, AI processing, draft generation,
+    approval, and audit logs. It is **not** the Review module — Review still owns customer reviews.
+  * **Position in the graph:** consumes the **Catalog** contract (`findProductAdmin()` → internal id + AI context) and the
+    **Review** contract (`createAiReview()` to publish an approved draft). Registered **after** both in
+    `bootstrap/providers.php`. Imports no Catalog/Review/Identity Eloquent model.
+  * **Adapter architecture (sources):** `ReviewSourceInterface` (`code`/`searchProducts`/`getProduct`/`getReviews`) with
+    `DigikalaSource` (live Digikala JSON APIs — search `/discovery/api/v2/search`, reviews
+    `/v1/rate-review/products/{id}/`; no HTML scraping). `ReviewSourceFactory` maps a stable **driver code** (persisted on
+    `review_sources.driver` — never a PHP namespace) to a concrete adapter; `SourceResolver` looks up the active
+    `review_sources` row + adapter. Adding Torob/Amazon = a new adapter + config, never `if source == digikala`.
+  * **Replaceable AI provider:** `AIProviderInterface` (pure transport — `complete(system, user)`; prompts + JSON parsing
+    live in the actions) with `AvalAIProvider` (OpenAI-compatible `…/chat/completions`, default model
+    `deepseek-v4.1-flash`). `AIProviderFactory` resolves it from `config('product_review_ai.ai.provider')`.
+  * **Real integrations, fail-loud (no fake fallback, ever):** missing config throws `IntegrationUnavailableException`;
+    a failed call throws `ExternalSourceException` / `AiGenerationException`. The queued job catches these, marks the run
+    `failed` with a `failure_reason`, and writes the failure into `ai_review_generation_logs`. Tests mock the interfaces
+    with test doubles bound in the container — never a production fake driver.
+  * **Async two-stage pipeline:** `GenerateProductAIReviewsJob` (Laravel queue; scraping + AI never in the HTTP request) →
+    `ProcessGenerationAction`: `processing` → collect ~100 external reviews (`collection.review_limit`) → **stage 1**
+    `RunAnalysisAction` (JSON: positive/negative points, customer profiles, important features; stored on
+    `analysis_json`) → **stage 2** `RunGenerationAction` (JSON `{reviews:[{name,rating,title,body}]}`, first-person
+    Persian, varied personalities, AI-chosen ratings — not all 5) → save drafts → `completed`. Every external/AI
+    request+response is logged (not failure-only).
+  * **Tables (8):** `review_sources`, `external_product_mappings` (unique `product_id,source_id`), `external_reviews`,
+    `ai_prompts` (versioned; unique `name,version`), `ai_review_generations` (stores `model` + `prompt_name`/`prompt_version`
+    + `analysis_json` + `failure_reason` + loose `created_by`; **never deleted**), `ai_generated_reviews` (drafts:
+    `name`/`rating`/`title`/`body`/`status` + loose `published_review_id` back-link + `approved_by`/`approved_at`),
+    `ai_generated_review_versions` (append-only edit history), `ai_review_generation_logs` (append-only debug ledger).
+    All cross-module references are loose (no FK to Catalog/Identity/Review).
+  * **Approval → publish:** `ApproveDraftAction` calls `ReviewManagerInterface::createAiReview()` inside a transaction →
+    a `reviews` row with `user_id=null`, `author_name`, `title`, `is_ai_generated=true`, `ai_generation_id`, `status=approved`,
+    `verified_purchase=false`; the draft records `published_review_id`. It then renders on the storefront exactly like any
+    other review. `reviews.user_id` was made nullable + those columns added by
+    `Modules/Review/.../2026_09_20_000001_add_ai_fields_to_reviews_table.php` (additive; Review tests unchanged).
+  * **HTTP (all `auth:sanctum` + `throttle:api` + `product-review-ai.manage`, admin only — never support/customer):**
+    `GET/POST /api/v1/admin/products/{product}/ai-reviews/{search,mappings}`, `POST .../generate` (returns
+    `{warning, existing_ai_reviews}` unless `confirm:true`; **202** when queued), `POST .../regenerate` (keeps history),
+    `GET .../generations`; `GET /api/v1/admin/ai-reviews/{generation}` (run + drafts), `PATCH /api/v1/admin/ai-reviews/{draft}`
+    (edit → version snapshot, `edited`; approved draft → 422), `POST .../{draft}/approve`, `POST .../{draft}/reject`.
+    `{product}` is the Catalog public code; `{generation}`/`{draft}` are numeric. **Read-only prompt browsing:**
+    `GET /api/v1/admin/ai-prompts` (filter `name`/`active`, paginated) + `GET /api/v1/admin/ai-prompts/{id}`. Prompts are
+    never client-supplied — the pipeline auto-resolves the active `review_analysis`/`review_generation`; these endpoints
+    are for viewing text/versions only.
+  * **Call logging (URL + response).** `DigikalaSource` and `AvalAIProvider` log every request's URL + response (success
+    and failure) via `Log::` (`ProductReviewAI Digikala request` / `ProductReviewAI AvalAI request|response`); the per-run
+    `ai_review_generation_logs` additionally captures each stage's request/response including the raw AI output.
+    **Digikala real shapes:** `/discovery/api/v2/search` nests each product as a `{type:"product", data:{…}}` entry inside
+    the listing widget's own `data.widgets[]` (walked recursively; filter/brand nodes ignored); reviews return under
+    `data.comments[]`. Both parsed defensively with flat fallbacks.
+  * **Permission:** `product-review-ai.manage` (admin only). Seeders: `ProductReviewAIPermissionsSeeder`,
+    `ReviewSourceSeeder` (Digikala), `AiPromptSeeder` (v1 `review_analysis` + `review_generation`).
+  * **Config/env:** `config/product_review_ai.php` + `AVALAI_*`, `DIGIKALA_*`, `PRODUCT_REVIEW_AI_*`.
+  * **Tests:** `tests/Feature/ProductReviewAI/` — **27 tests** (DigikalaSourceTest 6 via faked HTTP incl. the widget-based
+    v2 layout, GenerationWorkflowTest 5, ModerationTest 5, AuthorizationTest 4, PromptEndpointsTest 4, SourceAndAiLoggingTest 3):
+    source parsing/id-extraction/limit, missing-config + failed-call errors, job queueing, full pipeline JSON parsing +
+    logging, AI-failure → failed+logged, no-mapping 422, existing-AI warning/confirm, approval→normal-review + provenance,
+    published AI review served as an ordinary review, edit version history, reject + frozen-approved, search→save mapping,
+    prompt list/filter/show + auth, URL+response logging for the source and AI transports, and the 401/403 matrix.
+
 ---
 
 
@@ -556,5 +711,7 @@ replaces no primary key, foreign key, relation, cron input, internal query, or a
 | Analytics | ✅ Complete & Hardened | 41 passing across 9 feature test classes |
 | Review | ✅ Complete | 35 passing across 4 feature test classes |
 | Wishlist | ✅ Complete | 32 passing (ProductLikesTest, AvailabilitySubscriptionTest, RestockNotificationTest, RestockEventTest) |
+| Ticket | ✅ Complete | 39 passing (TicketTest 14, SupportTicketTest 7, AdminTicketTest 7, TicketNotificationTest 4, TicketAttachmentTest 7) |
+| ProductReviewAI | ✅ Complete | 27 passing (DigikalaSourceTest 6, GenerationWorkflowTest 5, ModerationTest 5, AuthorizationTest 4, PromptEndpointsTest 4, SourceAndAiLoggingTest 3) |
 
-**Full suite: 845 tests, 842 passing.** Three unrelated pre-existing failures remain — `ProfileTest::authenticated_user_can_update_profile`, `Payment\PaymentTest::callback_page_links_use_configured_frontend_url_and_real_order` (the callback now builds the order URL from the public code while that one assertion still expects the numeric id), and `Analytics\FinancialAnalyticsSafetyTest::payment_failed_and_cancelled_events_do_not_mutate_payment_stats` — all three verified to fail identically on a clean tree (wishlist changes stashed) and out of scope.
+**Full suite: 911 tests, 908 passing.** Three unrelated pre-existing failures remain — `ProfileTest::authenticated_user_can_update_profile`, `Payment\PaymentTest::callback_page_links_use_configured_frontend_url_and_real_order` (the callback now builds the order URL from the public code while that one assertion still expects the numeric id), and `Analytics\FinancialAnalyticsSafetyTest::payment_failed_and_cancelled_events_do_not_mutate_payment_stats` — all three verified to fail identically on a clean tree (wishlist changes stashed) and out of scope.

@@ -211,8 +211,10 @@ Order items snapshot prices and images at checkout and are never refreshed or ba
 | **Analytics** | ✅ Implemented | `Modules/Analytics/`. Provider registered. Read-model and reporting authority. Never queries other modules' tables or imports other modules' Eloquent models. Consumes published integration domain events carrying immutable `$eventId` UUIDs (`OrderPaidEvent`, `OrderCancelledEvent`, `PaymentSuccessfulEvent`, `PaymentFailedEvent`, `PaymentCancelledEvent`, `Shipment{AssignedToDelivery,HandedToPost,Delivered,DeliveryFailed}Event`). Event processing is atomic and idempotent via `analytics_processed_events` deduplication. Owns 10 reporting tables + 1 category index + 1 processed events table: `analytics_daily_sales`, `analytics_product_sales`, `analytics_variant_sales`, `analytics_category_sales` (hierarchical propagation: item category + all ancestor categories are updated on purchase), `analytics_customer_stats`, `analytics_payment_stats`, `analytics_delivery_stats` (stores additive `total_delivery_minutes` to calculate accurate weighted averages), `analytics_driver_stats` (`total_delivery_minutes`), `analytics_discount_usage`, `analytics_coupon_usage`, `analytics_product_categories` (event-maintained self-contained index enabling category-filtered product reporting without Catalog cross-module queries), `analytics_processed_events`. Admin APIs (`analytics.view` permission): `GET /api/v1/admin/analytics/dashboard`, `GET /api/v1/admin/analytics/sales`, `GET /api/v1/admin/analytics/products`, `GET /api/v1/admin/analytics/customers`, `GET /api/v1/admin/analytics/delivery`. Tests under `tests/Feature/Analytics/`. |
 | **Review** | ✅ Implemented | `Modules/Review/`. Provider registered. One entity — `Review` — is both star rating and comment (no separate Comment entity; product subjects only today, blog-ready via the enum-backed `subject_type`). Loose subject reference (no FK, no morph map); verified-purchase gating resolved server-side through the new `OrderManagerInterface::hasPurchasedProduct()` and enforced by validation (non-purchasers may comment but sending a rating/photos is 422). One review per `(user_id, subject_type, subject_id)` unique index — POST upgrades in place (201 create / 200 upgrade) and every edit re-resolves purchase status and resets `status=pending`. Hourly `reviews:sync-product-ratings` pushes approved+rated-only tallies through the new `CatalogManagerInterface::syncRatingSummary()`; Catalog stores raw `products.rating_sum`/`rating_count`, derives `rating_average`, adds `sort=rating` + `min_rating`. Customer routes under `/api/v1/reviews*`, admin under `/api/v1/admin/reviews*`. Tests under `tests/Feature/Review/`. |
 | **Wishlist** | ✅ Implemented | `Modules/Wishlist/` (**leaf** — imports no other module; deals only in primitives). Provider registered **before Catalog**. Owns `product_likes` (`unique(user_id, product_id)`) and `availability_subscriptions` (`unique(user_id, sku)`, one-shot `notified_at`) with loose refs (no FKs). `WishlistManagerInterface` is the only entry point. **Catalog owns the HTTP surface** (`Catalog → Wishlist`): `POST`/`DELETE /api/v1/catalog/products/{uuid}/like` → `{liked}`, `GET /api/v1/catalog/liked-products` (paginated `ProductResource`), `POST`/`DELETE /api/v1/catalog/variants/sku/{sku}/availability-notification` → `{availability_notification_requested}` — all `auth:sanctum`, self-service, caller-scoped (no `user_id` from client), no permission. `ProductResource.is_liked` + `ProductVariantResource.availability_notification_requested` are batched per page (no N+1, `false` for guests). **Restock is event-driven, never polled:** Inventory publishes `InventoryRestockedEvent` (primitives) when available stock crosses `<=0 → >0` (in `adjustStock`/`releaseReservation`); Notification's `SendProductAvailableNotifications` (`ShouldHandleEventsAfterCommit`) claims subscribers atomically (one-shot, dedup-by-consumption), resolves name/code via `CatalogManagerInterface::findVariantBySku()`, and sends db + best-effort sms (`NotificationType`/`NotificationTemplate::PRODUCT_AVAILABLE`). Tests under `tests/Feature/Wishlist/` + `tests/Feature/Inventory/RestockEventTest`. |
+| **Ticket** | ✅ Implemented | `Modules/Ticket/`. Provider registered (last). Customer support tickets: `tickets` (public code `bdk-XXXXXX` in `ticket_number`), `ticket_messages` (types `customer_reply`/`admin_reply`/`internal_note`/`system_message` — **internal notes are filtered out of every customer response at the query layer**; optional **attachments** as `media_ids` JSON — pre-uploaded Media referenced by id, loose coupling like `reviews.gallery_media_ids`, validated to be **owned by the caller** via `MediaManagerInterface::ownedByUser()` so nobody can attach another user's media, rendered through the existing `MediaResource`, and hidden from customers on internal notes because the whole message is), `ticket_references` (loose enum-typed pointers — `order`/`payment`/`shipment`/`product`/`variant` + the quoted public code; **no FK, never resolved for display**, but **ownership-gated at creation**: Ticket publishes `TicketReferenceValidatorInterface` and each owning module registers a validator under the `ticket.reference_validators` container tag that answers "does this code belong to the caller?" from its own tables — a customer cannot attach another user's `order`/`payment`/`shipment` code (422); `product`/`variant` are public and need no validator), `ticket_categories` (admin-managed; tickets store the immutable `code`). Enums `TicketStatus`/`TicketPriority`/`TicketMessageType`/`TicketReferenceType`. **New `support` Spatie role** (created in `TicketPermissionsSeeder`, additive like `delivery` — never `syncRoles`). Customer routes `/api/v1/tickets*` + `/api/v1/ticket-categories`; support routes `/api/v1/support/tickets*` (**assignee-scoped: a non-assignee gets 404, never 403** — structural scoping like the delivery driver); admin routes `/api/v1/admin/tickets*`, `/api/v1/admin/ticket-categories*`, `/api/v1/admin/support-users`, `POST`/`DELETE /api/v1/admin/users/{id}/roles/support`. Identity extended with `isSupportUser`/`getSupportUserIds`/`getSupportUserSummaries`/`grantSupportRole`/`revokeSupportRole` (Ticket imports **no** User model — assignment validity is `IdentityManagerInterface::isSupportUser()`). Notifications via primitives-only integration events (`TicketCreated`/`TicketReplyCreated`/`TicketAssigned`/`TicketStatusChanged`, dispatched inside the write transaction) → listeners in the Notification module (`NotificationType`/`NotificationTemplate::TICKET_*`, SMS best-effort/skipped). Tests under `tests/Feature/Ticket/`. |
+| **ProductReviewAI** | ✅ Implemented | `Modules/ProductReviewAI/`. Provider registered **after Catalog + Review** (it consumes both contracts). Admin-only AI drafting of Persian, customer-style product reviews from real marketplace reviews, then an approval workflow; approved drafts publish as **ordinary product reviews** via `ReviewManagerInterface::createAiReview()` (no separate storefront section) with full backend provenance. **Adapter architecture** for external sources (`ReviewSourceInterface` + `DigikalaSource`, resolved by driver code via `ReviewSourceFactory` — never `if source == digikala`) and a **replaceable AI provider** (`AIProviderInterface` + `AvalAIProvider`, OpenAI-compatible, default model `deepseek-v4.1-flash`, via `AIProviderFactory`). **Real integrations only, fail-loud:** missing config (e.g. `AVALAI_API_KEY`, Digikala base URL) never falls back to fake data — the run is marked `failed` with a reason and logged. Two-stage AI (analysis → generation) runs in the queued `GenerateProductAIReviewsJob` (scraping + AI never in the HTTP request). 8 tables (`review_sources`, `external_product_mappings`, `external_reviews`, `ai_prompts` (versioned), `ai_review_generations`, `ai_generated_reviews`, `ai_generated_review_versions`, `ai_review_generation_logs`). Permission `product-review-ai.manage` (admin only). Admin API under `/api/v1/admin/products/{product}/ai-reviews/*` (search, mappings, generate, regenerate, generations), `/api/v1/admin/ai-reviews/{id}*` (show generation, edit/approve/reject draft), and read-only `/api/v1/admin/ai-prompts*`. **You never send a prompt name** — prompts are auto-resolved server-side; the prompt endpoints are for browsing only. Every external/AI call logs its URL + response (app log + generation ledger). Tests under `tests/Feature/ProductReviewAI/`. |
 
-**Test suite baseline: 845 tests (842 green). Three unrelated pre-existing failures also fail on a clean tree:
+**Test suite baseline: 935 tests (932 green). The same three unrelated pre-existing failures also fail on a clean tree:
 `ProfileTest::authenticated_user_can_update_profile`, `Payment\PaymentTest::callback_page_links_use_configured_frontend_url_and_real_order` (callback URL now uses the order public code; that assertion still expects the numeric id), and `Analytics\FinancialAnalyticsSafetyTest::payment_failed_and_cancelled_events_do_not_mutate_payment_stats`.**
 
 ### Delivery workers — cross-module rule
@@ -249,6 +251,12 @@ Order items snapshot prices and images at checkout and are never refreshed or ba
 - **Slots are the source of truth for capacity** (no `reserved_count`). remaining = capacity − admin_reserved − active(held+confirmed). Generate with `shipment:generate-delivery-slots` (idempotent; never overwrites operator edits / reopens closed slots).
 - **Customer Shipment discovery is explicit.** `GET /shipment/methods` without `address_id` returns only canonical configured methods with `requires_address:false` (currently pickup); valid owned addresses run normal eligibility, while explicit invalid/foreign ids remain 422 and checkout validation stays strict. `GET /shipment/delivery-slots` whitelists `date`/`starts_at`/`remaining_capacity`/`capacity`/`created_at` with `asc`/`desc`, defaulting to `date ASC, starts_at ASC`; remaining-capacity sorting reuses the reservation-aware calculation.
 - **Contracts only across the wall.** Shipment imports no Order/Identity/Media models; Order/Payment reach Shipment solely through `ShipmentManagerInterface` + DTOs. `LocalDeliveryEligibilityInterface` isolates the supported-region rule.
+- **Dynamic Post shipping is the Shipment module's job — never Order/Cart.** Postal cost is computed by the Post tariff engine; local delivery and pickup keep their static `config('shipment.methods.*.price')`. Checkout calls `ShipmentManagerInterface::resolveShippingCostForSelection($selection, $totalWeightGrams)`; `CreateOrderAction` sums the cart's variant weights, gets the cost, and writes it to `orders.shipping_cost` + the order total + the shipment snapshot, so `activateForPaidOrder()` persists it to `shipments.shipping_cost`.
+  - **Engine:** `ShippingCostCalculatorInterface` (`Domain/Contracts`) → `PostShippingCalculator` (`Infrastructure/Shipping/Post`, bound in `ShipmentServiceProvider`). Flow: classify distance via `IdentityManagerInterface::getProvinceDistanceType()` → find `post_tariffs` bracket (`PostTariffRepository`) → add per-kg extra weight (open-ended top bracket) → add flat island surcharge → add each percentage (large / Tehran-Alborz / fragile) from `shipping_parameters` (`ShippingParameterRepository`). **All integer tomans** (Money Unit Rule); fragile reuses the standard tariff + `fragile_percentage`.
+  - **Distance is DB-driven, owned by Identity.** `province_neighbors` (Identity) + `getProvinceDistanceType()` return `same_province`/`neighbor`/`non_neighbor` (a shared primitive vocabulary with `Shipment\Domain\Enums\DistanceType`). Shipment never queries provinces directly. Seeded idempotently **by province name** via `ProvinceNeighborSeeder` (never hardcoded ids).
+  - **Formula constants + tariffs are data, not code.** `shipping_parameters` (carrier+key) and `post_tariffs` (weight brackets, per-distance prices) are seeded idempotently (`firstOrCreate`, preserving operator edits). Origin province + surcharge-group membership are env-backed in `config/shipping.php` (`SHIPPING_ORIGIN_PROVINCE_ID`, `SHIPPING_{ISLAND,LARGE,TEHRAN_ALBORZ}_PROVINCE_IDS`).
+  - **Safe fallback.** Dynamic pricing runs only for postal methods with an origin configured, a known destination province, real weight, and a matching tariff; otherwise it falls back to the static method price (logged, never a failed checkout). Activate in production by seeding tariffs, setting `product_variants.weight_grams`, and configuring `SHIPPING_ORIGIN_PROVINCE_ID`.
+  - **Weight** lives on Catalog's nullable `product_variants.weight_grams` (whole grams), exposed on `ProductVariantDTO`/resource and summed into `CartDTO.totalWeightGrams`.
 
 ### Promotion — key facts
 - **Promotion is a leaf.** It imports no Catalog/Cart/Order/Payment model, contract, or DTO. Everything arrives as
@@ -325,6 +333,11 @@ Order items snapshot prices and images at checkout and are never refreshed or ba
   `config/identity.php` under the `sms` key (`api_key`, `template_id`, `code_param`).
 - **Public contract:** `IdentityManagerInterface::isAdmin(int $userId): bool` — but prefer
   direct `$user->can('...')` permission checks in policies over role checks.
+- **Province adjacency ("shipping location matrices").** `province_neighbors` table + `ProvinceNeighbor` model live
+  here (Identity owns provinces/cities). `IdentityManagerInterface::getProvinceDistanceType(?origin, ?dest)` returns
+  `same_province`/`neighbor`/`non_neighbor` (adjacency matched either direction; null → `non_neighbor`) — the Shipment
+  Post calculator asks this instead of joining across the wall. Seeded idempotently **by province name** via
+  `ProvinceNeighborSeeder` (wired into `IdentityModuleSeeder` after `LocationSeeder`).
 
 ### Media — key facts
 - **Only entry point:** `MediaManagerInterface` —
@@ -332,6 +345,7 @@ Order items snapshot prices and images at checkout and are never refreshed or ba
   `delete`. No other module performs raw file I/O.
 - `MediaDTO` carries the public URL via `Storage::url()`.
 - **One usage flow:** pre-upload (`POST /api/v1/media` → get `media_id` → pass `primary_media_id` / `gallery_media_ids` / `variants.*.media_id` to a Catalog write endpoint). Catalog product endpoints no longer accept inline file uploads directly.
+- **Ownership:** `media.uploaded_by_user_id` (nullable loose Identity ref, recorded from `auth()->id()` on upload) tracks the uploader. `MediaManagerInterface::ownedByUser(array $ids, int $userId): bool` (all ids must exist **and** belong to the user) is the boundary a consumer uses to reject attaching someone else's media — never a direct media-table query. Uploading still requires the `media.upload` permission (admin by role; grant per-user/role to let customers or support upload, e.g. ticket attachments).
 
 ### Catalog — key facts
 - **Product public identifier is a public code (stored in the `uuid` column).** `Product` carries a unique,
@@ -406,6 +420,11 @@ Order items snapshot prices and images at checkout and are never refreshed or ba
   product list/admin endpoints accept a `brand_id` filter, and free-text `search` also matches brand name.
 - Permissions: `catalog.category.{create,update,delete}`, `catalog.brand.{create,update,delete}`,
   `catalog.product.{view-admin,create,update,delete}`, `catalog.variant.{create,update,delete}`.
+- **Variant shipping weight.** Nullable `product_variants.weight_grams` (whole grams — never decimal kilograms),
+  accepted on variant + nested-product create/update requests, exposed on `ProductVariantDTO`/`ProductVariantResource`
+  as `weight_grams`. Read by the Shipment Post tariff engine (via `getVariantsBySkus()`) and summed into the cart's
+  `total_weight_grams`. Server-owned like every other price/weight field; `null` means "no weight captured" (dynamic
+  postage then falls back to the static price).
 
 ### Inventory — key facts
 - Tracks `quantity` and `reserved_quantity` per SKU. Available stock = `quantity − reserved_quantity`.
@@ -432,6 +451,12 @@ Order items snapshot prices and images at checkout and are never refreshed or ba
   create, 200 on the upgrade path**. Every write re-resolves `verified_purchase`, so a commenter who later buys
   the product adds rating/photos to their existing row via PATCH. Every edit resets `status=pending` — edited
   content is unmoderated content.
+- **AI-generated reviews (from the ProductReviewAI module).** `reviews.user_id` is **nullable**; a published AI
+  review has no user (no fake accounts), stores its persona in `author_name`, an optional `title`, and provenance
+  in `is_ai_generated` + `ai_generation_id`. NULL user_ids are distinct in the unique index, so many AI reviews may
+  attach to one product while the one-per-user rule still holds for authored reviews. The only publish path is
+  `ReviewManagerInterface::createAiReview()` (born `approved`); `ReviewResource` exposes `author_name`/`title`
+  (null for authored reviews) but **never** the AI flag — the customer shape is identical for both.
 - **PATCH /reviews/{uuid} is owner-only policy 403** (standard pattern — deliberately not driver-style 404
   scoping); unknown uuid → 404 before validation.
 - **Public reads are approved-only, always.** `GET /api/v1/reviews` never honors a caller-passed `status`;
@@ -447,6 +472,40 @@ Order items snapshot prices and images at checkout and are never refreshed or ba
   moves the average ("4.3★ (8 ratings) · 12 reviews" is correct).
 - **Permissions:** `review.create` (customer + admin), `review.view-admin` + `review.moderate` (admin only).
 - Public code: `bdr-XXXXXX` in `reviews.uuid` (column name historical, like `products.uuid`).
+
+### ProductReviewAI — key facts
+- **Not the Review module.** Review owns customer reviews; ProductReviewAI owns external sources, collection, AI
+  processing, draft generation, and the approval workflow. Its **only** write into reviews is
+  `ReviewManagerInterface::createAiReview()` on approval — it never imports the `Review` model.
+- **Adapter + factory, no source branching.** `ReviewSourceInterface` (`code`/`searchProducts`/`getProduct`/`getReviews`)
+  with `DigikalaSource`; `ReviewSourceFactory` maps a stable **driver code** (stored on `review_sources.driver`, never a
+  PHP namespace) to a concrete adapter. Future sources (Torob/Amazon) are a new adapter + a config block.
+- **Replaceable AI provider.** `AIProviderInterface` (`complete()` is pure transport — prompt building + JSON parsing
+  live in the actions) with `AvalAIProvider` (OpenAI-compatible `…/chat/completions`, default `deepseek-v4.1-flash`),
+  resolved by `AIProviderFactory` from `config('product_review_ai.ai.provider')`.
+- **Real integrations, fail-loud (no fake fallback).** Missing `AVALAI_API_KEY`/Digikala base URL throws
+  `IntegrationUnavailableException`; a live call failure throws `ExternalSourceException`/`AiGenerationException`. The
+  queued job catches these, marks the run `failed` with a reason, and writes the failure to `ai_review_generation_logs`
+  — it never fabricates reviews. Tests mock the interfaces with test doubles, not production fakes.
+- **Async two-stage pipeline.** `GenerateProductAIReviewsJob`: collect ~100 external reviews → stage-1 analysis (JSON:
+  positives/negatives/profiles/features) → stage-2 generation (JSON `{reviews:[{name,rating,title,body}]}`, first-person
+  Persian, varied personalities, AI-chosen ratings — not all 5). Scraping + AI never run in the HTTP request.
+- **Auditable + immutable history.** Every run records the AI `model` + prompt `name`/`version` used (prompts are
+  versioned in `ai_prompts`; editing = new version); drafts keep `published_review_id`; edits snapshot into
+  `ai_generated_review_versions`; runs are never deleted. Generating for a product that already has approved AI reviews
+  returns `{warning, existing_ai_reviews}` until `confirm:true`.
+- **Prompts are server-resolved, never client-supplied.** No endpoint accepts a prompt name; the pipeline auto-picks the
+  active `review_analysis`/`review_generation` prompt. Read-only `GET /api/v1/admin/ai-prompts[/{id}]` (admin) lets you
+  browse prompt text/versions (filter by `name`/`active`). Editing prompts stays a data-layer/versioned concern.
+- **Call logging (URL + response).** `DigikalaSource` and `AvalAIProvider` log every request's target URL and the
+  response (success and failure) via `Log::` (`ProductReviewAI Digikala request` / `ProductReviewAI AvalAI
+  request|response`), plus the per-run `ai_review_generation_logs` (including the raw AI output). Digikala's real shapes:
+  v2 discovery search nests each product as a `{type:"product", data:{…}}` entry inside the listing widget's own
+  `data.widgets[]` (walked recursively; filter/brand nodes ignored), and reviews return under `data.comments[]` — not
+  `data.products` / `data.reviews`.
+- **Product handle is the public code.** Product-scoped routes use `{product}` (`bdp-XXXXXX`/legacy hex), resolved to the
+  internal integer id + AI context via `CatalogManagerInterface::findProductAdmin()` (that integer id is the review
+  `subject_id`). Permission `product-review-ai.manage`, admin only — never support, never customer.
 
 ### Per-variant order quantity limit — cross-module rule
 - Catalog owns nullable `product_variants.max_quantity_per_order` and exposes it only through immutable `ProductVariantDTO`; `null` means no special limit and the minimum configured value is 1.
