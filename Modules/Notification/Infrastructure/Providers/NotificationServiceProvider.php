@@ -17,6 +17,10 @@ use Modules\Notification\Application\Listeners\SendShipmentHandedToPostNotificat
 use Modules\Notification\Application\Listeners\SendShipmentOutForDeliveryNotifications;
 use Modules\Notification\Application\Listeners\SendShipmentPreparingNotification;
 use Modules\Notification\Application\Listeners\SendShipmentReadyForPickupNotifications;
+use Modules\Notification\Application\Listeners\SendTicketAssignedNotifications;
+use Modules\Notification\Application\Listeners\SendTicketCreatedNotifications;
+use Modules\Notification\Application\Listeners\SendTicketReplyNotifications;
+use Modules\Notification\Application\Listeners\SendTicketStatusChangedNotifications;
 use Modules\Notification\Domain\Contracts\NotificationManagerInterface;
 use Modules\Notification\Domain\Models\Notification;
 use Modules\Notification\Domain\Policies\NotificationPolicy;
@@ -34,6 +38,10 @@ use Modules\Shipment\Domain\Events\ShipmentHandedToPostEvent;
 use Modules\Shipment\Domain\Events\ShipmentOutForDeliveryEvent;
 use Modules\Shipment\Domain\Events\ShipmentPreparingStartedEvent;
 use Modules\Shipment\Domain\Events\ShipmentReadyForPickupEvent;
+use Modules\Ticket\Domain\Events\TicketAssignedEvent;
+use Modules\Ticket\Domain\Events\TicketCreatedEvent;
+use Modules\Ticket\Domain\Events\TicketReplyCreatedEvent;
+use Modules\Ticket\Domain\Events\TicketStatusChangedEvent;
 
 class NotificationServiceProvider extends ServiceProvider
 {
@@ -81,5 +89,12 @@ class NotificationServiceProvider extends ServiceProvider
         // Inventory publishes a restock (available 0 → positive); Wishlist owns the
         // subscriptions, Notification delivers to the subscribed customers.
         Event::listen(InventoryRestockedEvent::class, SendProductAvailableNotifications::class);
+
+        // Support tickets. The Ticket module dispatches primitives-only events and
+        // knows nothing about notifications; the fan-out to customer/agent lives here.
+        Event::listen(TicketCreatedEvent::class, SendTicketCreatedNotifications::class);
+        Event::listen(TicketReplyCreatedEvent::class, SendTicketReplyNotifications::class);
+        Event::listen(TicketAssignedEvent::class, SendTicketAssignedNotifications::class);
+        Event::listen(TicketStatusChangedEvent::class, SendTicketStatusChangedNotifications::class);
     }
 }

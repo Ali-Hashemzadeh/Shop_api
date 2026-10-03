@@ -22,8 +22,11 @@ class LocalMediaManager implements MediaManagerInterface
         // This makes it publicly accessible via the storage symlink
         $path = $file->store($folder, 'public');
 
-        // 2. Create the record in our local media ledger database table
+        // 2. Create the record in our local media ledger database table.
+        // The uploader is captured from the authenticated request (null for
+        // seeder/CLI uploads) so ownership can later be enforced by consumers.
         $media = Media::create([
+            'uploaded_by_user_id' => auth()->id(),
             'file_path' => $path,
             'mime_type' => $file->getMimeType(),
             'file_size' => $file->getSize(),
@@ -56,6 +59,24 @@ class LocalMediaManager implements MediaManagerInterface
         return Media::whereIn('id', $ids)
             ->get()
             ->map(fn (Media $media) => MediaDTO::fromModel($media));
+    }
+
+    public function ownedByUser(array $ids, int $userId): bool
+    {
+        $ids = array_values(array_unique(array_map('intval', $ids)));
+
+        if ($ids === []) {
+            return true;
+        }
+
+        $ownedCount = Media::query()
+            ->whereIn('id', $ids)
+            ->where('uploaded_by_user_id', $userId)
+            ->count();
+
+        // Every requested id must resolve to a row owned by this user; a missing
+        // id or a foreign-owned id lowers the count and fails the check.
+        return $ownedCount === count($ids);
     }
 
     public function listMedia(int $perPage = 15): LengthAwarePaginator

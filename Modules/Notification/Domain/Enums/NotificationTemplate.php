@@ -64,4 +64,17 @@ enum NotificationTemplate: string
      * still lands.
      */
     case PRODUCT_AVAILABLE = 'product_available';
+
+    /** Support-facing: a new ticket was opened. Parameters: `TicketNumber`. */
+    case TICKET_CREATED = 'ticket_created';
+
+    /**
+     * A new reply on a ticket. Parameters: `TicketNumber`. Sent to the customer
+     * when support replies (and, when configured, to the agent when the customer
+     * replies) — the copy is a neutral "your ticket has a new reply".
+     */
+    case TICKET_REPLY = 'ticket_reply';
+
+    /** Support-facing: a ticket was assigned to the agent. Parameters: `TicketNumber`. */
+    case TICKET_ASSIGNED = 'ticket_assigned';
 }

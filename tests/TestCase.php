@@ -16,6 +16,8 @@ use Modules\Payment\Infrastructure\Persistence\Seeders\PaymentPermissionsSeeder;
 use Modules\Promotion\Infrastructure\Persistence\Seeders\PromotionPermissionsSeeder;
 use Modules\Review\Infrastructure\Persistence\Seeders\ReviewPermissionsSeeder;
 use Modules\Shipment\Infrastructure\Persistence\Seeders\ShipmentPermissionsSeeder;
+use Modules\Ticket\Infrastructure\Persistence\Seeders\TicketCategorySeeder;
+use Modules\Ticket\Infrastructure\Persistence\Seeders\TicketPermissionsSeeder;
 
 abstract class TestCase extends BaseTestCase
 {
@@ -74,6 +76,16 @@ abstract class TestCase extends BaseTestCase
         $this->seed(ReviewPermissionsSeeder::class);
     }
 
+    protected function seedTicketPermissions(): void
+    {
+        $this->seed(TicketPermissionsSeeder::class);
+    }
+
+    protected function seedTicketCategories(): void
+    {
+        $this->seed(TicketCategorySeeder::class);
+    }
+
     protected function actingAsCustomer(?User $user = null): User
     {
         $user ??= User::factory()->create();
@@ -88,6 +100,22 @@ abstract class TestCase extends BaseTestCase
     {
         $user ??= User::factory()->create();
         $user->assignRole('admin');
+
+        Sanctum::actingAs($user);
+
+        return $user;
+    }
+
+    /**
+     * A support agent is a shopper who also handles tickets: the `support` role
+     * is added on top of `customer`, never a replacement (mirrors delivery).
+     * Requires the `support` role to exist — call seedTicketPermissions() first.
+     */
+    protected function actingAsSupport(?User $user = null): User
+    {
+        $user ??= User::factory()->create();
+        $user->assignRole('customer');
+        $user->assignRole('support');
 
         Sanctum::actingAs($user);
 

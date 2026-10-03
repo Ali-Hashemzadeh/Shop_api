@@ -23,4 +23,7 @@ enum PublicCodeEntity: string
     case Address = 'a';
     case Category = 'c';
     case Review = 'r';
+    // `k` (not `t`, which belongs to Payment) — the customer-facing support
+    // ticket handle, e.g. `bdk-Q8M2XC`.
+    case Ticket = 'k';
 }

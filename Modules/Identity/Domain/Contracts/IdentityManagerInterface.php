@@ -73,4 +73,42 @@ interface IdentityManagerInterface
      * @return list<int>
      */
     public function getDeliveryUserIds(): array;
+
+    /**
+     * Whether the given user holds the customer-support role. The Ticket module
+     * asks this instead of reading roles or the User model — e.g. before letting
+     * a ticket be assigned to someone.
+     */
+    public function isSupportUser(int $userId): bool;
+
+    /**
+     * Ids of every support agent — the audience for "a new ticket arrived"
+     * notifications. Ids only; no User model crosses this boundary.
+     *
+     * @return list<int>
+     */
+    public function getSupportUserIds(): array;
+
+    /**
+     * The support agents with the fields needed to *show* them (name, phone) so a
+     * frontend can render an "assign to" picker — resolved in one query. DTOs
+     * only; no User model crosses here.
+     *
+     * @return list<UserSummaryDTO>
+     */
+    public function getSupportUserSummaries(): array;
+
+    /**
+     * Grant the support role to an existing account, additively (never syncs, so
+     * every other role is kept). Idempotent. Returns the updated summary.
+     * Throws ModelNotFoundException when the user does not exist.
+     */
+    public function grantSupportRole(int $userId): UserSummaryDTO;
+
+    /**
+     * Remove the support role from an account, leaving its other roles intact.
+     * Idempotent. Returns the updated summary. Throws ModelNotFoundException when
+     * the user does not exist.
+     */
+    public function revokeSupportRole(int $userId): UserSummaryDTO;
 }

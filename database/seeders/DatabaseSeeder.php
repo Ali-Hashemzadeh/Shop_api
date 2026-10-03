@@ -27,6 +27,8 @@ use Modules\Shipment\Infrastructure\Persistence\Seeders\ShipmentPermissionsSeede
 use Modules\Shipment\Infrastructure\Persistence\Seeders\ShipmentSampleDataSeeder;
 use Modules\Shipment\Infrastructure\Persistence\Seeders\ShipmentScheduleSeeder;
 use Modules\Shipment\Infrastructure\Persistence\Seeders\ShippingParameterSeeder;
+use Modules\Ticket\Infrastructure\Persistence\Seeders\TicketCategorySeeder;
+use Modules\Ticket\Infrastructure\Persistence\Seeders\TicketPermissionsSeeder;
 
 class DatabaseSeeder extends Seeder
 {
@@ -65,6 +67,8 @@ class DatabaseSeeder extends Seeder
             // Runs last — activates a shipment per paid order and drives it to its state.
             ShipmentSampleDataSeeder::class,
             ReviewPermissionsSeeder::class,
+            TicketPermissionsSeeder::class,
+            TicketCategorySeeder::class,
             // AI product reviews: admin-only capability, the registered external
             // sources, and the two-stage prompt templates.
             ProductReviewAIPermissionsSeeder::class,

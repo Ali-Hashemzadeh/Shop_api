@@ -10,12 +10,17 @@ use Modules\Order\Domain\Contracts\OrderManagerInterface;
 use Modules\Order\Domain\Models\Order;
 use Modules\Order\Domain\Policies\OrderPolicy;
 use Modules\Order\Infrastructure\Persistence\Repositories\EloquentOrderManager;
+use Modules\Order\Infrastructure\Validation\OrderTicketReferenceValidator;
 
 class OrderServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
         $this->app->bind(OrderManagerInterface::class, EloquentOrderManager::class);
+
+        // Let the Ticket module ownership-check `order` references against our own
+        // table, without Ticket importing the Order model (published contract + tag).
+        $this->app->tag(OrderTicketReferenceValidator::class, 'ticket.reference_validators');
     }
 
     public function boot(): void

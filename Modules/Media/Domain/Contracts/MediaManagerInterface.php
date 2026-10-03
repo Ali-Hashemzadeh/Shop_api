@@ -32,6 +32,18 @@ interface MediaManagerInterface
     public function getMediaCollection(array $ids): Collection;
 
     /**
+     * Whether every id in the set exists AND was uploaded by the given user.
+     *
+     * Returns false as soon as any id is missing or owned by someone else, so a
+     * consuming module can reject an attempt to attach media the caller does not
+     * own — without ever querying the media table itself. An empty set is
+     * trivially true (nothing to attach).
+     *
+     * @param  array<int>  $ids
+     */
+    public function ownedByUser(array $ids, int $userId): bool;
+
+    /**
      * Delete a physical asset and its accompanying ledger record.
      */
     public function delete(int $id): bool;

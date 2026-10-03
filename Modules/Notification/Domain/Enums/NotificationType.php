@@ -49,4 +49,16 @@ enum NotificationType: string
      * product's public code and the SKU so the frontend can deep-link.
      */
     case PRODUCT_AVAILABLE = 'product_available';
+
+    /** Support-facing: a new support ticket was opened. Carries the ticket code. */
+    case TICKET_CREATED = 'ticket_created';
+
+    /** A new reply landed on a ticket — sent to whichever side did not write it. */
+    case TICKET_REPLY = 'ticket_reply';
+
+    /** Support-facing: a ticket was assigned to this agent. */
+    case TICKET_ASSIGNED = 'ticket_assigned';
+
+    /** Customer-facing: the status of one of their tickets changed. In-app only. */
+    case TICKET_STATUS_CHANGED = 'ticket_status_changed';
 }

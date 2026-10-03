@@ -104,4 +104,49 @@ class EloquentIdentityManager implements IdentityManagerInterface
     {
         return User::role('delivery')->pluck('id')->map(fn ($id) => (int) $id)->all();
     }
+
+    public function isSupportUser(int $userId): bool
+    {
+        $user = User::find($userId);
+
+        return $user?->hasRole('support') ?? false;
+    }
+
+    public function getSupportUserIds(): array
+    {
+        return User::role('support')->pluck('id')->map(fn ($id) => (int) $id)->all();
+    }
+
+    public function getSupportUserSummaries(): array
+    {
+        return User::role('support')
+            ->orderBy('id')
+            ->get()
+            ->map(fn (User $user) => UserSummaryDTO::fromModel($user))
+            ->all();
+    }
+
+    public function grantSupportRole(int $userId): UserSummaryDTO
+    {
+        $user = User::findOrFail($userId);
+
+        // Additive, never syncRoles: an agent may also be a shopper/admin, and
+        // those roles must survive the grant.
+        if (! $user->hasRole('support')) {
+            $user->assignRole('support');
+        }
+
+        return UserSummaryDTO::fromModel($user->fresh());
+    }
+
+    public function revokeSupportRole(int $userId): UserSummaryDTO
+    {
+        $user = User::findOrFail($userId);
+
+        if ($user->hasRole('support')) {
+            $user->removeRole('support');
+        }
+
+        return UserSummaryDTO::fromModel($user->fresh());
+    }
 }

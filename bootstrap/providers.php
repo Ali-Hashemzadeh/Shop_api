@@ -15,6 +15,7 @@ use Modules\Promotion\Infrastructure\Providers\PromotionServiceProvider;
 use Modules\Review\Infrastructure\Providers\ReviewServiceProvider;
 use Modules\Shipment\Infrastructure\Providers\ShipmentServiceProvider;
 use Modules\Sms\Infrastructure\Providers\SmsServiceProvider;
+use Modules\Ticket\Infrastructure\Providers\TicketServiceProvider;
 use Modules\Wishlist\Infrastructure\Providers\WishlistServiceProvider;
 
 return [
@@ -38,6 +39,9 @@ return [
     NotificationServiceProvider::class,
     AnalyticsServiceProvider::class,
     ReviewServiceProvider::class,
+    // Ticket depends only on the Identity contract; its integration events are
+    // consumed by the Notification module (listeners registered there).
+    TicketServiceProvider::class,
     // ProductReviewAI resolves Catalog (product context) and the Review contract
     // (publishing approved drafts), so it registers after both.
     ProductReviewAIServiceProvider::class,

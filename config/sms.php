@@ -44,6 +44,12 @@ return [
                 'shipment_assigned_delivery' => env('SMS_SMSIR_SHIPMENT_ASSIGNED_DELIVERY_TEMPLATE_ID'),
                 'product_available' => env('SMS_SMSIR_PRODUCT_AVAILABLE_TEMPLATE_ID'),
 
+                // Support tickets. Each is best-effort: with no template id
+                // configured the SMS is skipped (the in-app notification still lands).
+                'ticket_created' => env('SMS_SMSIR_TICKET_CREATED_TEMPLATE_ID'),
+                'ticket_reply' => env('SMS_SMSIR_TICKET_REPLY_TEMPLATE_ID'),
+                'ticket_assigned' => env('SMS_SMSIR_TICKET_ASSIGNED_TEMPLATE_ID'),
+
                 // Legacy, no longer sent: `shipment_sent` covered both postal handoff
                 // and local dispatch before they were split. Kept mapped so an
                 // existing .env stays valid during the changeover; safe to delete

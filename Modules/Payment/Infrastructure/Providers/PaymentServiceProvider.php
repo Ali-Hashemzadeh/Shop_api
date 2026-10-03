@@ -6,6 +6,7 @@ use Illuminate\Support\ServiceProvider;
 use Modules\Payment\Domain\Contracts\PaymentManagerInterface;
 use Modules\Payment\Infrastructure\Gateways\PaymentGatewayFactory;
 use Modules\Payment\Infrastructure\Persistence\Repositories\EloquentPaymentManager;
+use Modules\Payment\Infrastructure\Validation\PaymentTicketReferenceValidator;
 
 class PaymentServiceProvider extends ServiceProvider
 {
@@ -16,6 +17,10 @@ class PaymentServiceProvider extends ServiceProvider
         $this->app->bind(PaymentManagerInterface::class, EloquentPaymentManager::class);
 
         $this->app->singleton(PaymentGatewayFactory::class);
+
+        // Ticket ownership-checks `payment` references; a payment has no user of
+        // its own, so the validator defers to the Order contract (tag).
+        $this->app->tag(PaymentTicketReferenceValidator::class, 'ticket.reference_validators');
     }
 
     public function boot(): void
