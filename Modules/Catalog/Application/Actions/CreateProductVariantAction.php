@@ -52,6 +52,7 @@ class CreateProductVariantAction
                 'type' => $data['type'],
                 'is_default' => $isDefault,
                 'base_price' => (int) $data['base_price'],
+                'weight_grams' => isset($data['weight_grams']) ? (int) $data['weight_grams'] : null,
                 'max_quantity_per_order' => isset($data['max_quantity_per_order']) ? (int) $data['max_quantity_per_order'] : null,
                 'media_id' => $mediaId,
                 'attributes' => $data['attributes'] ?? null,

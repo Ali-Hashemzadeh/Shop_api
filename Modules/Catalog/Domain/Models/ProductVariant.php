@@ -19,6 +19,8 @@ class ProductVariant extends Model
         // The regular price, and the only price this module stores. Promotional
         // pricing is evaluated live by the Promotion module on every read.
         'base_price',
+        // Shipping weight in whole grams (nullable). Feeds the Post tariff calculator.
+        'weight_grams',
         'max_quantity_per_order',
         'media_id',
         'attributes',
@@ -29,6 +31,7 @@ class ProductVariant extends Model
         return [
             'is_default' => 'boolean',
             'base_price' => 'integer',
+            'weight_grams' => 'integer',
             'max_quantity_per_order' => 'integer',
             'attributes' => 'array',
         ];

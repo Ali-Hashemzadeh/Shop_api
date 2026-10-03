@@ -35,6 +35,20 @@ interface IdentityManagerInterface
     public function getUserSummary(int $userId): UserSummaryDTO;
 
     /**
+     * Classify the shipping distance between two provinces using the database-driven
+     * province adjacency Identity owns. Returns one of the three canonical primitive
+     * values (a shared vocabulary with the Shipment tariff engine):
+     *
+     *   - 'same_province'  origin and destination are the same province
+     *   - 'neighbor'       destination borders the origin (either direction)
+     *   - 'non_neighbor'   anything else, or when either id is null/unknown
+     *
+     * Identity classifies because it owns the provinces/adjacency tables; the Shipment
+     * module asks this question instead of joining across the module wall.
+     */
+    public function getProvinceDistanceType(?int $originProvinceId, ?int $destinationProvinceId): string;
+
+    /**
      * Ids of every user holding the administrator role — the audience for
      * operational, admin-facing notifications. Ids only; no User model crosses
      * this boundary.

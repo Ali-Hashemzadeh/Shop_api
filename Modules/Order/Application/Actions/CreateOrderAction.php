@@ -70,13 +70,22 @@ class CreateOrderAction
         // cart displayed earlier. A discount that ended while the customer was on the
         // checkout page therefore does not carry into the order.
         $subtotal = 0;
+        // Total parcel weight (grams) drives dynamic Post pricing. A variant with no
+        // captured weight contributes 0, which makes the calculator fall back safely.
+        $totalWeightGrams = 0;
         foreach ($enrichedCart->items as $cartItem) {
             $variant = $variantsBySku[$cartItem->sku];
             $subtotal += $variant->effectivePrice() * $cartItem->quantity;
+            $totalWeightGrams += (int) ($variant->weightGrams ?? 0) * $cartItem->quantity;
         }
 
-        $shippingCost = $selection->shippingCost;
+        // Shipment owns shipping-cost calculation: postal methods are priced by the Post
+        // tariff engine from origin/destination/weight; others keep their static price.
+        $shippingCost = $this->shipment->resolveShippingCostForSelection($selection, $totalWeightGrams);
         $snapshot = $selection->toSnapshot();
+        // Persist the resolved cost onto the snapshot so activateForPaidOrder() writes it
+        // to shipments.shipping_cost — the dynamic figure flows all the way through.
+        $snapshot['shipping_cost'] = $shippingCost;
         $expiresAt = now()->addMinutes((int) config('shipment.pending_order_ttl_minutes', 15));
 
         $customer = $this->identity->getUserSummary($userId);

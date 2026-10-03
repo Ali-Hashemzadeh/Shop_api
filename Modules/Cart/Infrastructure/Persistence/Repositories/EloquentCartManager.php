@@ -192,6 +192,7 @@ class EloquentCartManager implements CartManagerInterface
                 maxQuantityPerOrder: $variant?->maxQuantityPerOrder,
                 type: $variant?->type,
                 primaryImageUrl: $variant?->productPrimaryImageUrl,
+                weightGrams: $variant?->weightGrams,
             );
         })->all();
 

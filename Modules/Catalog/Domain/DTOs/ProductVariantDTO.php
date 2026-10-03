@@ -14,6 +14,10 @@ class ProductVariantDTO
         public readonly bool $isDefault,
         /** The regular price. Catalog owns only this — promotions live in Promotion. */
         public readonly int $basePrice,
+        /** Shipping weight in whole grams, or null when unset. Read by the Shipment
+         *  module's Post tariff calculator to price postage; null means "no weight
+         *  captured", which makes dynamic postage fall back to the static price. */
+        public readonly ?int $weightGrams,
         public readonly ?int $maxQuantityPerOrder,
         public readonly array $attributes,
         public readonly ?string $imageUrl,
@@ -65,6 +69,7 @@ class ProductVariantDTO
             type: $variant->type,
             isDefault: $variant->is_default,
             basePrice: $variant->base_price,
+            weightGrams: $variant->weight_grams,
             maxQuantityPerOrder: $variant->max_quantity_per_order,
             attributes: $variant->attributes ?? [],
             imageUrl: $imageUrl,

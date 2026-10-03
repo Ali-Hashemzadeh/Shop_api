@@ -8,18 +8,22 @@ use Carbon\Carbon;
 use DateTimeInterface;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Modules\Identity\Domain\Contracts\IdentityManagerInterface;
 use Modules\Shipment\Application\Services\DeliverySlotAvailabilityService;
 use Modules\Shipment\Application\Services\ShipmentTransitionService;
 use Modules\Shipment\Domain\Contracts\LocalDeliveryEligibilityInterface;
 use Modules\Shipment\Domain\Contracts\ShipmentManagerInterface;
+use Modules\Shipment\Domain\Contracts\ShippingCostCalculatorInterface;
 use Modules\Shipment\Domain\DTOs\DeliverySlotReservationDTO;
 use Modules\Shipment\Domain\DTOs\ShipmentDTO;
 use Modules\Shipment\Domain\DTOs\ShipmentSelectionDTO;
+use Modules\Shipment\Domain\DTOs\ShippingCostRequestDTO;
 use Modules\Shipment\Domain\Enums\ReservationStatus;
 use Modules\Shipment\Domain\Enums\ShipmentMethodType;
 use Modules\Shipment\Domain\Enums\ShipmentStatus;
+use Modules\Shipment\Domain\Exceptions\ShippingTariffNotFoundException;
 use Modules\Shipment\Domain\Models\DeliverySlot;
 use Modules\Shipment\Domain\Models\DeliverySlotReservation;
 use Modules\Shipment\Domain\Models\Shipment;
@@ -34,6 +38,7 @@ class EloquentShipmentManager implements ShipmentManagerInterface
         private readonly DeliverySlotAvailabilityService $availability,
         private readonly ShipmentTransitionService $transitions,
         private readonly IdentityManagerInterface $identity,
+        private readonly ShippingCostCalculatorInterface $shippingCalculator,
     ) {}
 
     public function getAvailableMethods(int $userId, ?int $addressId): array
@@ -291,6 +296,49 @@ class EloquentShipmentManager implements ShipmentManagerInterface
         $shipment = Shipment::where('order_id', $orderId)->first();
 
         return $shipment ? $this->transitions->toDTO($shipment) : null;
+    }
+
+    public function resolveShippingCostForSelection(ShipmentSelectionDTO $selection, int $totalWeightGrams): int
+    {
+        // Only postal methods are priced by the Post tariff engine. Local delivery and
+        // pickup keep their static configured price.
+        if ($selection->methodType !== ShipmentMethodType::Postal->value) {
+            return $selection->shippingCost;
+        }
+
+        $originProvinceId = (int) config('shipping.origin_province_id', 0) ?: null;
+        $destinationProvinceId = isset($selection->address['province_id'])
+            ? (int) $selection->address['province_id']
+            : null;
+
+        // Cannot price dynamically without an origin, a destination, and real weight —
+        // fall back to the static price rather than block or mis-price checkout.
+        if ($originProvinceId === null || $destinationProvinceId === null || $totalWeightGrams <= 0) {
+            return $selection->shippingCost;
+        }
+
+        try {
+            $breakdown = $this->shippingCalculator->calculate(new ShippingCostRequestDTO(
+                originProvinceId: $originProvinceId,
+                destinationProvinceId: $destinationProvinceId,
+                weightGrams: $totalWeightGrams,
+                serviceType: $selection->methodCode,
+                packageType: (string) config('shipping.default_package_type', 'standard'),
+            ));
+
+            return $breakdown->total;
+        } catch (ShippingTariffNotFoundException $e) {
+            // No tariff configured for this parcel yet — safe static fallback + a log so
+            // the gap is visible without failing a customer's checkout.
+            Log::info('Post shipping tariff missing; falling back to static price.', [
+                'method_code' => $selection->methodCode,
+                'destination_province_id' => $destinationProvinceId,
+                'weight_grams' => $totalWeightGrams,
+                'reason' => $e->getMessage(),
+            ]);
+
+            return $selection->shippingCost;
+        }
     }
 
     /**

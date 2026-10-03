@@ -58,6 +58,7 @@ class UpdateProductRequest extends FormRequest
             'variants.*.type' => ['required', 'in:image,color'],
             // Regular price only — see StoreProductRequest.
             'variants.*.base_price' => ['required', 'integer', 'min:0'],
+            'variants.*.weight_grams' => ['nullable', 'integer', 'min:0'],
             'variants.*.max_quantity_per_order' => ['nullable', 'integer', 'min:1'],
             'variants.*.is_default' => ['required', 'boolean'],
             'variants.*.media_id' => ['nullable', 'integer'],

@@ -23,6 +23,8 @@ class CartResource extends JsonResource
             'total_price' => $this->totalPrice,
             'regular_total_price' => $this->regularTotalPrice,
             'automatic_discount_total' => $this->automaticDiscountTotal,
+            // Total basket weight in grams (0 when no item carries a weight).
+            'total_weight_grams' => $this->totalWeightGrams,
         ];
     }
 }

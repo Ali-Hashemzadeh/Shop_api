@@ -44,6 +44,10 @@ class CartItemDTO
         public readonly bool $quantityValid = true,
         public readonly ?string $type = null,
         public readonly ?string $primaryImageUrl = null,
+        /** Per-unit shipping weight in grams, or null when unset. */
+        public readonly ?int $weightGrams = null,
+        /** weightGrams × quantity; 0 when this variant has no captured weight. */
+        public readonly int $lineWeightGrams = 0,
     ) {}
 
     public static function fromModel(
@@ -58,6 +62,7 @@ class CartItemDTO
         ?int $maxQuantityPerOrder = null,
         ?string $type = null,
         ?string $primaryImageUrl = null,
+        ?int $weightGrams = null,
     ): self {
         $effectiveMax = $availableStock !== null
             ? min(max(0, $availableStock), $maxQuantityPerOrder ?? PHP_INT_MAX)
@@ -90,6 +95,8 @@ class CartItemDTO
             quantityValid: $effectiveMax === null || $item->quantity <= $effectiveMax,
             type: $type,
             primaryImageUrl: $primaryImageUrl,
+            weightGrams: $weightGrams,
+            lineWeightGrams: $weightGrams !== null ? $item->quantity * $weightGrams : 0,
         );
     }
 }

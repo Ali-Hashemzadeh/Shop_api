@@ -42,6 +42,8 @@ class ProductVariantResource extends JsonResource
                 'amount' => $discount->discountAmount,
             ],
             'max_quantity_per_order' => $dto->maxQuantityPerOrder,
+            // Shipping weight in whole grams (null when unset).
+            'weight_grams' => $dto->weightGrams,
             'attributes' => $dto->attributes,
             'image_url' => $dto->imageUrl,
             // Available units for this variant (physical − reserved), from Inventory.

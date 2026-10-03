@@ -15,6 +15,9 @@ class IdentityModuleSeeder extends Seeder
             RolesAndPermissionsSeeder::class,
             DefaultUsersSeeder::class,
             LocationSeeder::class,
+            // Adjacency matrix for the Post shipping calculator — runs after
+            // LocationSeeder so the provinces it references already exist.
+            ProvinceNeighborSeeder::class,
         ]);
 
     }

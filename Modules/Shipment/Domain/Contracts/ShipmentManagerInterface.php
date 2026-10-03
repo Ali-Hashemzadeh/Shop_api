@@ -67,4 +67,17 @@ interface ShipmentManagerInterface
     public function activateForPaidOrder(int $orderId, int $userId, array $shipmentSnapshot): ?ShipmentDTO;
 
     public function findForOrder(int $orderId): ?ShipmentDTO;
+
+    /**
+     * Resolve the effective shipping cost (TOMANS) for a validated selection given the
+     * parcel's total weight. Postal methods are priced dynamically through the Post
+     * tariff engine; every other method returns its static configured price. Any
+     * inability to price dynamically (no origin configured, no destination province,
+     * zero weight, or no matching tariff) falls back to the selection's static cost, so
+     * checkout is never blocked by incomplete tariff data.
+     *
+     * This keeps the Shipment module the sole owner of shipping-cost calculation —
+     * Order/Cart supply only the weight and never compute a shipping price themselves.
+     */
+    public function resolveShippingCostForSelection(ShipmentSelectionDTO $selection, int $totalWeightGrams): int;
 }

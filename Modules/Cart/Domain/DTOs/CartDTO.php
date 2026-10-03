@@ -21,6 +21,8 @@ class CartDTO
         public readonly int $regularTotalPrice = 0,
         /** regularTotalPrice − totalPrice; what automatic discounts saved. */
         public readonly int $automaticDiscountTotal = 0,
+        /** Total basket weight in grams — the sum of line weights. Feeds a shipping quote. */
+        public readonly int $totalWeightGrams = 0,
     ) {}
 
     /** @param CartItemDTO[] $items */
@@ -31,6 +33,7 @@ class CartDTO
         // effectivePrice, so this is what checkout will charge for merchandise.
         $totalPrice = array_sum(array_map(static fn (CartItemDTO $i) => $i->lineTotal, $items));
         $regularTotalPrice = array_sum(array_map(static fn (CartItemDTO $i) => $i->regularLineTotal, $items));
+        $totalWeightGrams = array_sum(array_map(static fn (CartItemDTO $i) => $i->lineWeightGrams, $items));
 
         return new self(
             id: $cart->id,
@@ -42,6 +45,7 @@ class CartDTO
             totalPrice: $totalPrice,
             regularTotalPrice: $regularTotalPrice,
             automaticDiscountTotal: max(0, $regularTotalPrice - $totalPrice),
+            totalWeightGrams: $totalWeightGrams,
         );
     }
 }

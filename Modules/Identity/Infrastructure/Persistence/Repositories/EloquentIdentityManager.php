@@ -6,6 +6,7 @@ use Modules\Identity\Domain\Contracts\IdentityManagerInterface;
 use Modules\Identity\Domain\DTOs\AddressSnapshotDTO;
 use Modules\Identity\Domain\DTOs\UserSummaryDTO;
 use Modules\Identity\Domain\Models\Address;
+use Modules\Identity\Domain\Models\ProvinceNeighbor;
 use Modules\Identity\Domain\Models\User;
 
 class EloquentIdentityManager implements IdentityManagerInterface
@@ -55,6 +56,34 @@ class EloquentIdentityManager implements IdentityManagerInterface
     public function getUserSummary(int $userId): UserSummaryDTO
     {
         return UserSummaryDTO::fromModel(User::findOrFail($userId));
+    }
+
+    public function getProvinceDistanceType(?int $originProvinceId, ?int $destinationProvinceId): string
+    {
+        // Indeterminate destination/origin defaults to the farthest (safest) band, so
+        // a missing coordinate never accidentally prices as "same province".
+        if ($originProvinceId === null || $destinationProvinceId === null) {
+            return 'non_neighbor';
+        }
+
+        if ($originProvinceId === $destinationProvinceId) {
+            return 'same_province';
+        }
+
+        // Adjacency is matched in either direction, so a row seeded only one way still
+        // classifies both origin→destination and destination→origin as neighbours.
+        $isNeighbor = ProvinceNeighbor::query()
+            ->where(function ($query) use ($originProvinceId, $destinationProvinceId) {
+                $query->where('province_id', $originProvinceId)
+                    ->where('neighbor_province_id', $destinationProvinceId);
+            })
+            ->orWhere(function ($query) use ($originProvinceId, $destinationProvinceId) {
+                $query->where('province_id', $destinationProvinceId)
+                    ->where('neighbor_province_id', $originProvinceId);
+            })
+            ->exists();
+
+        return $isNeighbor ? 'neighbor' : 'non_neighbor';
     }
 
     public function getAdminUserIds(): array
