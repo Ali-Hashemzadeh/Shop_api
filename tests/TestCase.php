@@ -5,6 +5,7 @@ namespace Tests;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 use Laravel\Sanctum\Sanctum;
 use Modules\Analytics\Infrastructure\Persistence\Seeders\AnalyticsPermissionsSeeder;
+use Modules\Blog\Infrastructure\Persistence\Seeders\BlogPermissionsSeeder;
 use Modules\Catalog\Infrastructure\Persistence\Seeders\CatalogPermissionsSeeder;
 use Modules\Identity\Domain\Models\User;
 use Modules\Identity\Infrastructure\Persistence\Seeders\RolesAndPermissionsSeeder;
@@ -79,6 +80,11 @@ abstract class TestCase extends BaseTestCase
     protected function seedTicketPermissions(): void
     {
         $this->seed(TicketPermissionsSeeder::class);
+    }
+
+    protected function seedBlogPermissions(): void
+    {
+        $this->seed(BlogPermissionsSeeder::class);
     }
 
     protected function seedTicketCategories(): void

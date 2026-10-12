@@ -126,6 +126,17 @@ interface CatalogManagerInterface
 
     public function createProduct(array $data): ProductDTO;
 
+    /**
+     * Which of the given internal product ids exist (in any status). A cheap,
+     * single-query existence check for modules that hold loose product
+     * references (e.g. Blog's shoppable articles) and must validate them
+     * without touching Catalog's tables.
+     *
+     * @param  list<int>  $ids
+     * @return list<int>
+     */
+    public function getExistingProductIds(array $ids): array;
+
     public function addProductImage(int $productId, int $mediaId, int $sortOrder = 0): ProductImageDTO;
 
     public function removeProductImage(int $imageId): void;

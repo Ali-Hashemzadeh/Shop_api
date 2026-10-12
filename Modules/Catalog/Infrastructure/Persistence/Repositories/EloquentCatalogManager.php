@@ -365,6 +365,22 @@ class EloquentCatalogManager implements CatalogManagerInterface
             ->all();
     }
 
+    public function getExistingProductIds(array $ids): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids), fn (int $id) => $id > 0)));
+
+        if ($ids === []) {
+            return [];
+        }
+
+        return Product::query()
+            ->whereIn('id', $ids)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->values()
+            ->all();
+    }
+
     public function createProduct(array $data): ProductDTO
     {
         // createWithPublicCode: the `uuid` public code is minted by the model hook

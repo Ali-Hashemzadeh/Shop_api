@@ -5,6 +5,8 @@ namespace Database\Seeders;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Modules\Analytics\Infrastructure\Persistence\Seeders\AnalyticsPermissionsSeeder;
+use Modules\Blog\Infrastructure\Persistence\Seeders\BlogPermissionsSeeder;
+use Modules\Blog\Infrastructure\Persistence\Seeders\BlogSampleDataSeeder;
 use Modules\Catalog\Infrastructure\Persistence\Seeders\CatalogModuleSeeder;
 use Modules\Catalog\Infrastructure\Persistence\Seeders\CatalogSampleDataSeeder;
 use Modules\Identity\Infrastructure\Persistence\Seeders\IdentityModuleSeeder;
@@ -74,6 +76,10 @@ class DatabaseSeeder extends Seeder
             ProductReviewAIPermissionsSeeder::class,
             ReviewSourceSeeder::class,
             AiPromptSeeder::class,
+            // Blog/CMS: permissions, then demo content built through the real
+            // Actions (needs the admin account and catalog demo products above).
+            BlogPermissionsSeeder::class,
+            BlogSampleDataSeeder::class,
         ]);
     }
 }

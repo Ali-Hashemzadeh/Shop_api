@@ -19,4 +19,5 @@ Route::middleware(['api', 'auth:sanctum', 'throttle:api'])
         Route::get('/products', [AdminAnalyticsController::class, 'products']);
         Route::get('/customers', [AdminAnalyticsController::class, 'customers']);
         Route::get('/delivery', [AdminAnalyticsController::class, 'delivery']);
+        Route::get('/blog', [AdminAnalyticsController::class, 'blog']);
     });

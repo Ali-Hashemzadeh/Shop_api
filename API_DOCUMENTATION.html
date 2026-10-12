@@ -223,6 +223,24 @@
   <a href="#prai-draft-edit">Edit Draft</a>
   <a href="#prai-draft-approve">Approve / Reject</a>
   <a href="#prai-prompts">Prompts (read-only)</a>
+
+  <div class="section-label">Blog / CMS</div>
+  <a href="#blog-overview">Overview, Content &amp; Permissions</a>
+  <a href="#blog-posts">Posts (public)</a>
+  <a href="#blog-home">Blog Home</a>
+  <a href="#blog-taxonomy">Categories, Tags, Authors</a>
+  <a href="#blog-curation">Collections &amp; Placements</a>
+  <a href="#blog-comments">Comments</a>
+  <a href="#blog-engagement">Likes, Bookmarks, Follows</a>
+  <a href="#blog-feed">RSS Feed &amp; Sitemap</a>
+  <a href="#blog-preview">Signed Preview</a>
+  <a href="#blog-admin-posts">Admin &#8212; Posts</a>
+  <a href="#blog-admin-workflow">Admin &#8212; Workflow</a>
+  <a href="#blog-admin-editorial">Admin &#8212; Revisions &amp; Notes</a>
+  <a href="#blog-admin-taxonomy">Admin &#8212; Taxonomy &amp; Curation</a>
+  <a href="#blog-admin-comments">Admin &#8212; Moderation</a>
+  <a href="#blog-admin-analytics">Admin &#8212; Blog Analytics</a>
+  <a href="#blog-frontend-guide">Frontend Guide</a>
 </nav>
 
 <main>
@@ -341,7 +359,7 @@ curl -s -X POST http://localhost:8000/api/v1/media \
   <h3 id="public-codes">Public Codes</h3>
   <p>Every entity a customer might read aloud, paste into a support ticket, or search for carries a short
     <strong>public code</strong>: a lowercase namespace + entity segment, a hyphen, and a six-character uppercase suffix.</p>
-  <pre>bdp-K92XMQ    bdv-R7P4NZ    bdo-Q8M2XC    bdt-W4N7KP    bds-Z9C3TR    bda-H7Q9CM    bdc-T4K8NP</pre>
+  <pre>bdp-K92XMQ    bdv-R7P4NZ    bdo-Q8M2XC    bdt-W4N7KP    bds-Z9C3TR    bda-H7Q9CM    bdc-T4K8NP    bdb-K92XMQ    bdm-Q8M2XC</pre>
 
   <p>The <code>bd</code> namespace comes from the <code>PUBLIC_CODE_NAMESPACE</code> environment variable
     (required; normalized to lowercase). The suffix is drawn from a deliberately reduced, human-safe alphabet â€”
@@ -357,6 +375,8 @@ curl -s -X POST http://localhost:8000/api/v1/media \
     <tr><td>Shipment</td><td><code>bds-XXXXXX</code></td><td>response <code>id</code></td><td><code>shipments.public_code</code> <em>(existing, reused)</em></td></tr>
     <tr><td>Address</td><td><code>bda-XXXXXX</code></td><td><code>public_code</code></td><td><code>addresses.public_code</code> <em>(new)</em></td></tr>
     <tr><td>Category</td><td><code>bdc-XXXXXX</code></td><td><code>public_code</code></td><td><code>categories.public_code</code> <em>(new)</em></td></tr>
+    <tr><td>Blog post</td><td><code>bdb-XXXXXX</code></td><td>response <code>id</code> (public) / <code>public_code</code> (admin)</td><td><code>blog_posts.public_code</code> <em>(new)</em></td></tr>
+    <tr><td>Blog comment</td><td><code>bdm-XXXXXX</code></td><td>response <code>id</code> (public) / <code>public_code</code> (admin)</td><td><code>blog_comments.public_code</code> <em>(new; <code>m</code> because <code>c</code> is Category)</em></td></tr>
   </table>
 
   <div class="warn"><strong>Server-generated and immutable.</strong> Public codes are never accepted from client input,
@@ -436,6 +456,7 @@ curl -s -X POST http://localhost:8000/api/v1/media \
     <tr><td>uploads</td><td class="opt">20 / min</td><td>User ID (or IP for guests)</td><td>POST /media</td></tr>
     <tr><td>api</td><td class="opt">60 / min (auth) Â· 30 / min (guest)</td><td>User ID or IP</td><td>All authenticated endpoints; guest cart falls back to IP</td></tr>
     <tr><td>delivery-confirm</td><td class="req">5 / min by default</td><td>User ID + shipment public code</td><td>POST /delivery/shipments/{publicCode}/mark-delivered and POST /admin/shipments/{publicCode}/mark-delivered. Configurable via <code>SHIPMENT_DELIVERY_CONFIRM_MAX_ATTEMPTS</code>.</td></tr>
+    <tr><td>blog-comments</td><td class="req">10 / min by default</td><td>User ID</td><td>POST /blog/posts/{slug}/comments, POST /blog/comments/{code}/replies, POST /blog/comments/{code}/report &#8212; applied on top of <code>api</code>. Configurable via <code>BLOG_COMMENT_RATE_LIMIT</code>.</td></tr>
   </table>
   <div class="note"><strong>Endpoint badges:</strong> endpoints with non-default limits show a <span class="badge rate">N/min</span> badge in their header. All other public reads are 120/min and all authenticated writes are 60/min.</div>
 
@@ -4627,6 +4648,9 @@ async function deleteWorkingPeriod(token, id) {
     <tr><td><code>shipment_out_for_delivery</code></td><td>Local delivery reaches <code>out_for_delivery</code> (first dispatch or a retry)</td><td>customer</td><td>yes â€” <strong>one</strong> SMS carrying the order code + the delivery verification code</td><td><code>order_id</code>, <code>order_public_code</code> â€” <strong>never any code</strong></td></tr>
     <tr><td><code>shipment_sent</code> <em>(legacy)</em></td><td>Not raised any more. Rows written before postal handoff and local dispatch were split still carry it; history is never rewritten, so clients must keep rendering it.</td><td>customer</td><td>â€”</td><td><code>order_id</code>, <code>tracking_code</code>?</td></tr>
     <tr><td><code>shipment_delivered</code></td><td>Shipment reaches <code>delivered</code></td><td>customer</td><td>yes</td><td><code>order_id</code></td></tr>
+    <tr><td><code>blog_post_published</code></td><td>An article goes live for the <strong>first</strong> time in a category / tag / author the reader follows (republishing is silent)</td><td>followers</td><td>no</td><td><code>post_code</code>, <code>slug</code></td></tr>
+    <tr><td><code>blog_comment_reply</code></td><td>Someone else&#39;s reply under the reader&#39;s Blog comment is approved</td><td>parent comment author</td><td>no</td><td><code>comment_code</code>, <code>parent_comment_code</code>, <code>slug</code></td></tr>
+    <tr><td><code>blog_comment_approved</code></td><td>The reader&#39;s Blog comment passes moderation (first approval only)</td><td>comment author</td><td>no</td><td><code>comment_code</code>, <code>slug</code></td></tr>
   </table>
   <div class="warn"><strong><code>shipment_preparing</code> is SMS-only.</strong> It never appears in <code>GET /notifications</code>. Do not build UI that waits for it â€” use the shipment status endpoints for live fulfillment state.</div>
   <div class="warn"><strong>The delivery verification code is SMS-only and never appears in any API response</strong> â€” not in <code>data</code>, not in an order/shipment/driver payload. Only a hash is stored. A retry or a resend mints a <em>new</em> code by SMS and invalidates the previous one, without raising a second in-app notification.</div>
@@ -5935,6 +5959,296 @@ await fetch(`/api/v1/admin/reviews/${reviewCode}/reply`, {
 
   <div class="note"><strong>Model &amp; prompt history.</strong> Every generation stores the AI <code>model</code> and the prompt <code>name</code>/<code>version</code> it used. Prompts are versioned (<code>ai_prompts</code>), so editing a prompt is a new version and never rewrites past runs. Every external/AI request+response and every approval/rejection is recorded in <code>ai_review_generation_logs</code> for full debugging visibility.</div>
 
+
+  <!-- ═══ BLOG / CMS ═══ -->
+  <h2 id="blog-overview">Blog / CMS</h2>
+  <p>A full editorial Blog owned by the <code>Blog</code> module: articles with an editorial workflow and scheduling,
+    hierarchical categories, flat tags, Blog-owned author profiles, revisions + autosave, private editorial notes,
+    slug history, SEO metadata, shoppable articles (linked Catalog products), a real threaded discussion system
+    (separate from product Reviews), likes, bookmarks, follow-subscriptions, collections, keyed placements, an RSS
+    feed, sitemap data, and signed previews.</p>
+
+  <table>
+    <tr><th>Concept</th><th>Rule</th></tr>
+    <tr><td>Article id</td><td>Public code <code>bdb-XXXXXX</code> (response <code>id</code>). Server-generated, immutable, never accepted from input. Storefront URLs use the <code>slug</code>; admin routes use the numeric <code>id</code>.</td></tr>
+    <tr><td>Comment id</td><td>Public code <code>bdm-XXXXXX</code> (<code>m</code> for "message", because <code>c</code> is the Catalog category).</td></tr>
+    <tr><td>Content</td><td><strong>HTML only</strong> (from the admin rich-text editor). Sanitized on the server before it is stored; the API returns the stored HTML for the frontend to render as-is. There is no Markdown, no block JSON, no <code>content_format</code>, no reading-time field.</td></tr>
+    <tr><td>Visibility</td><td>A post is public only when <code>status = published</code>, <code>published_at &le; now</code>, <code>unpublish_at</code> is empty or in the future, and it is not deleted. Drafts, in-review, approved, scheduled, archived and deleted posts return <strong>404</strong> on every public endpoint &#8212; indistinguishable from a missing post.</td></tr>
+    <tr><td>Slugs</td><td>Unicode (Persian slugs such as <code>راهنمای-خرید-گوشی</code> are valid). Auto-generated from the title on create; <strong>never</strong> changed automatically when the title changes.</td></tr>
+    <tr><td>Media</td><td>Pre-upload via <code>POST /media</code>, then reference by id (<code>featured_media_id</code>, <code>og_media_id</code>, <code>media[].media_id</code>, comment <code>media_ids</code>). No inline uploads, no FK to the media table.</td></tr>
+    <tr><td>Pagination</td><td>Every list is <code>{data, links, meta}</code>, <code>per_page</code> 1&#8211;100 (default 15), <code>page</code>.</td></tr>
+  </table>
+
+  <div class="warn"><strong>HTML sanitization (server-side, allow-list).</strong> Allowed elements: <code>p br h1&#8211;h6 strong b em i u s ul ol li blockquote a img figure figcaption table thead tbody tr th td hr code pre</code>.
+    Allowed attributes: <code>dir</code>/<code>lang</code> on text blocks (RTL), <code>href title target</code> on links, <code>src alt title width height loading</code> on images, <code>colspan rowspan scope</code> on cells, <code>class</code> on <code>pre</code>/<code>code</code> (syntax highlighting).
+    Links accept <code>http</code>, <code>https</code>, <code>mailto</code>, <code>tel</code> and relative URLs and are always rewritten with <code>rel="noopener noreferrer nofollow"</code>; images accept <code>http</code>/<code>https</code>/relative sources only.
+    Removed: <code>&lt;script&gt;</code>, <code>&lt;style&gt;</code>, <code>&lt;iframe&gt;</code>, <code>&lt;object&gt;</code>, <code>&lt;form&gt;</code>, every <code>on*</code> event attribute, every <code>style</code> attribute, and <code>javascript:</code>/<code>data:</code> URLs. Comments are <strong>plain text</strong> &#8212; render them escaped.</div>
+
+  <h4>Permissions</h4>
+  <table>
+    <tr><th>Permission</th><th>Allows</th></tr>
+    <tr><td><code>blog.view-admin</code></td><td>Admin post list/detail, activity, revisions, preview links, editorial lookups</td></tr>
+    <tr><td><code>blog.post.create</code></td><td>Create drafts</td></tr>
+    <tr><td><code>blog.post.update-own</code></td><td>Edit <strong>own</strong> posts while they are <code>draft</code> (own = created it, or is the account linked to a credited author profile)</td></tr>
+    <tr><td><code>blog.post.update-any</code></td><td>Edit any post in any status, restore revisions</td></tr>
+    <tr><td><code>blog.post.submit-review</code></td><td>draft &rarr; in_review (own posts, or any with <code>update-any</code>)</td></tr>
+    <tr><td><code>blog.post.approve</code></td><td>in_review &rarr; approved, return to draft</td></tr>
+    <tr><td><code>blog.post.publish</code></td><td>Schedule, publish, unpublish</td></tr>
+    <tr><td><code>blog.post.archive</code> / <code>blog.post.delete</code> / <code>blog.post.restore</code></td><td>Archive / soft delete / restore a deleted post</td></tr>
+    <tr><td><code>blog.category.manage</code>, <code>blog.tag.manage</code>, <code>blog.author.manage</code>, <code>blog.collection.manage</code>, <code>blog.placement.manage</code></td><td>Manage that lookup</td></tr>
+    <tr><td><code>blog.comment.create</code></td><td>Write comments/replies (granted to <code>customer</code>)</td></tr>
+    <tr><td><code>blog.comment.view-admin</code> / <code>blog.comment.moderate</code> / <code>blog.comment.delete</code></td><td>Moderation queue / approve&#8226;reject&#8226;spam&#8226;restore + reports / delete any comment</td></tr>
+    <tr><td><code>blog.analytics.view</code></td><td>Blog engagement report</td></tr>
+  </table>
+  <div class="note">Authorization is <strong>permission-based</strong>: any account holding the exact permission can act, whatever its role. <code>admin</code> holds all of them. Future roles such as <code>blog_author</code>/<code>blog_editor</code>/<code>blog_moderator</code> are just bundles of these permissions. Likes, bookmarks, follows, reports and reactions need authentication only. Admin routes: <strong>401</strong> unauthenticated, <strong>404</strong> unknown id, <strong>403</strong> missing permission, <strong>422</strong> validation, <strong>409</strong> stale version.</div>
+
+  <!-- Public reads -->
+  <h3 id="blog-posts">Public &#8212; Posts</h3>
+  <div class="endpoint">
+    <div class="endpoint-header"><span class="method get">GET</span><span class="endpoint-path">/blog/posts</span><span class="badge">Public</span><span class="badge rate">120/min &#183; per IP</span></div>
+    <div class="endpoint-body">
+      <p>Published posts only. List rows never include article HTML.</p>
+      <table>
+        <tr><th>Query</th><th>Description</th></tr>
+        <tr><td>search</td><td class="opt">Title, excerpt, article text and category/tag names. Persian/Arabic variants are folded (<code>ي/ی</code>, <code>ك/ک</code>, Persian digits, diacritics, ZWNJ) for search only &#8212; stored content is never rewritten. A value shaped like <code>bdb-XXXXXX</code> switches to an <strong>exact</strong> public-code match (never partial).</td></tr>
+        <tr><td>category</td><td class="opt">Category slug &#8212; includes active sub-categories.</td></tr>
+        <tr><td>tag / author</td><td class="opt">Tag slug / author slug.</td></tr>
+        <tr><td>product_id</td><td class="opt">Numeric Catalog product id &#8212; articles that link this product ("articles about this product").</td></tr>
+        <tr><td>featured</td><td class="opt">Boolean.</td></tr>
+        <tr><td>published_from / published_to</td><td class="opt"><code>Y-m-d</code> dates.</td></tr>
+        <tr><td>sort</td><td class="opt"><code>newest</code> (default), <code>oldest</code>, <code>most_viewed</code>, <code>most_commented</code>, <code>popular</code>. Metric sorts read Blog's maintained counters; <code>popular</code> = views&#215;1 + likes&#215;3 + bookmarks&#215;4 + approved comments&#215;5.</td></tr>
+        <tr><td>per_page / page</td><td class="opt">1&#8211;100, default 15.</td></tr>
+      </table>
+      <pre>{
+  <span class="key">"data"</span>: [{
+    <span class="key">"id"</span>: <span class="str">"bdb-K92XMQ"</span>,
+    <span class="key">"title"</span>: <span class="str">"راهنمای خرید گوشی هوشمند"</span>,
+    <span class="key">"slug"</span>: <span class="str">"how-to-choose-a-phone"</span>,
+    <span class="key">"url"</span>: <span class="str">"https://shop.example/blog/how-to-choose-a-phone"</span>,
+    <span class="key">"excerpt"</span>: <span class="str">"..."</span>,
+    <span class="key">"featured_media"</span>: { <span class="key">"id"</span>: 12, <span class="key">"url"</span>: <span class="str">"https://.../hero.jpg"</span>, <span class="key">"mime_type"</span>: <span class="str">"image/jpeg"</span>, <span class="key">"alt_text"</span>: <span class="bool">null</span>, <span class="key">"caption"</span>: <span class="bool">null</span>, <span class="key">"role"</span>: <span class="bool">null</span>, <span class="key">"sort_order"</span>: 0 },
+    <span class="key">"authors"</span>: [{ <span class="key">"id"</span>: 1, <span class="key">"display_name"</span>: <span class="str">"تیم تحریریه"</span>, <span class="key">"slug"</span>: <span class="str">"editorial-team"</span>, <span class="key">"role"</span>: <span class="str">"author"</span>, <span class="key">"avatar"</span>: <span class="bool">null</span>, <span class="key">"seo"</span>: { } }],
+    <span class="key">"categories"</span>: [{ <span class="key">"id"</span>: 3, <span class="key">"name"</span>: <span class="str">"موبایل"</span>, <span class="key">"slug"</span>: <span class="str">"mobile-guides"</span>, <span class="key">"is_primary"</span>: <span class="bool">true</span> }],
+    <span class="key">"tags"</span>: [{ <span class="key">"id"</span>: 1, <span class="key">"name"</span>: <span class="str">"گوشی"</span>, <span class="key">"slug"</span>: <span class="str">"phone"</span> }],
+    <span class="key">"published_at"</span>: <span class="str">"2026-10-12T08:00:00.000000Z"</span>,
+    <span class="key">"updated_at"</span>: <span class="str">"2026-10-12T08:00:00.000000Z"</span>,
+    <span class="key">"is_featured"</span>: <span class="bool">true</span>, <span class="key">"allow_comments"</span>: <span class="bool">true</span>,
+    <span class="key">"likes_count"</span>: 4, <span class="key">"comments_count"</span>: 2, <span class="key">"views_count"</span>: 310,
+    <span class="key">"is_liked"</span>: <span class="bool">false</span>, <span class="key">"is_bookmarked"</span>: <span class="bool">false</span>
+  }],
+  <span class="key">"links"</span>: { }, <span class="key">"meta"</span>: { }
+}</pre>
+      <div class="note"><code>is_liked</code> / <code>is_bookmarked</code> are filled for a signed-in reader (send the Bearer token even on public routes); guests always get <code>false</code>. The route never returns 401/403.</div>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header"><span class="method get">GET</span><span class="endpoint-path">/blog/posts/{slug}</span><span class="badge">Public</span></div>
+    <div class="endpoint-body">
+      <p><code>{slug}</code> may be the current slug, the exact public code (<code>bdb-XXXXXX</code>, any case), or a <strong>retired slug</strong>. A retired slug returns the post with a <code>redirect</code> block &#8212; issue a 301 on the storefront to <code>redirect.to</code>.</p>
+      <pre>{
+  <span class="key">"data"</span>: {
+    <span class="comment">// …every list field above, plus:</span>
+    <span class="key">"content"</span>: <span class="str">"&lt;h2&gt;چرا این راهنما؟&lt;/h2&gt;&lt;p&gt;...&lt;/p&gt;"</span>,
+    <span class="key">"first_published_at"</span>: <span class="str">"2026-10-01T08:00:00.000000Z"</span>,
+    <span class="key">"modified_at"</span>: <span class="str">"2026-10-12T08:00:00.000000Z"</span>,
+    <span class="key">"media"</span>: [{ <span class="key">"id"</span>: 15, <span class="key">"url"</span>: <span class="str">"..."</span>, <span class="key">"alt_text"</span>: <span class="str">"گوشی روی میز"</span>, <span class="key">"caption"</span>: <span class="str">"..."</span>, <span class="key">"role"</span>: <span class="str">"inline"</span>, <span class="key">"sort_order"</span>: 0 }],
+    <span class="key">"related_products"</span>: [{ <span class="key">"id"</span>: <span class="str">"bdp-R7P4NZ"</span>, <span class="key">"product_id"</span>: 10, <span class="key">"title"</span>: <span class="str">"..."</span>, <span class="key">"slug"</span>: <span class="str">"..."</span>, <span class="key">"primary_image_url"</span>: <span class="str">"..."</span>, <span class="key">"base_price"</span>: 12000000, <span class="key">"effective_price"</span>: 10800000, <span class="key">"rating_average"</span>: 4.5, <span class="key">"relation_type"</span>: <span class="str">"featured"</span> }],
+    <span class="key">"seo"</span>: {
+      <span class="key">"title"</span>: <span class="str">"..."</span>, <span class="key">"description"</span>: <span class="str">"..."</span>, <span class="key">"canonical_url"</span>: <span class="str">"https://shop.example/blog/how-to-choose-a-phone"</span>,
+      <span class="key">"og_title"</span>: <span class="str">"..."</span>, <span class="key">"og_description"</span>: <span class="str">"..."</span>, <span class="key">"og_media"</span>: { },
+      <span class="key">"robots_index"</span>: <span class="bool">true</span>, <span class="key">"robots_follow"</span>: <span class="bool">true</span>, <span class="key">"robots"</span>: <span class="str">"index,follow"</span>
+    },
+    <span class="key">"breadcrumbs"</span>: [{ <span class="key">"name"</span>: <span class="str">"راهنمای خرید"</span>, <span class="key">"slug"</span>: <span class="str">"buying-guides"</span> }, { <span class="key">"name"</span>: <span class="str">"موبایل"</span>, <span class="key">"slug"</span>: <span class="str">"mobile-guides"</span> }],
+    <span class="key">"structured_data"</span>: { <span class="key">"article"</span>: { <span class="key">"@type"</span>: <span class="str">"BlogPosting"</span> }, <span class="key">"breadcrumb"</span>: { <span class="key">"@type"</span>: <span class="str">"BreadcrumbList"</span> } },
+    <span class="key">"redirect"</span>: <span class="bool">null</span>   <span class="comment">// or { "from": "old-slug", "to": "how-to-choose-a-phone", "status": 301 }</span>
+  }
+}</pre>
+      <div class="note"><strong>SEO fallbacks</strong> are already applied: <code>title</code> &larr; seo_title &rarr; title; <code>description</code> &larr; seo_description &rarr; excerpt; <code>og_title</code> &larr; og_title &rarr; seo_title &rarr; title; <code>og_description</code> &larr; og_description &rarr; seo_description &rarr; excerpt; <code>og_media</code> &larr; og media &rarr; featured media; <code>canonical_url</code> &larr; canonical_url &rarr; storefront URL. <code>structured_data</code> is ready-to-embed JSON-LD.</div>
+      <div class="note"><strong>Related products</strong> are hydrated live from Catalog (current price and discount); Blog never stores a price. Unpublished or deleted products are silently omitted.</div>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header"><span class="method get">GET</span><span class="endpoint-path">/blog/posts/{slug}/related</span><span class="badge">Public</span></div>
+    <div class="endpoint-body"><p>Query <code>limit</code> (1&#8211;20, default 4). Editor-curated related posts first (published only, curated order), then a fallback ranked by shared categories + tags and recency. Returns <code>{ "data": [ post card, … ] }</code>.</p></div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header"><span class="method post">POST</span><span class="endpoint-path">/blog/posts/{slug}/views</span><span class="badge">Public</span><span class="badge rate">120/min &#183; per IP</span></div>
+    <div class="endpoint-body"><p>Call <strong>once per article page view</strong> (views are never counted on GET, because SSR, prefetch and crawlers hit GETs). Bots are ignored by user agent; each viewer (user id, else <code>X-Session-Id</code>, else IP+UA) counts once per 24 h by default. Always <strong>202</strong> <code>{ "recorded": true|false }</code>.</p></div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header"><span class="method post">POST</span><span class="endpoint-path">/blog/posts/{slug}/product-clicks</span><span class="badge">Public</span></div>
+    <div class="endpoint-body"><p>Body <code>{ "product_id": 10, "placement": "inline_card" }</code>. The product must be linked from the article (else <strong>422</strong> on <code>product_id</code>). Deduplicated per viewer/post/product (1 h). <strong>202</strong> <code>{ "recorded": true|false }</code>. Send <code>X-Session-Id</code> for guests; only a one-way hash of it is published to analytics.</p></div>
+  </div>
+
+  <h3 id="blog-home">Public &#8212; Blog Home</h3>
+  <div class="endpoint">
+    <div class="endpoint-header"><span class="method get">GET</span><span class="endpoint-path">/blog</span><span class="badge">Public</span></div>
+    <div class="endpoint-body"><pre>{ <span class="key">"data"</span>: { <span class="key">"featured"</span>: [ ], <span class="key">"latest"</span>: [ ], <span class="key">"placements"</span>: { <span class="key">"blog.home.hero"</span>: [ ], <span class="key">"blog.home.editor_picks"</span>: [ ], <span class="key">"blog.home.secondary"</span>: [ ] }, <span class="key">"categories"</span>: [ <span class="comment">/* tree */</span> ] } }</pre></div>
+  </div>
+
+  <h3 id="blog-taxonomy">Public &#8212; Categories, Tags, Authors</h3>
+  <table>
+    <tr><th>Endpoint</th><th>Returns</th></tr>
+    <tr><td><code>GET /blog/categories</code></td><td>Active category tree (roots with nested <code>children</code>), ordered by <code>sort_order</code>, name, id.</td></tr>
+    <tr><td><code>GET /blog/categories/{slug}</code></td><td>One active category with its active children and <code>seo</code> (<code>title</code>, <code>description</code>, <code>canonical_url</code>). Inactive &rarr; 404.</td></tr>
+    <tr><td><code>GET /blog/categories/{slug}/posts</code></td><td>Paginated posts in the category <em>and its active sub-categories</em>. Accepts the post-list filters.</td></tr>
+    <tr><td><code>GET /blog/tags</code>, <code>/blog/tags/{slug}</code>, <code>/blog/tags/{slug}/posts</code></td><td>Active tags (paginated, <code>search</code>), one tag, its posts.</td></tr>
+    <tr><td><code>GET /blog/authors</code>, <code>/blog/authors/{slug}</code>, <code>/blog/authors/{slug}/posts</code></td><td>Active author profiles (Blog-owned &#8212; never the Identity user; no <code>user_id</code>), one author, their posts.</td></tr>
+  </table>
+  <div class="note">Inactive categories, tags and authors are hidden everywhere public, including from post cards &#8212; the post itself stays visible.</div>
+
+  <h3 id="blog-curation">Public &#8212; Collections &amp; Placements</h3>
+  <table>
+    <tr><th>Endpoint</th><th>Returns</th></tr>
+    <tr><td><code>GET /blog/collections</code></td><td>Active collections inside their optional <code>starts_at</code>/<code>ends_at</code> window (paginated).</td></tr>
+    <tr><td><code>GET /blog/collections/{slug}</code></td><td>One collection with <code>posts</code> in curated order &#8212; published posts only.</td></tr>
+    <tr><td><code>GET /blog/placements/{key}</code></td><td>Placements for a key (e.g. <code>blog.home.hero</code>) active right now, ordered by <code>sort_order</code>, id; each row has a <code>post</code> card. Unpublished placed posts are skipped and appear automatically once published.</td></tr>
+  </table>
+
+  <h3 id="blog-comments">Comments</h3>
+  <div class="endpoint">
+    <div class="endpoint-header"><span class="method get">GET</span><span class="endpoint-path">/blog/posts/{slug}/comments</span><span class="badge">Public</span></div>
+    <div class="endpoint-body">
+      <p>Approved comments only, paginated by top-level thread (<code>sort</code> = <code>newest</code>|<code>oldest</code>), each with nested approved <code>replies</code> (max depth 3). A deleted comment that still has visible replies is kept as a placeholder (<code>is_deleted: true</code>, <code>body</code>/<code>author</code> null).</p>
+      <pre>{ <span class="key">"data"</span>: [{
+  <span class="key">"id"</span>: <span class="str">"bdm-Q8M2XC"</span>, <span class="key">"parent_id"</span>: <span class="bool">null</span>, <span class="key">"author"</span>: { <span class="key">"name"</span>: <span class="str">"مینا راد"</span> },
+  <span class="key">"body"</span>: <span class="str">"ممنون از راهنما!"</span>, <span class="key">"is_deleted"</span>: <span class="bool">false</span>, <span class="key">"is_edited"</span>: <span class="bool">false</span>, <span class="key">"is_mine"</span>: <span class="bool">false</span>,
+  <span class="key">"attachments"</span>: [ ], <span class="key">"reactions"</span>: { <span class="key">"like"</span>: 3, <span class="key">"helpful"</span>: 1 }, <span class="key">"my_reaction"</span>: <span class="bool">null</span>,
+  <span class="key">"created_at"</span>: <span class="str">"..."</span>, <span class="key">"edited_at"</span>: <span class="bool">null</span>, <span class="key">"replies"</span>: [ ]
+}], <span class="key">"links"</span>: { }, <span class="key">"meta"</span>: { } }</pre>
+    </div>
+  </div>
+  <table>
+    <tr><th>Endpoint</th><th>Auth</th><th>Behaviour</th></tr>
+    <tr><td><code>POST /blog/posts/{slug}/comments</code></td><td><code>blog.comment.create</code> &#183; <span class="badge rate">10/min</span></td><td>Body <code>body</code> (plain text, &le; 5000), <code>media_ids?</code> (&le; 5 Media ids <strong>you uploaded</strong>; another user's media &rarr; 422). <strong>201</strong>; starts <code>pending</code> (shown to you as <code>status</code>). Readers may post many comments. Comments closed (<code>allow_comments=false</code>) &rarr; 422 on <code>post</code>.</td></tr>
+    <tr><td><code>POST /blog/comments/{code}/replies</code></td><td>same</td><td>Reply to an <strong>approved</strong> comment (anything else &rarr; 404). Deeper than 3 levels &rarr; 422 on <code>parent</code>.</td></tr>
+    <tr><td><code>PATCH /blog/comments/{code}</code></td><td>author only (403)</td><td>Edit <code>body</code>/<code>media_ids</code>. An approved comment goes back to <code>pending</code>.</td></tr>
+    <tr><td><code>DELETE /blog/comments/{code}</code></td><td>author or <code>blog.comment.delete</code></td><td>Soft delete, <strong>204</strong>.</td></tr>
+    <tr><td><code>POST /blog/comments/{code}/report</code></td><td>signed in &#183; <span class="badge rate">10/min</span></td><td>Body <code>reason</code> (<code>spam</code>|<code>abuse</code>|<code>off_topic</code>|<code>misinformation</code>|<code>other</code>), <code>details?</code>. 201 new / 200 <code>already_reported: true</code> while your previous report is open. Reporting your own comment &rarr; 422.</td></tr>
+    <tr><td><code>POST /blog/comments/{code}/reactions</code></td><td>signed in</td><td>Body <code>reaction</code> = <code>like</code>|<code>helpful</code>. One reaction per reader; repeating is a no-op, a different one replaces it.</td></tr>
+    <tr><td><code>DELETE /blog/comments/{code}/reactions</code></td><td>signed in</td><td>Remove your reaction (idempotent).</td></tr>
+  </table>
+
+  <h3 id="blog-engagement">Likes, Bookmarks, Subscriptions</h3>
+  <table>
+    <tr><th>Endpoint</th><th>Response</th></tr>
+    <tr><td><code>POST</code> / <code>DELETE /blog/posts/{slug}/like</code></td><td><code>{ "liked": true|false, "likes_count": 5 }</code> &#8212; idempotent both ways.</td></tr>
+    <tr><td><code>POST</code> / <code>DELETE /blog/posts/{slug}/bookmark</code></td><td><code>{ "bookmarked": true|false }</code> &#8212; idempotent.</td></tr>
+    <tr><td><code>GET /blog/bookmarks</code></td><td>Your saved posts (still-published only), newest save first, paginated post cards.</td></tr>
+    <tr><td><code>GET /blog/subscriptions</code></td><td>Your follows: <code>{ id, subject_type, subject_id, subject: { name, slug }, created_at }</code>.</td></tr>
+    <tr><td><code>POST /blog/subscriptions</code></td><td>Body <code>{ "subject_type": "category"|"tag"|"author", "subject_id": 3 }</code>. The subject must exist and be active (else 422). 201 new / 200 already following.</td></tr>
+    <tr><td><code>DELETE /blog/subscriptions/{id}</code></td><td>204. Another reader's id &rarr; <strong>404</strong>.</td></tr>
+  </table>
+  <div class="note">All of these require a token (<code>auth:sanctum</code>, 60/min) but no permission; the post must be publicly visible (else 404). Following a subject sends an in-app <code>blog_post_published</code> notification the first time a matching article goes live.</div>
+
+  <h3 id="blog-feed">RSS Feed &amp; Sitemap</h3>
+  <table>
+    <tr><th>Endpoint</th><th>Returns</th></tr>
+    <tr><td><code>GET /blog/feed</code></td><td>RSS 2.0 (<code>application/rss+xml</code>): latest published posts with title, storefront link, public-code guid, excerpt, authors (<code>dc:creator</code>), <code>pubDate</code>, <code>atom:updated</code>, categories and the featured image enclosure.</td></tr>
+    <tr><td><code>GET /blog/sitemap</code></td><td><code>{ "data": [ { "type": "post"|"category"|"tag"|"author", "slug", "url", "published_at", "updated_at", "indexable" } ] }</code> &#8212; indexable published posts, active categories, active authors, and active tags when <code>BLOG_SITEMAP_INCLUDE_TAGS=true</code>. Other modules use <code>BlogManagerInterface::getSitemapEntries()</code>.</td></tr>
+  </table>
+
+  <h3 id="blog-preview">Signed Preview</h3>
+  <p>Editors call <code>POST /admin/blog/posts/{id}/preview-link</code> (optionally <code>{ "revision_id": 7 }</code>) and receive <code>{ "url", "expires_at" }</code>. The URL (<code>GET /blog/preview/{id}?expires=…&amp;signature=…</code>) needs no token, is valid for <code>BLOG_PREVIEW_TTL_MINUTES</code> (default 60), and returns the normal detail shape plus <code>"is_preview": true</code> and the real <code>status</code>, with <code>Cache-Control: no-store</code> and <code>X-Robots-Tag: noindex, nofollow</code>. A tampered or expired signature is <strong>403</strong>. There is no <code>?preview=true</code> flag on public endpoints.</p>
+
+  <!-- Admin -->
+  <h3 id="blog-admin-posts">Admin &#8212; Posts</h3>
+  <table>
+    <tr><th>Endpoint</th><th>Permission</th><th>Notes</th></tr>
+    <tr><td><code>GET /admin/blog/posts</code></td><td><code>blog.view-admin</code></td><td>Filters: <code>search</code> (title/slug/text, or exact <code>bdb-</code> code), <code>status</code>, <code>category_id</code>, <code>tag_id</code>, <code>author_id</code>, <code>featured</code>, <code>published_from/to</code>, <code>created_from/to</code>, <code>trashed</code> (<code>with</code>|<code>only</code>), <code>sort</code> (<code>newest</code>|<code>oldest</code>|<code>updated</code>|<code>title</code>). No HTML in rows.</td></tr>
+    <tr><td><code>POST /admin/blog/posts</code></td><td><code>blog.post.create</code></td><td>Creates a <code>draft</code>, revision #1 and a <code>created</code> audit entry. <strong>201</strong>.</td></tr>
+    <tr><td><code>GET /admin/blog/posts/{id}</code></td><td><code>blog.view-admin</code></td><td>Full editor shape incl. <code>content</code>, <code>version</code>, raw <code>seo</code>, <code>media</code>, <code>products</code>, <code>related_post_ids</code>, <code>stats</code>, <code>is_publicly_visible</code>, <code>deleted_at</code>.</td></tr>
+    <tr><td><code>PATCH /admin/blog/posts/{id}</code></td><td><code>update-any</code>, or <code>update-own</code> on own draft</td><td><strong><code>version</code> required</strong>. Stale version &rarr; <strong>409</strong> <code>{ message, submitted_version, current_version }</code> and nothing is written.</td></tr>
+    <tr><td><code>DELETE /admin/blog/posts/{id}</code></td><td><code>blog.post.delete</code></td><td>Soft delete (204). Revisions, audit trail, slug history and attachments are kept.</td></tr>
+    <tr><td><code>POST /admin/blog/posts/{id}/restore</code></td><td><code>blog.post.restore</code></td><td>Undo a delete (422 if not deleted).</td></tr>
+    <tr><td><code>GET /admin/blog/posts/{id}/activity</code></td><td><code>blog.view-admin</code></td><td>Audit trail: <code>created</code>, <code>updated</code>, <code>submitted_for_review</code>, <code>returned_to_draft</code>, <code>approved</code>, <code>scheduled</code>, <code>published</code>, <code>unpublished</code>, <code>archived</code>, <code>deleted</code>, <code>restored</code>, <code>revision_restored</code>, <code>slug_changed</code>, <code>featured</code>, <code>unfeatured</code>.</td></tr>
+  </table>
+  <div class="block-label">Create / update body</div>
+  <table>
+    <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+    <tr><td>title</td><td class="req">required on create</td><td>&le; 255</td></tr>
+    <tr><td>slug</td><td class="opt">optional</td><td>Unicode slug; unique; may not look like a <code>bdb-</code> code; may not be another post's retired slug. Changing it on a post that was ever published keeps the old slug as a redirect.</td></tr>
+    <tr><td>excerpt / content</td><td class="opt">optional</td><td><code>content</code> is editor HTML, sanitized on save (&le; 1,000,000 chars).</td></tr>
+    <tr><td>authors</td><td class="req">required on create</td><td><code>[{ "author_id": 1, "role": "author"|"editor"|"contributor"|"reviewer" }]</code>, ordered; active authors only; at least one <code>author</code>. <code>primary_author_id</code> follows the first <code>author</code>.</td></tr>
+    <tr><td>category_ids / primary_category_id</td><td class="opt">optional</td><td>Exactly one primary when categories exist (defaults to the first).</td></tr>
+    <tr><td>tag_ids</td><td class="opt">optional</td><td>Existing tag ids only &#8212; tags are never created from post input.</td></tr>
+    <tr><td>featured_media_id / og_media_id</td><td class="opt">optional</td><td>Existing Media ids.</td></tr>
+    <tr><td>media</td><td class="opt">optional</td><td><code>[{ "media_id", "role": "inline"|"gallery"|"attachment", "alt_text", "caption" }]</code> &#8212; Blog-specific alt/caption per article.</td></tr>
+    <tr><td>products</td><td class="opt">optional</td><td><code>[{ "product_id", "relation_type": "featured"|"mentioned"|"recommended"|"comparison" }]</code> &#8212; existence checked through Catalog.</td></tr>
+    <tr><td>related_post_ids</td><td class="opt">optional</td><td>Curated related posts (not self).</td></tr>
+    <tr><td>seo_title, seo_description, canonical_url, og_title, og_description, robots_index, robots_follow</td><td class="opt">optional</td><td>SEO overrides (see fallbacks above).</td></tr>
+    <tr><td>allow_comments, is_featured, unpublish_at</td><td class="opt">optional</td><td><code>unpublish_at</code> must be in the future.</td></tr>
+    <tr><td>version</td><td class="req">required on PATCH</td><td>The version you loaded.</td></tr>
+  </table>
+  <div class="note">Sending a key replaces that relation; omitting it leaves it untouched; an empty array removes all. <code>public_code</code>, <code>status</code>, <code>version</code> bumps and audit columns are never accepted.</div>
+
+  <h3 id="blog-admin-workflow">Admin &#8212; Workflow</h3>
+  <table>
+    <tr><th>Endpoint</th><th>Move</th><th>Permission</th></tr>
+    <tr><td><code>POST /admin/blog/posts/{id}/submit-review</code></td><td>draft &rarr; in_review</td><td><code>blog.post.submit-review</code> (own, or any with <code>update-any</code>)</td></tr>
+    <tr><td><code>POST …/return-to-draft</code> <code>{ "reason"? }</code></td><td>in_review|archived &rarr; draft</td><td><code>blog.post.approve</code></td></tr>
+    <tr><td><code>POST …/approve</code></td><td>in_review &rarr; approved</td><td><code>blog.post.approve</code></td></tr>
+    <tr><td><code>POST …/schedule</code> <code>{ "published_at", "unpublish_at"? }</code></td><td>approved &rarr; scheduled (future time)</td><td><code>blog.post.publish</code></td></tr>
+    <tr><td><code>POST …/publish</code></td><td>approved|scheduled &rarr; published (idempotent)</td><td><code>blog.post.publish</code></td></tr>
+    <tr><td><code>POST …/unpublish</code></td><td>published|scheduled &rarr; approved</td><td><code>blog.post.publish</code></td></tr>
+    <tr><td><code>POST …/archive</code></td><td>any &rarr; archived</td><td><code>blog.post.archive</code></td></tr>
+  </table>
+  <div class="note">Illegal moves &rarr; <strong>422</strong> on <code>status</code>. <code>first_published_at</code> is set once, <code>last_published_at</code> on every real publication, <code>published_at</code> is the scheduled/current publication time. The <code>blogs:publish-scheduled</code> command (every minute) publishes due schedules and unpublishes posts whose <code>unpublish_at</code> passed; both are idempotent. Posts with a lapsed <code>unpublish_at</code> disappear from public reads immediately, even before the command runs.</div>
+
+  <h3 id="blog-admin-editorial">Admin &#8212; Revisions, Notes, Autosave</h3>
+  <table>
+    <tr><th>Endpoint</th><th>Notes</th></tr>
+    <tr><td><code>GET /admin/blog/posts/{id}/revisions</code></td><td>Append-only history, newest first (no content in rows). <code>blog.view-admin</code>.</td></tr>
+    <tr><td><code>GET …/revisions/{revision}</code></td><td>Full snapshot: content, slug, featured media, <code>seo_snapshot</code>, <code>taxonomy_snapshot</code>, <code>author_snapshot</code>, <code>status_snapshot</code>.</td></tr>
+    <tr><td><code>POST …/revisions/{revision}/restore</code> <code>{ "version" }</code></td><td>Saves the old content as a <strong>new</strong> revision (history is never rewritten). Same permission and 409 rules as PATCH; status is not changed.</td></tr>
+    <tr><td><code>GET</code> / <code>POST …/notes</code>, <code>PATCH …/notes/{note}</code> <code>{ "resolved"?, "body"? }</code></td><td>Private editorial notes &#8212; never on any public endpoint. Anyone collaborating on the post may resolve/reopen; only the note's author may edit its text.</td></tr>
+    <tr><td><code>GET</code> / <code>PUT …/autosave</code> <code>{ title?, excerpt?, content? }</code></td><td>One replaceable autosave per editor per post; never a revision; <code>is_stale</code> when the post was saved since. A manual save clears it.</td></tr>
+    <tr><td><code>POST …/preview-link</code></td><td>See <a href="#blog-preview">Signed Preview</a>.</td></tr>
+  </table>
+  <div class="note">A <strong>revision</strong> is recorded on create, on every manual save that changes title/slug/excerpt/content/featured media/SEO/taxonomy/authors, on every real publication, and on revision restore.</div>
+
+  <h3 id="blog-admin-taxonomy">Admin &#8212; Categories, Tags, Authors, Collections, Placements</h3>
+  <table>
+    <tr><th>Resource</th><th>Endpoints</th><th>Rules</th></tr>
+    <tr><td>Categories</td><td><code>GET /admin/blog/categories</code>, <code>GET …/categories/tree</code>, <code>POST</code>, <code>PATCH /{id}</code>, <code>DELETE /{id}</code></td><td>Fields: <code>name</code>, <code>slug?</code>, <code>parent_id?</code>, <code>description?</code>, <code>media_id?</code>, <code>is_active</code>, <code>sort_order</code>, <code>seo_title?</code>, <code>seo_description?</code>. Self-parent/cycles &rarr; 422. Delete refused (422) while it has sub-categories or posts &#8212; deactivate instead.</td></tr>
+    <tr><td>Tags</td><td><code>GET</code>, <code>POST</code>, <code>PATCH /{id}</code>, <code>DELETE /{id}</code> under <code>/admin/blog/tags</code></td><td>Fields: <code>name</code>, <code>slug?</code>, <code>is_active</code>. No description. Delete detaches the tag from all posts.</td></tr>
+    <tr><td>Authors</td><td>… under <code>/admin/blog/authors</code></td><td>Fields: <code>display_name</code>, <code>slug?</code>, <code>user_id?</code> (an existing account, checked through Identity; one profile per account), <code>bio?</code>, <code>media_id?</code>, <code>job_title?</code>, <code>is_active</code>, <code>seo_*</code>. Delete refused while credited on any post &#8212; deactivate instead.</td></tr>
+    <tr><td>Collections</td><td><code>GET</code>, <code>POST</code>, <code>GET /{id}</code>, <code>PATCH /{id}</code>, <code>DELETE /{id}</code> under <code>/admin/blog/collections</code></td><td>Fields: <code>name</code>, <code>slug?</code>, <code>description?</code>, <code>is_active</code>, <code>starts_at?</code>, <code>ends_at?</code>, <code>post_ids</code> (ordered).</td></tr>
+    <tr><td>Placements</td><td><code>GET</code> (filter <code>placement_key</code>), <code>POST</code>, <code>PATCH /{id}</code>, <code>DELETE /{id}</code> under <code>/admin/blog/placements</code></td><td>Fields: <code>placement_key</code> (dotted, e.g. <code>blog.home.hero</code> &#8212; new slots are data, not schema), <code>blog_post_id</code>, <code>starts_at?</code>, <code>ends_at?</code>, <code>sort_order</code>.</td></tr>
+  </table>
+  <div class="note">Lookup lists are readable with <code>blog.view-admin</code> or the matching <code>*.manage</code> permission (so writers can fill the post form); writes need the matching <code>*.manage</code> permission.</div>
+
+  <h3 id="blog-admin-comments">Admin &#8212; Comment Moderation &amp; Reports</h3>
+  <table>
+    <tr><th>Endpoint</th><th>Permission</th><th>Notes</th></tr>
+    <tr><td><code>GET /admin/blog/comments</code></td><td><code>blog.comment.view-admin</code></td><td>Filters: <code>status</code>, <code>post_id</code>, <code>user_id</code>, <code>reported</code> (has open reports), <code>date_from</code>, <code>date_to</code>, <code>trashed</code>, <code>sort</code> (<code>newest</code>|<code>oldest</code>|<code>most_reported</code>). Rows include <code>user_id</code>, <code>status</code>, <code>open_reports_count</code>.</td></tr>
+    <tr><td><code>GET /admin/blog/comments/{id}</code></td><td><code>blog.comment.view-admin</code></td><td>One comment (incl. deleted).</td></tr>
+    <tr><td><code>POST …/{id}/approve</code> · <code>/reject</code> · <code>/spam</code> · <code>/restore</code></td><td><code>blog.comment.moderate</code></td><td>The first approval notifies the author and, for a reply, the parent's author. Repeating a decision is a no-op.</td></tr>
+    <tr><td><code>DELETE /admin/blog/comments/{id}</code></td><td><code>blog.comment.delete</code></td><td>Soft delete.</td></tr>
+    <tr><td><code>GET /admin/blog/comment-reports</code></td><td><code>blog.comment.moderate</code></td><td>Filters <code>status</code>, <code>reason</code>, <code>comment_id</code>.</td></tr>
+    <tr><td><code>POST /admin/blog/comment-reports/{id}/review</code> · <code>/dismiss</code> · <code>/action</code> <code>{ "comment_status"?: "rejected"|"spam" }</code></td><td><code>blog.comment.moderate</code></td><td><code>action</code> also moderates the comment (rejected by default).</td></tr>
+  </table>
+
+  <h3 id="blog-admin-analytics">Admin &#8212; Blog Analytics</h3>
+  <table>
+    <tr><th>Endpoint</th><th>Permission</th><th>Returns</th></tr>
+    <tr><td><code>GET /admin/blog/analytics?metric=views_count&amp;limit=10</code></td><td><code>blog.analytics.view</code></td><td>Lifetime totals, top posts, top categories/tags/authors from Blog's own counters (<code>views_count</code>, <code>likes_count</code>, <code>bookmarks_count</code>, <code>comments_count</code>, <code>product_clicks_count</code>).</td></tr>
+    <tr><td><code>GET /admin/analytics/blog?from=&amp;to=&amp;metric=views&amp;limit=</code></td><td><code>analytics.view</code></td><td>Daily time series + top posts (raw Blog post ids) from the Analytics module's <code>analytics_blog_daily_stats</code>, built from Blog's integration events (idempotent per event id). Comments are counted when approved.</td></tr>
+  </table>
+
+  <h3 id="blog-frontend-guide">Frontend Guide</h3>
+  <ul>
+    <li><strong>Article page:</strong> <code>GET /blog/posts/{slug}</code> (send the token if signed in). If <code>redirect</code> is set, 301 to <code>/blog/{redirect.to}</code>. Render <code>content</code> as HTML; build <code>&lt;title&gt;</code>, meta description, canonical, OpenGraph/Twitter tags and robots from <code>seo</code>; embed <code>structured_data.article</code> and <code>structured_data.breadcrumb</code> as JSON-LD. Then fire <code>POST /blog/posts/{slug}/views</code> once (send <code>X-Session-Id</code> for guests).</li>
+    <li><strong>Shoppable blocks:</strong> render <code>related_products</code>; on click call <code>POST /blog/posts/{slug}/product-clicks</code> with the <code>product_id</code> and a <code>placement</code> label, then navigate to the product (<code>id</code> is the product public code).</li>
+    <li><strong>Comments:</strong> render <code>body</code> as escaped text. After posting, show the returned comment as "awaiting moderation" (<code>status: pending</code>) &#8212; it will not appear in the public list until approved. Use the comment <code>id</code> (<code>bdm-…</code>) for replies, edits, reports and reactions.</li>
+    <li><strong>Discovery:</strong> categories tree from <code>GET /blog/categories</code>; archive pages via <code>/blog/{categories|tags|authors}/{slug}/posts</code>; homepage via <code>GET /blog</code>.</li>
+    <li><strong>Editor:</strong> keep the <code>version</code> from the last load and send it with every PATCH; on <strong>409</strong> reload and re-apply. Autosave every few seconds with <code>PUT …/autosave</code>; offer recovery from <code>GET …/autosave</code> when it exists.</li>
+    <li><strong>Slugs may be Persian:</strong> URL-encode them in links (the API's <code>url</code> fields are already encoded).</li>
+  </ul>
 
 </main>
 

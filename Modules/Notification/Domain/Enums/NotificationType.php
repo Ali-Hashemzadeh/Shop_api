@@ -61,4 +61,13 @@ enum NotificationType: string
 
     /** Customer-facing: the status of one of their tickets changed. In-app only. */
     case TICKET_STATUS_CHANGED = 'ticket_status_changed';
+
+    /** Reader-facing: a new article in a followed Blog category/tag/author. In-app only. */
+    case BLOG_POST_PUBLISHED = 'blog_post_published';
+
+    /** Reader-facing: someone's approved reply landed under your Blog comment. In-app only. */
+    case BLOG_COMMENT_REPLY = 'blog_comment_reply';
+
+    /** Reader-facing: your Blog comment passed moderation. In-app only. */
+    case BLOG_COMMENT_APPROVED = 'blog_comment_approved';
 }

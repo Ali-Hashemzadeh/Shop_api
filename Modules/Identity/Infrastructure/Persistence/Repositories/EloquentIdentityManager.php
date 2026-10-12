@@ -149,4 +149,19 @@ class EloquentIdentityManager implements IdentityManagerInterface
 
         return UserSummaryDTO::fromModel($user->fresh());
     }
+
+    public function getUserSummaries(array $userIds): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $userIds), fn (int $id) => $id > 0)));
+
+        if ($ids === []) {
+            return [];
+        }
+
+        return User::query()
+            ->whereIn('id', $ids)
+            ->get()
+            ->mapWithKeys(fn (User $user): array => [(int) $user->id => UserSummaryDTO::fromModel($user)])
+            ->all();
+    }
 }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Modules\Analytics\Domain\Contracts;
 
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Modules\Analytics\Domain\DTOs\AnalyticsBlogEngagementDTO;
 use Modules\Analytics\Domain\DTOs\AnalyticsCustomerStatsDTO;
 use Modules\Analytics\Domain\DTOs\AnalyticsDailySalesDTO;
 use Modules\Analytics\Domain\DTOs\AnalyticsDashboardDTO;
@@ -44,4 +45,14 @@ interface AnalyticsManagerInterface
      * @param  array{from?: ?string, to?: ?string, method?: ?string, driver_id?: ?int}  $filters
      */
     public function getDelivery(array $filters = []): AnalyticsDeliveryStatsDTO;
+
+    /**
+     * Blog engagement over time (views, likes, bookmarks, approved comments,
+     * product click-throughs), built from Blog's integration events only.
+     * `top_posts` carries raw Blog post ids — the caller resolves titles
+     * through Blog itself if it needs them.
+     *
+     * @param  array{from?: ?string, to?: ?string, metric?: ?string, limit?: ?int}  $filters
+     */
+    public function getBlogEngagement(array $filters = []): AnalyticsBlogEngagementDTO;
 }

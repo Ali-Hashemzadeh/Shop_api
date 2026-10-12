@@ -49,7 +49,8 @@ replaces no primary key, foreign key, relation, cron input, internal query, or a
 
 * **One generator, no scattered prefixes.** `App\Support\PublicCodeGenerator` is the only place a code is
   assembled. `App\Support\PublicCodeEntity` is the only place entity → segment is mapped
-  (`p`/`v`/`o`/`t`/`s`/`a`/`c`; Payment is `t` because `p` belongs to Product). Never write `'bdp'` or
+  (`p`/`v`/`o`/`t`/`s`/`a`/`c`/`r`/`k`/`b`/`m`; Payment is `t` because `p` belongs to Product, Blog comment is `m`
+  because `c` belongs to Category). Never write `'bdp'` or
   `'bdo'` as a literal anywhere else.
 * **Namespace is required configuration.** `config/public_codes.php` ← `PUBLIC_CODE_NAMESPACE` (no
   fallback — a missing/invalid value throws `PublicCodeGenerationException`, because a public identifier
@@ -74,6 +75,8 @@ replaces no primary key, foreign key, relation, cron input, internal query, or a
 | Category | `bdc-XXXXXX` | `categories.public_code` | new |
 | Review | `bdr-XXXXXX` | `reviews.uuid` | new; column name historical like Product |
 | Ticket | `bdk-XXXXXX` | `tickets.ticket_number` | new; `k` because `t` is Payment |
+| Blog post | `bdb-XXXXXX` | `blog_posts.public_code` | new; public response `id`; storefront URLs use the slug, admin routes the numeric id |
+| Blog comment | `bdm-XXXXXX` | `blog_comments.public_code` | new; `m` ("message") because `c` is Category |
 
 * **Immutable and server-owned.** Never accepted from client input, never a writable field, never regenerated
   on update, never reused after deletion. The four new columns are **nullable at the DB level** (matching the
@@ -368,6 +371,10 @@ replaces no primary key, foreign key, relation, cron input, internal query, or a
 | `ShipmentDeliveredEvent` | `ShipmentTransitionService` → `delivered` | `SendShipmentDeliveredNotifications` | customer db+sms |
 | `InventoryRestockedEvent` (Inventory) | `EloquentInventoryManager` when available stock crosses `<= 0 → > 0` (`adjustStock`/`releaseReservation`) | `SendProductAvailableNotifications` | **each subscribed** customer db+sms (`product_available`: `ProductName`; in-app `data` = `{product_code, sku}`). Subscribers come from Wishlist's atomic `claimPendingSubscribersForSku()` (one-shot, dedup-by-consumption), product name/code from `CatalogManagerInterface::findVariantBySku()`. A restock with no subscribers is a no-op. |
 
+  * **Blog (in-app only):** `BlogPostPublishedEvent` → `SendBlogPostPublishedNotifications` (`blog_post_published` to
+    followers resolved via `BlogManagerInterface::getSubscriberUserIds()`, first publication only);
+    `BlogCommentRepliedEvent` → `blog_comment_reply` (parent author); `BlogCommentApprovedEvent` → `blog_comment_approved`
+    (comment author). No SMS templates were added.
   * **Transaction safety + idempotency:** every listener implements `ShouldHandleEventsAfterCommit`, so a rolled-back business transaction notifies nobody. `markAsPaid`'s existing already-paid early return means repeat gateway callbacks never reach the dispatch — no duplicate notifications.
   * **Deliberately silent:** the shared `CancelOrderAction::releaseAndCancel` primitive (checkout uses it to retire a superseded pending order), TTL expiry (`orders:cancel-expired`), and the `picked_up` shipment status. Not implemented anywhere: email, push, marketing.
   * **Enclosure note:** these are *published* integration events in `Domain/Events/`, carrying primitives only — part of a module's public contract alongside Contracts and DTOs. Internal events remain private.
@@ -418,6 +425,7 @@ replaces no primary key, foreign key, relation, cron input, internal query, or a
       - `OrderCancelledEvent` (Order) → updates `analytics_daily_sales` (`cancelled_orders_count`, `refund_amount`, net revenue adjustment).
       - `PaymentSuccessfulEvent`, `PaymentFailedEvent`, `PaymentCancelledEvent` (Payment) → updates `analytics_payment_stats` (`successful_count`, `failed_count`, `cancelled_count`, `total_amount`). Never alters sales revenue (zero double-counting).
       - `ShipmentAssignedToDeliveryEvent`, `ShipmentHandedToPostEvent`, `ShipmentDeliveredEvent`, `ShipmentDeliveryFailedEvent` (Shipment) → updates `analytics_delivery_stats` and `analytics_driver_stats` with delivery duration and success/failure metrics.
+      - `BlogPostViewedEvent`, `BlogPostLikedEvent`, `BlogPostBookmarkedEvent`, `BlogCommentApprovedEvent`, `BlogProductClickedEvent` (Blog) → `analytics_blog_daily_stats` ((date, blog_post_id) UNIQUE; views, likes, bookmarks, comments, product_clicks — `date` is a plain `Y-m-d` string). Read via `getBlogEngagement()` / `GET /api/v1/admin/analytics/blog`. See the Blog section.
   * **Public Contract:** `Modules\Analytics\Domain\Contracts\AnalyticsManagerInterface` — `getDashboard()`, `getSales(filters)`, `getProducts(filters)`, `getCustomers(filters, perPage)`, `getDelivery(filters)`.
   * **Tables:** 10 aggregate reporting tables + 1 index table + 1 processed events table (store raw IDs only, zero cross-module foreign keys):
     - `analytics_daily_sales` (date UNIQUE, orders_count, paid_orders_count, cancelled_orders_count, gross_revenue, discount_amount, coupon_amount, refund_amount, net_revenue)
@@ -691,6 +699,130 @@ replaces no primary key, foreign key, relation, cron input, internal query, or a
     published AI review served as an ordinary review, edit version history, reject + frozen-approved, search→save mapping,
     prompt list/filter/show + auth, URL+response logging for the source and AI transports, and the 401/403 matrix.
 
+### Module: Blog (`Modules/Blog/`) — Editorial Blog / CMS ✅
+
+  * **Position in the graph:** depends on the **Media**, **Catalog** and **Identity** contracts only; publishes
+    `BlogManagerInterface` + primitives-only integration events. `Notification → Blog` (contract + events) and
+    `Analytics → Blog` (events only). **Catalog does not depend on Blog** — reverse "articles about a product" is
+    answered inside Blog (`GET /api/v1/blog/posts?product_id=`, `BlogManagerInterface::getPublishedPostsForProduct()`),
+    so no cycle. Provider registered last in `bootstrap/providers.php`. Imports no other module's model; queries and
+    constrains only `blog_*` tables (architecture tests enforce both).
+  * **Content is HTML only.** `blog_posts.content` (LONGTEXT) holds editor HTML **sanitized server-side before
+    persistence** through the Blog-owned `Domain/Contracts/BlogHtmlSanitizerInterface` →
+    `Infrastructure/Sanitization/SymfonyBlogHtmlSanitizer` (`symfony/html-sanitizer`, parser-based allow-list: `p br
+    h1–h6 strong b em i u s ul ol li blockquote a img figure figcaption table thead tbody tr th td hr code pre`; `dir`/`lang`
+    on text blocks; links http/https/mailto/tel/relative with forced `rel="noopener noreferrer nofollow"`; images
+    http/https/relative, optional host allow-list; scripts/styles/iframes/objects/forms/`on*`/`style`/`javascript:`/
+    `data:` removed). The vendor's 20 KB `maxInputLength` default is raised via `blog.sanitizer.max_input_length` —
+    leaving it would silently truncate long articles. Autosave content is sanitized too. **No** `content_format`, Markdown,
+    block JSON, or `reading_time_minutes`. Comments are plain text (render escaped).
+  * **Search:** derived `blog_posts.search_text` (hidden, never returned) = Persian-normalized plain text of
+    title + excerpt + content (`Domain/Services/PersianTextNormalizer`: ي/ى/ئ→ی, ك→ک, ة/ۀ→ه, أ/إ/آ→ا, Persian/Arabic
+    digits→ASCII, ZWNJ→space, diacritics/tatweel removed). Queries are folded the same way. Stored HTML/titles are never
+    rewritten. A `bdb-XXXXXX` search term switches to an **exact** normalized public-code match (never LIKE/partial).
+    Search can later move behind an adapter without touching the domain.
+  * **Tables (25, all `blog_*`):** `blog_posts`, `blog_categories` (same-module `parent_id`), `blog_tags` (no
+    description), `blog_authors` (loose unique `user_id`), pivots `blog_post_category` (`is_primary`, `sort_order`),
+    `blog_post_tag`, `blog_post_author` (`role` author/editor/contributor/reviewer, `sort_order`), `blog_post_media`
+    (loose `media_id`, role inline/gallery/attachment, per-article `alt_text`/`caption`), `blog_post_revisions`,
+    `blog_post_autosaves` (unique post+user), `blog_post_activity`, `blog_post_slug_history` (globally unique slug),
+    `blog_editorial_notes`, `blog_related_posts`, `blog_post_products` (loose `product_id`, relation
+    featured/mentioned/recommended/comparison), `blog_comments`, `blog_comment_media`, `blog_comment_reports`,
+    `blog_comment_reactions` (PK user+comment), `blog_post_likes`, `blog_post_bookmarks`, `blog_subscriptions`
+    (unique user+type+id), `blog_post_stats` (read model), `blog_collections`, `blog_collection_posts`,
+    `blog_placements`. **No FK to any non-Blog table**; Media/Catalog/Identity columns are loose. History tables use
+    `restrictOnDelete` (posts are only soft-deleted); pivots cascade.
+  * **Public visibility** (`BlogPost::scopePubliclyVisible()`, the only definition): `status=published` AND
+    `published_at <= now` AND (`unpublish_at` null OR future) AND not soft-deleted. Every public query starts there, so
+    draft/in_review/approved/scheduled/archived/expired/deleted posts are 404 everywhere public (incl. collections,
+    placements, related, bookmarks, feed, sitemap). List queries select `BlogPost::listColumns()` — never the HTML.
+  * **Workflow** (`BlogPostStatus::allowedTransitions()` is the single authority; `Application/Support/BlogPostWorkflow`
+    locks + asserts + audits): draft→in_review→approved→scheduled|published; in_review|archived→draft;
+    published|scheduled→approved (unpublish); any→archived. Illegal → 422 on `status`. `PublishBlogPostAction` is the
+    only publication path (manual + scheduler): idempotent on an already-published post (no revision, no event),
+    `published_at` = now (scheduler keeps the scheduled time), `first_published_at` set once, `last_published_at` per
+    real publication, records a revision, dispatches `BlogPostPublishedEvent`. `blogs:publish-scheduled`
+    (`App\Console\Commands\BlogsPublishScheduledCommand`, `routes/console.php` every minute, `withoutOverlapping`) runs
+    `ProcessScheduledBlogPostsAction`: publishes due schedules and unpublishes due `unpublish_at` posts, each in its own
+    locked, re-checked transaction (idempotent).
+  * **Optimistic locking:** PATCH and revision-restore require `version`; `UpdateBlogPostAction` locks the row, compares,
+    and writes with a conditional `where version = ?` (second guard); mismatch → `BlogPostVersionConflictException`
+    (**409** `{message, submitted_version, current_version}`), nothing written. Status transitions don't bump version.
+  * **Revisions** (append-only, `BlogRevisionRecorder`): on create, on any save touching title/slug/excerpt/content/
+    featured media/SEO/taxonomy/authors, on each real publication, and on restore. Snapshot = content + slug + featured
+    media + `status_snapshot` + `seo_snapshot` + `taxonomy_snapshot` + `author_snapshot`. Restore goes through
+    `UpdateBlogPostAction` (new revision, 409 rules, slug history, skips deleted taxonomy/authors). **Autosave** is one
+    replaceable row per editor/post, never a revision, cleared by that editor's manual save. **Activity**
+    (`blog_post_activity`): created, updated, submitted_for_review, returned_to_draft, approved, scheduled, published,
+    unpublished, archived, deleted, restored, revision_restored, slug_changed, featured, unfeatured. **Editorial notes**
+    are internal only (no public query touches the table).
+  * **Slugs & history:** unicode slugs (`BlogSlugger`, Str::slug would empty Persian); auto from title on create,
+    deduplicated `-2`, `-3`; never changed by a title edit. A slug change on a post that was ever published writes the
+    old slug to `blog_post_slug_history`; reclaiming an own retired slug deletes that history row (no loops); another
+    post's retired slug is reserved (422). Public `GET /blog/posts/{slug}` resolves current slug → exact `bdb-` code →
+    retired slug (returns the post + `redirect: {from, to, status: 301}`).
+  * **SEO:** resolved in `BlogPostHydrator::seo()` — title ← seo_title→title; description ← seo_description→excerpt;
+    og_title ← og_title→seo_title→title; og_description ← og_description→seo_description→excerpt; og image ← og media→
+    featured; canonical ← canonical_url→storefront URL (`BlogUrls` + `config('frontend.url')` + `blog.frontend.*`).
+    Detail also returns breadcrumbs (primary category ancestry) and ready JSON-LD (`BlogPosting`, `BreadcrumbList`).
+    Categories/authors expose `seo` too.
+  * **N+1 guard:** `BlogPostHydrator` turns any set of posts into DTOs with a fixed query count — eager-loaded Blog
+    relations, ONE `MediaManagerInterface::getMediaCollection()`, two viewer-state `whereIn`s (likes/bookmarks), ONE
+    `CatalogManagerInterface::getPublishedProductsByIds()`. Comments use `BlogCommentQueries` (batch media, reactions,
+    `IdentityManagerInterface::getUserSummaries()` for author names). A test asserts a 10-post page costs the same
+    queries as a 1-post page.
+  * **Comments (not the Review module):** `bdm-` codes, many per reader, all start `pending`; replies only to approved
+    comments, max depth `blog.comments.max_depth` (3); public reads approved-only, threads paginated by root with nested
+    replies; a soft-deleted comment survives as a body/author-less placeholder only while visible replies hang below it;
+    edit → pending (and leaves the public thread); author edits (policy 403), author or `blog.comment.delete` deletes;
+    moderation approve/reject/spam/restore (re-approval never re-notifies); reports (open report per reader is reused →
+    200 `already_reported`; own comment → 422); reactions like/helpful, one per reader, idempotent; attachments
+    ownership-checked via `MediaManagerInterface::ownedByUser()`. `comments_count` is **recounted** from source rows.
+  * **Engagement:** likes/bookmarks idempotent (unique PKs decide change; only real changes move counters or raise
+    events); `is_liked`/`is_bookmarked` batched, false for guests; own bookmarks list (still-public only); follow
+    subscriptions (enum whitelist category/tag/author; subject must exist and be active, validated in Blog; foreign id →
+    404). Views: explicit `POST /blog/posts/{slug}/views` (never on GET), bot UA filter, `Cache::add` dedup per viewer
+    (user id → `X-Session-Id` → IP+UA hash) per `blog.engagement.view_dedup_minutes`. Product clicks: product must be
+    linked; dedup per viewer/post/product; session id only published as a sha256 prefix.
+  * **Curation:** collections (active + date window, curated order, published posts only) and keyed placements (any
+    dotted key — data not schema; active window; ordered `sort_order, id`; unpublished placed posts skipped until live).
+    `is_featured` is only a global flag. Related posts: curated first, then fallback ranked by shared categories+tags
+    and recency (portable single-alias ORDER BY).
+  * **Preview:** `POST /admin/blog/posts/{id}/preview-link` → `URL::temporarySignedRoute('blog.preview')` (TTL
+    `blog.preview.ttl_minutes`), optional `revision_id` overlay; `GET /blog/preview/{post}` behind `signed` middleware,
+    `no-store` + `X-Robots-Tag: noindex`. No `?preview=true`.
+  * **Feed / sitemap:** RSS 2.0 at `GET /blog/feed`; `BlogManagerInterface::getSitemapEntries()` +
+    `GET /blog/sitemap` (indexable posts, active categories, authors, tags when `blog.sitemap.include_tags`).
+  * **Integration events** (`Domain/Events`, readonly primitives + `eventId`): BlogPostPublished (+category/tag/author
+    ids, `isFirstPublication`), BlogPostUnpublished (`trigger` manual|scheduled), BlogPostArchived (`wasPublic`),
+    BlogCommentCreated, BlogCommentReplied (at approval), BlogCommentApproved (first approval), BlogPostLiked,
+    BlogPostBookmarked, BlogProductClicked, BlogPostViewed. Dispatched inside the write transaction; consumers implement
+    `ShouldHandleEventsAfterCommit` (rollback → nothing). Notification: `SendBlogPostPublishedNotifications` (followers
+    via `getSubscriberUserIds()`, first publication only), `SendBlogCommentReplyNotification`,
+    `SendBlogCommentApprovedNotification` — in-app only. Analytics: `RecordBlogEngagementAnalytics` →
+    `analytics_blog_daily_stats` (date string + post id; views/likes/bookmarks/approved comments/product clicks),
+    idempotent via `analytics_processed_events`, read by `GET /api/v1/admin/analytics/blog` (`analytics.view`).
+  * **Additive contracts:** `IdentityManagerInterface::getUserSummaries(array)` (batch, keyed by id — existence check for
+    author `user_id` + comment author names), `CatalogManagerInterface::getExistingProductIds(array)`,
+    `AnalyticsManagerInterface::getBlogEngagement(array)`.
+  * **Authorization:** permission-based (`BlogPostPolicy`, `BlogCommentPolicy`, typehinted `Authorizable&Authenticatable`;
+    Form Requests resolve the post first → 404 before 403 before 422). `update-own` = own **draft** (creator or linked
+    author profile); `update-any` edits anything. Permissions: `blog.view-admin`, `blog.post.{create,update-own,
+    update-any,delete,restore,submit-review,approve,publish,archive}`, `blog.{category,tag,author,collection,placement}.manage`,
+    `blog.comment.{create,view-admin,moderate,delete}`, `blog.analytics.view`. `BlogPermissionsSeeder` grants all to
+    `admin`, `blog.comment.create` to `customer`; no Blog roles are created (future `blog_author`/`blog_editor`/
+    `blog_moderator` are just bundles).
+  * **Routes (94):** public `api/v1/blog/*` (`throttle:public`, optional token read), self-service `api/v1/blog/*`
+    (`auth:sanctum` + `throttle:api`; comment/reply/report also `throttle:blog-comments`, a new per-user limiter
+    `blog.comments.rate_limit_per_minute`), admin `api/v1/admin/blog/*` (`auth:sanctum` + `throttle:api`, numeric ids).
+  * **Config:** `config/blog.php` (`BLOG_*` env keys documented in `.env.example`).
+  * **Seeders:** `BlogPermissionsSeeder`, `BlogSampleDataSeeder` (idempotent by slug; real Actions so codes/revisions/
+    audit are genuine under `WithoutModelEvents`; admin id via `getAdminUserIds()`, products via
+    `CatalogManagerInterface::getProducts()`), both in `DatabaseSeeder`.
+  * **Tests:** `tests/Feature/Blog/` — **119 tests** (BlogPostAdminTest 19, BlogWorkflowTest 11, BlogPublicReadTest 18,
+    BlogHtmlSanitizerTest 6, BlogTaxonomyAdminTest 11, BlogEditorialToolsTest 8, BlogCommentTest 15, BlogEngagementTest 9,
+    BlogCurationTest 6, BlogIntegrationEventsTest 7, BlogArchitectureTest 7, BlogSeederTest 2).
+
 ---
 
 
@@ -713,5 +845,13 @@ replaces no primary key, foreign key, relation, cron input, internal query, or a
 | Wishlist | ✅ Complete | 32 passing (ProductLikesTest, AvailabilitySubscriptionTest, RestockNotificationTest, RestockEventTest) |
 | Ticket | ✅ Complete | 39 passing (TicketTest 14, SupportTicketTest 7, AdminTicketTest 7, TicketNotificationTest 4, TicketAttachmentTest 7) |
 | ProductReviewAI | ✅ Complete | 27 passing (DigikalaSourceTest 6, GenerationWorkflowTest 5, ModerationTest 5, AuthorizationTest 4, PromptEndpointsTest 4, SourceAndAiLoggingTest 3) |
+| Blog | ✅ Complete | 119 passing across 12 feature test classes (`tests/Feature/Blog/`) |
 
-**Full suite: 911 tests, 908 passing.** Three unrelated pre-existing failures remain — `ProfileTest::authenticated_user_can_update_profile`, `Payment\PaymentTest::callback_page_links_use_configured_frontend_url_and_real_order` (the callback now builds the order URL from the public code while that one assertion still expects the numeric id), and `Analytics\FinancialAnalyticsSafetyTest::payment_failed_and_cancelled_events_do_not_mutate_payment_stats` — all three verified to fail identically on a clean tree (wishlist changes stashed) and out of scope.
+**Full suite after Blog (2026-10-12): 1054 tests, 1032 passing.** All 22 failures are pre-existing and fail identically
+on a clean tree with the Blog work stashed: the three listed below, **15** Shipment tests
+(`PostShippingCalculatorTest` ×10, `DynamicPostShippingTest` ×5) that import `Modules\Shipment\...\Seeders\PostTariffSeeder`
+while the class on disk is `PostTarifffSeeder` (typo), and **4** `ShipmentMethodsTest` cases asserting a post price of
+850000 while the configured price resolves to 10000. `Promotion\CartAndOrderPricingTest::automatic_pricing_is_not_re_evaluated_when_payment_is_initialized`
+calls the live Zarinpal sandbox (no HTTP fake) and can fail on a network timeout. None were touched by the Blog work.
+
+**Previous baseline: 911 tests, 908 passing.** Three unrelated pre-existing failures remain — `ProfileTest::authenticated_user_can_update_profile`, `Payment\PaymentTest::callback_page_links_use_configured_frontend_url_and_real_order` (the callback now builds the order URL from the public code while that one assertion still expects the numeric id), and `Analytics\FinancialAnalyticsSafetyTest::payment_failed_and_cancelled_events_do_not_mutate_payment_stats` — all three verified to fail identically on a clean tree (wishlist changes stashed) and out of scope.

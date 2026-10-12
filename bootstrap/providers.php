@@ -2,6 +2,7 @@
 
 use App\Providers\AppServiceProvider;
 use Modules\Analytics\Infrastructure\Providers\AnalyticsServiceProvider;
+use Modules\Blog\Infrastructure\Providers\BlogServiceProvider;
 use Modules\Cart\Infrastructure\Providers\CartServiceProvider;
 use Modules\Catalog\Infrastructure\Providers\CatalogServiceProvider;
 use Modules\Identity\Infrastructure\Providers\IdentityServiceProvider;
@@ -45,4 +46,9 @@ return [
     // ProductReviewAI resolves Catalog (product context) and the Review contract
     // (publishing approved drafts), so it registers after both.
     ProductReviewAIServiceProvider::class,
+    // Blog/CMS resolves the Media, Catalog and Identity contracts (shoppable
+    // articles, author/comment summaries). Catalog does not depend on Blog, so
+    // the graph stays acyclic; Notification and Analytics only listen to Blog's
+    // primitives-only integration events.
+    BlogServiceProvider::class,
 ];

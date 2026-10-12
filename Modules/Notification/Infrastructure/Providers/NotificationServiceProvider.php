@@ -5,7 +5,13 @@ namespace Modules\Notification\Infrastructure\Providers;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
+use Modules\Blog\Domain\Events\BlogCommentApprovedEvent;
+use Modules\Blog\Domain\Events\BlogCommentRepliedEvent;
+use Modules\Blog\Domain\Events\BlogPostPublishedEvent;
 use Modules\Inventory\Domain\Events\InventoryRestockedEvent;
+use Modules\Notification\Application\Listeners\SendBlogCommentApprovedNotification;
+use Modules\Notification\Application\Listeners\SendBlogCommentReplyNotification;
+use Modules\Notification\Application\Listeners\SendBlogPostPublishedNotifications;
 use Modules\Notification\Application\Listeners\SendDeliveryVerificationCodeSms;
 use Modules\Notification\Application\Listeners\SendOrderCancelledNotifications;
 use Modules\Notification\Application\Listeners\SendOrderPaidNotifications;
@@ -96,5 +102,11 @@ class NotificationServiceProvider extends ServiceProvider
         Event::listen(TicketReplyCreatedEvent::class, SendTicketReplyNotifications::class);
         Event::listen(TicketAssignedEvent::class, SendTicketAssignedNotifications::class);
         Event::listen(TicketStatusChangedEvent::class, SendTicketStatusChangedNotifications::class);
+
+        // Blog. Blog publishes primitives-only events; followers are resolved via
+        // BlogManagerInterface, never by reading Blog tables.
+        Event::listen(BlogPostPublishedEvent::class, SendBlogPostPublishedNotifications::class);
+        Event::listen(BlogCommentRepliedEvent::class, SendBlogCommentReplyNotification::class);
+        Event::listen(BlogCommentApprovedEvent::class, SendBlogCommentApprovedNotification::class);
     }
 }

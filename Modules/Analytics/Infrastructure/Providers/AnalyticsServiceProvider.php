@@ -6,12 +6,18 @@ namespace Modules\Analytics\Infrastructure\Providers;
 
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
+use Modules\Analytics\Application\Listeners\RecordBlogEngagementAnalytics;
 use Modules\Analytics\Application\Listeners\RecordOrderCancelledAnalytics;
 use Modules\Analytics\Application\Listeners\RecordOrderSaleAnalytics;
 use Modules\Analytics\Application\Listeners\RecordPaymentAnalytics;
 use Modules\Analytics\Application\Listeners\RecordShipmentAnalytics;
 use Modules\Analytics\Domain\Contracts\AnalyticsManagerInterface;
 use Modules\Analytics\Infrastructure\Persistence\Repositories\EloquentAnalyticsManager;
+use Modules\Blog\Domain\Events\BlogCommentApprovedEvent;
+use Modules\Blog\Domain\Events\BlogPostBookmarkedEvent;
+use Modules\Blog\Domain\Events\BlogPostLikedEvent;
+use Modules\Blog\Domain\Events\BlogPostViewedEvent;
+use Modules\Blog\Domain\Events\BlogProductClickedEvent;
 use Modules\Order\Domain\Events\OrderCancelledEvent;
 use Modules\Order\Domain\Events\OrderPaidEvent;
 use Modules\Payment\Domain\Events\PaymentCancelledEvent;
@@ -48,5 +54,12 @@ class AnalyticsServiceProvider extends ServiceProvider
         Event::listen(ShipmentHandedToPostEvent::class, [RecordShipmentAnalytics::class, 'handleHandedToPost']);
         Event::listen(ShipmentDeliveredEvent::class, [RecordShipmentAnalytics::class, 'handleDelivered']);
         Event::listen(ShipmentDeliveryFailedEvent::class, [RecordShipmentAnalytics::class, 'handleFailed']);
+
+        // Blog engagement events (primitives only; Analytics never reads Blog tables)
+        Event::listen(BlogPostViewedEvent::class, [RecordBlogEngagementAnalytics::class, 'handleViewed']);
+        Event::listen(BlogPostLikedEvent::class, [RecordBlogEngagementAnalytics::class, 'handleLiked']);
+        Event::listen(BlogPostBookmarkedEvent::class, [RecordBlogEngagementAnalytics::class, 'handleBookmarked']);
+        Event::listen(BlogCommentApprovedEvent::class, [RecordBlogEngagementAnalytics::class, 'handleCommentApproved']);
+        Event::listen(BlogProductClickedEvent::class, [RecordBlogEngagementAnalytics::class, 'handleProductClicked']);
     }
 }

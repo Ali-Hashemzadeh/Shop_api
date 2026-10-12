@@ -54,6 +54,13 @@ class AppServiceProvider extends ServiceProvider
         )->by(($r->user()?->id ?? $r->ip()).'|'.$r->route('publicCode'))
         );
 
+        // Blog comments, replies and reports — a per-user spam brake applied on
+        // top of `api`, so one account cannot flood a discussion.
+        RateLimiter::for('blog-comments', fn (Request $r) => Limit::perMinute(
+            max((int) config('blog.comments.rate_limit_per_minute', 10), 1)
+        )->by($r->user()?->id ?? $r->ip())
+        );
+
         // General authenticated API; guest cart falls back to per-IP
         RateLimiter::for('api', fn (Request $r) => $r->user()
                 ? Limit::perMinute(60)->by($r->user()->id)

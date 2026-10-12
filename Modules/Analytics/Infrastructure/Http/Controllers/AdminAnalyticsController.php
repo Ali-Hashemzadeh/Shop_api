@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace Modules\Analytics\Infrastructure\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Modules\Analytics\Domain\Contracts\AnalyticsManagerInterface;
 use Modules\Analytics\Infrastructure\Http\Requests\AdminAnalyticsRequest;
+use Modules\Analytics\Infrastructure\Http\Requests\IndexBlogEngagementAnalyticsRequest;
 use Modules\Analytics\Infrastructure\Http\Requests\IndexCustomerStatsRequest;
 use Modules\Analytics\Infrastructure\Http\Requests\IndexDeliveryStatsRequest;
 use Modules\Analytics\Infrastructure\Http\Requests\IndexProductSalesAnalyticsRequest;
@@ -57,5 +59,10 @@ class AdminAnalyticsController extends Controller
         $data = $this->analytics->getDelivery($request->filters());
 
         return new AnalyticsDeliveryResource($data);
+    }
+
+    public function blog(IndexBlogEngagementAnalyticsRequest $request): JsonResponse
+    {
+        return response()->json(['data' => $this->analytics->getBlogEngagement($request->filters())->toArray()]);
     }
 }

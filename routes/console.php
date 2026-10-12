@@ -13,3 +13,4 @@ Schedule::command('payments:expire-stale')->everyFiveMinutes();
 Schedule::command('orders:sync-sales-counts')->hourly();
 Schedule::command('reviews:sync-product-ratings')->hourly();
 Schedule::command('shipment:generate-delivery-slots')->dailyAt('00:30');
+Schedule::command('blogs:publish-scheduled')->everyMinute()->withoutOverlapping();

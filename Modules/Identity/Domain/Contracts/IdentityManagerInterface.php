@@ -111,4 +111,15 @@ interface IdentityManagerInterface
      * the user does not exist.
      */
     public function revokeSupportRole(int $userId): UserSummaryDTO;
+
+    /**
+     * Batch summaries for a set of user ids, keyed by id. Unknown ids are simply
+     * absent, so a caller can use this both to render many authors in one query
+     * (no N+1) and to check that a loose user reference still exists. DTOs only;
+     * no User model crosses this boundary.
+     *
+     * @param  list<int>  $userIds
+     * @return array<int, UserSummaryDTO>
+     */
+    public function getUserSummaries(array $userIds): array;
 }

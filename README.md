@@ -227,6 +227,18 @@ Two independent, per-customer features — product **likes** and one-shot **"not
 - **Restock is event-driven, never polled.** Inventory publishes `InventoryRestockedEvent` (primitives only) when available stock (`quantity − reserved_quantity`) crosses `0 → positive` (in `adjustStock`/`releaseReservation`). Notification's `SendProductAvailableNotifications` listener (`ShouldHandleEventsAfterCommit`) reuses `NotificationManagerInterface` + `SmsChannel` to send an in-app notification and a best-effort SMS (`product_available`). Subscribers are claimed atomically (`lockForUpdate`), so a retried/duplicated event or concurrent workers never double-notify, and the subscription is consumed. A rolled-back restock notifies nobody.
 - **Endpoints** (all `auth:sanctum`, self-service, caller-scoped — no `user_id` from the client, no permission): `POST`/`DELETE /api/v1/catalog/products/{uuid}/like` → `{ "liked": bool }`; `GET /api/v1/catalog/liked-products` (paginated, ordinary `ProductResource`); `POST`/`DELETE /api/v1/catalog/variants/sku/{sku}/availability-notification` → `{ "availability_notification_requested": bool }`.
 
+### Blog / CMS (Complete)
+An editorial Blog (`Modules/Blog/`) with workflow, scheduling, revisions, SEO, shoppable articles and a real discussion system. It depends only on the Media, Catalog and Identity contracts; Notification and Analytics consume its primitives-only integration events. Catalog does not depend on Blog — "articles about a product" is answered by Blog (`GET /api/v1/blog/posts?product_id=`).
+
+- **Articles** carry a public code `bdb-XXXXXX` (response `id`) and a unicode slug (Persian slugs work). `content` is **HTML only**, sanitized server-side with an allow-list (`symfony/html-sanitizer` behind `BlogHtmlSanitizerInterface`) before it is stored; the API returns the stored HTML.
+- **Workflow:** `draft → in_review → approved → scheduled | published → archived` (+ return to draft), one endpoint per action, idempotent publish, `first_published_at` set once. `blogs:publish-scheduled` (every minute) publishes due schedules and unpublishes posts whose `unpublish_at` passed. Only live published posts are ever public.
+- **Editing safety:** optimistic locking (`version`, **409** on a stale save), append-only revisions (restore = new revision), per-editor autosave, audit trail, private editorial notes, slug history with redirects, signed time-limited previews.
+- **Discovery:** hierarchical categories, flat tags, Blog-owned author profiles (co-authors with roles), collections, keyed placements (`blog.home.hero`, …), curated + fallback related posts, Persian-aware search, `newest/oldest/most_viewed/most_commented/popular` sorts, RSS feed, sitemap data, SEO fields with fallbacks + JSON-LD.
+- **Shoppable articles:** link Catalog products (`featured/mentioned/recommended/comparison`); product data and prices are hydrated live through Catalog, never stored in Blog. Product click-through is tracked.
+- **Comments** (`bdm-XXXXXX`, separate from product Reviews): many per reader, threaded replies (depth 3), moderation, approved-only public reads, reports, reactions, owned-media attachments.
+- **Engagement:** idempotent likes and bookmarks, follow subscriptions (category/tag/author → in-app notification on first publication), deduplicated, bot-filtered view counting.
+- **Permissions:** granular `blog.*` (e.g. `blog.post.publish`, `blog.comment.moderate`); admins hold all, customers hold `blog.comment.create`.
+
 ---
 
 ## API Overview
@@ -362,6 +374,41 @@ Scoped to the caller's own assigned local deliveries; anything else is `404`, ne
 | `POST` | `/admin/shipments/{publicCode}/resend-delivery-code` | `shipment.delivery.resend-code` | Issue a **new** handoff code and SMS it to the customer |
 | `POST` | `/admin/shipments/{publicCode}/mark-delivered` | `shipment.delivery.complete` | Close a delivery; for local delivery the customer's `code` is still required |
 
+### Blog — Public (no auth; a token is read optionally for `is_liked` / `is_bookmarked`)
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/blog` | Home: featured, latest, configured placements, category tree |
+| `GET` | `/blog/posts` | Published posts — `search`, `category`, `tag`, `author`, `product_id`, `featured`, `published_from/to`, `sort` |
+| `GET` | `/blog/posts/{slug}` | Detail by slug, exact `bdb-` code, or retired slug (with `redirect`) — HTML content, SEO, JSON-LD, related products |
+| `GET` | `/blog/posts/{slug}/related` · `/comments` | Related posts · approved comment threads |
+| `POST` | `/blog/posts/{slug}/views` · `/product-clicks` | Deduplicated view / product click-through tracking (202) |
+| `GET` | `/blog/categories[/{slug}[/posts]]` · `/blog/tags[...]` · `/blog/authors[...]` | Discovery pages |
+| `GET` | `/blog/collections[/{slug}]` · `/blog/placements/{key}` | Editorial curation |
+| `GET` | `/blog/feed` · `/blog/sitemap` | RSS 2.0 · sitemap entries |
+
+### Blog — Readers (`auth:sanctum`)
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/blog/posts/{slug}/comments` · `/blog/comments/{code}/replies` | Comment / reply (`blog.comment.create`, starts pending) |
+| `PATCH`/`DELETE` | `/blog/comments/{code}` | Edit (author; back to pending) / delete (author or moderator) |
+| `POST` | `/blog/comments/{code}/report` · `POST`/`DELETE /blog/comments/{code}/reactions` | Report · react (`like`/`helpful`) |
+| `POST`/`DELETE` | `/blog/posts/{slug}/like` · `/bookmark` | Idempotent like / bookmark |
+| `GET` | `/blog/bookmarks` | Own saved posts |
+| `GET`/`POST` · `DELETE` | `/blog/subscriptions` · `/blog/subscriptions/{id}` | Follow categories / tags / authors |
+
+### Blog — Admin (`auth:sanctum` + `blog.*` permission)
+
+| Method | Endpoint | Permission |
+|---|---|---|
+| `GET`/`POST` · `GET`/`PATCH`/`DELETE` | `/admin/blog/posts` · `/admin/blog/posts/{id}` (+ `/restore`, `/activity`) | `blog.view-admin`, `blog.post.create`, `blog.post.update-own/any` (PATCH needs `version`), `blog.post.delete/restore` |
+| `POST` | `/admin/blog/posts/{id}/{submit-review,return-to-draft,approve,schedule,publish,unpublish,archive}` | `blog.post.submit-review` / `approve` / `publish` / `archive` |
+| `GET`/`POST` | `/admin/blog/posts/{id}/revisions[/{revision}[/restore]]`, `/notes[/{note}]`, `/autosave` (PUT), `/preview-link` | `blog.view-admin` / update / collaboration |
+| CRUD | `/admin/blog/{categories,tags,authors,collections,placements}` | `blog.{category,tag,author,collection,placement}.manage` |
+| `GET`/`POST`/`DELETE` | `/admin/blog/comments[/{id}/{approve,reject,spam,restore}]`, `/admin/blog/comment-reports[/{id}/{review,dismiss,action}]` | `blog.comment.view-admin` / `moderate` / `delete` |
+| `GET` | `/admin/blog/analytics` · `/admin/analytics/blog` | `blog.analytics.view` · `analytics.view` |
+
 ---
 
 ## Getting Started
@@ -438,6 +485,7 @@ Several modules rely on Laravel's scheduler (defined in `routes/console.php`):
 | `orders:sync-sales-counts` | hourly | Push best-seller tallies to Catalog |
 | `reviews:sync-product-ratings` | hourly | Push rating summaries (approved + rated reviews) to Catalog |
 | `shipment:generate-delivery-slots` | daily at 00:30 | Generate dated local-delivery sessions from the recurring working periods |
+| `blogs:publish-scheduled` | every minute | Publish Blog posts whose scheduled time has come and unpublish posts whose `unpublish_at` passed (idempotent) |
 
 These fire **only if Laravel's scheduler is itself driven by the system cron**. In production add this **single** cron entry (it runs `schedule:run` every minute; Laravel then decides which commands are due):
 
@@ -548,6 +596,10 @@ tests/
 | Promotion | Complete |
 | Analytics | Complete & Hardened |
 | Review | Complete |
+| Wishlist | Complete |
+| Ticket | Complete |
+| ProductReviewAI | Complete |
+| Blog / CMS | Complete |
 
 ---
 

@@ -2,6 +2,68 @@
 
 ## [Unreleased]
 
+### Feature — Blog / CMS module
+
+**New bounded context `Modules/Blog/`: a production editorial Blog with workflow, scheduling, revisions, SEO,
+shoppable articles, and a real threaded discussion system.** Blog depends only on the Media, Catalog and Identity
+contracts; Notification and Analytics consume its primitives-only integration events. Catalog does **not** depend on
+Blog, so the graph stays acyclic ("articles about a product" is answered by Blog: `GET /api/v1/blog/posts?product_id=`).
+
+- **Articles (`blog_posts`).** Public code `bdb-XXXXXX` (new `PublicCodeEntity::BlogPost = 'b'`), HTML-only `content`
+  (no `content_format`, Markdown, block JSON, or reading time), unicode/Persian slugs, SEO fields with documented
+  fallbacks, soft deletes, optimistic locking via `version` (**409** on a stale save, atomic increment). A derived,
+  Persian-normalized `search_text` backs search; stored HTML is never rewritten for search.
+- **Server-side HTML sanitization.** New dependency `symfony/html-sanitizer` behind the Blog-owned
+  `BlogHtmlSanitizerInterface` (`SymfonyBlogHtmlSanitizer`). Explicit allow-list for an article editor; links forced to
+  `rel="noopener noreferrer nofollow"`; scripts, event handlers, styles, iframes/objects/forms and `javascript:`/`data:`
+  URLs never survive. The vendor's 20 KB input cap is raised (configurable) so long articles are not truncated.
+- **Editorial workflow.** `draft → in_review → approved → scheduled|published → archived` (+ return to draft) via one
+  endpoint per action; illegal moves 422. Idempotent publish; `first_published_at` set once, `last_published_at` per
+  real publication. `blogs:publish-scheduled` (every minute) publishes due schedules and unpublishes due `unpublish_at`
+  posts, both idempotent; a lapsed `unpublish_at` hides the post immediately even before the command runs.
+- **History.** Append-only revisions (restore = new revision), per-editor replaceable autosave, an audit trail
+  (`blog_post_activity`), private editorial notes, and slug history (retired slugs resolve with redirect info; reclaiming
+  an old slug removes it from history, so no loops).
+- **Taxonomy & authors.** Hierarchical categories (cycle-proof, one primary per post), flat tags (no description,
+  never created from post input), Blog-owned author profiles with a loose Identity link and ordered co-authorship roles.
+  Unsafe deletes are refused (categories with children/posts, credited authors); tag delete detaches explicitly.
+- **Media.** Loose references only (featured, OG, author/category images, `blog_post_media` with per-article alt
+  text/caption/role), validated through `MediaManagerInterface`; comment attachments must be owned by the commenter.
+- **Shoppable articles.** `blog_post_products` (loose `product_id`, relation types) validated via the new
+  `CatalogManagerInterface::getExistingProductIds()` and hydrated live (one batch `getPublishedProductsByIds()` call);
+  Blog never stores prices. Product click-through is tracked and deduplicated.
+- **Comments (not the Review module).** `bdm-XXXXXX` (`PublicCodeEntity::BlogComment = 'm'`), many per reader,
+  threaded replies (max depth 3), pending → approved/rejected/spam moderation, approved-only public reads, edit returns
+  to pending, soft-deleted parents kept as placeholders, reports (idempotent while open), reactions (`like`/`helpful`).
+  New per-user `blog-comments` rate limiter.
+- **Engagement.** Idempotent likes and bookmarks with batched `is_liked`/`is_bookmarked`, own bookmarks list, follow
+  subscriptions (category/tag/author), bot-filtered and deduplicated view counting via an explicit POST, Blog-owned
+  `blog_post_stats` counters backing `most_viewed`/`most_commented`/`popular` sorts.
+- **Curation & discovery.** Collections (date windows, curated order), keyed placements (`blog.home.hero`, …),
+  manual + fallback related posts, `GET /api/v1/blog` home, RSS 2.0 feed, sitemap entries
+  (`BlogManagerInterface::getSitemapEntries()` + `GET /api/v1/blog/sitemap`), signed time-limited previews.
+- **Integration events** (`Domain/Events`, primitives only, each with `eventId`): `BlogPostPublished`,
+  `BlogPostUnpublished`, `BlogPostArchived`, `BlogCommentCreated`, `BlogCommentReplied`, `BlogCommentApproved`,
+  `BlogPostLiked`, `BlogPostBookmarked`, `BlogProductClicked`, `BlogPostViewed`.
+- **Notification:** new in-app types `blog_post_published` (followers, first publication only),
+  `blog_comment_reply`, `blog_comment_approved` (listeners in the Notification module, after-commit).
+- **Analytics:** new `analytics_blog_daily_stats` read model fed by Blog events (idempotent via
+  `analytics_processed_events`) and `GET /api/v1/admin/analytics/blog` (`analytics.view`). Blog's own
+  `GET /api/v1/admin/blog/analytics` (`blog.analytics.view`) reports from Blog's counters.
+- **Additive contract methods:** `IdentityManagerInterface::getUserSummaries()` (batch),
+  `CatalogManagerInterface::getExistingProductIds()`, `AnalyticsManagerInterface::getBlogEngagement()`.
+- **Permissions:** `blog.view-admin`, `blog.post.{create,update-own,update-any,delete,restore,submit-review,approve,publish,archive}`,
+  `blog.{category,tag,author,collection,placement}.manage`, `blog.comment.{create,view-admin,moderate,delete}`,
+  `blog.analytics.view` — all to `admin`; `blog.comment.create` also to `customer`.
+- **Seeders:** `BlogPermissionsSeeder`, idempotent `BlogSampleDataSeeder` (real Actions, contracts for cross-module ids).
+- **Config:** `config/blog.php` + `BLOG_*` keys in `.env.example`.
+- **Tests (+119):** `tests/Feature/Blog/` — admin CRUD/locking/revisions, workflow & scheduling, public visibility,
+  search/sort/SEO/redirects/feed/sitemap/N+1, sanitizer, taxonomy, editorial tools & signed previews, comments,
+  engagement, curation, integration events (primitives, after-commit, consumers), architecture guards, seeders.
+- **Full suite:** 1054 tests, 1032 passing. The 22 failures are pre-existing and fail identically on a clean tree
+  (Blog stashed): the 3 documented ones, 15 Shipment tests importing a non-existent `PostTariffSeeder` (the class is
+  `PostTarifffSeeder`), and 4 `ShipmentMethodsTest` price assertions (expect 850000, config yields 10000). Not touched.
+
 ### Feature — Dynamic Post shipping calculation
 
 **Postal shipping cost is now computed from a database-driven Post tariff engine owned by the Shipment module,

@@ -6,11 +6,13 @@ namespace Modules\Analytics\Infrastructure\Persistence\Repositories;
 
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Modules\Analytics\Domain\Contracts\AnalyticsManagerInterface;
+use Modules\Analytics\Domain\DTOs\AnalyticsBlogEngagementDTO;
 use Modules\Analytics\Domain\DTOs\AnalyticsCustomerStatsDTO;
 use Modules\Analytics\Domain\DTOs\AnalyticsDailySalesDTO;
 use Modules\Analytics\Domain\DTOs\AnalyticsDashboardDTO;
 use Modules\Analytics\Domain\DTOs\AnalyticsDeliveryStatsDTO;
 use Modules\Analytics\Domain\DTOs\AnalyticsProductSalesDTO;
+use Modules\Analytics\Domain\Models\AnalyticsBlogDailyStat;
 use Modules\Analytics\Domain\Models\AnalyticsCategorySale;
 use Modules\Analytics\Domain\Models\AnalyticsCustomerStat;
 use Modules\Analytics\Domain\Models\AnalyticsDailySale;
@@ -403,6 +405,45 @@ class EloquentAnalyticsManager implements AnalyticsManagerInterface
             deliveryByMethod: $deliveryByMethod,
             driverStats: $driverStats,
             summary: $summary,
+        );
+    }
+
+    public function getBlogEngagement(array $filters = []): AnalyticsBlogEngagementDTO
+    {
+        $counters = ['views', 'likes', 'bookmarks', 'comments', 'product_clicks'];
+        $metric = in_array($filters['metric'] ?? null, $counters, true) ? $filters['metric'] : 'views';
+        $limit = max(1, min(50, (int) ($filters['limit'] ?? 10)));
+
+        $base = AnalyticsBlogDailyStat::query()
+            ->when($filters['from'] ?? null, fn ($q, $from) => $q->where('date', '>=', $from))
+            ->when($filters['to'] ?? null, fn ($q, $to) => $q->where('date', '<=', $to));
+
+        $sums = implode(', ', array_map(fn (string $c) => "coalesce(sum({$c}), 0) as {$c}", $counters));
+
+        $daily = (clone $base)
+            ->selectRaw("date, {$sums}")
+            ->groupBy('date')
+            ->orderBy('date')
+            ->get()
+            ->map(fn ($row) => ['date' => (string) $row->date, ...collect($counters)->mapWithKeys(fn ($c) => [$c => (int) $row->{$c}])->all()])
+            ->all();
+
+        $topPosts = (clone $base)
+            ->selectRaw("blog_post_id, {$sums}")
+            ->groupBy('blog_post_id')
+            ->orderByDesc($metric)
+            ->orderBy('blog_post_id')
+            ->limit($limit)
+            ->get()
+            ->map(fn ($row) => ['blog_post_id' => (int) $row->blog_post_id, ...collect($counters)->mapWithKeys(fn ($c) => [$c => (int) $row->{$c}])->all()])
+            ->all();
+
+        $totals = (clone $base)->selectRaw($sums)->first();
+
+        return new AnalyticsBlogEngagementDTO(
+            daily: $daily,
+            topPosts: $topPosts,
+            summary: collect($counters)->mapWithKeys(fn ($c) => [$c => (int) ($totals?->{$c} ?? 0)])->all(),
         );
     }
 }

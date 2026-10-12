@@ -26,4 +26,9 @@ enum PublicCodeEntity: string
     // `k` (not `t`, which belongs to Payment) — the customer-facing support
     // ticket handle, e.g. `bdk-Q8M2XC`.
     case Ticket = 'k';
+    // Blog article handle, e.g. `bdb-K92XMQ`.
+    case BlogPost = 'b';
+    // Blog discussion comment, e.g. `bdm-K92XMQ` — `m` for "message", because
+    // `c` already belongs to the Catalog category.
+    case BlogComment = 'm';
 }
