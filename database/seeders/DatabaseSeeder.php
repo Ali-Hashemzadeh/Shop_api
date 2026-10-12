@@ -24,7 +24,7 @@ use Modules\ProductReviewAI\Infrastructure\Persistence\Seeders\ReviewSourceSeede
 use Modules\Promotion\Infrastructure\Persistence\Seeders\PromotionPermissionsSeeder;
 use Modules\Promotion\Infrastructure\Persistence\Seeders\PromotionSampleDataSeeder;
 use Modules\Review\Infrastructure\Persistence\Seeders\ReviewPermissionsSeeder;
-use Modules\Shipment\Infrastructure\Persistence\Seeders\PostTarifffSeeder;
+use Modules\Shipment\Infrastructure\Persistence\Seeders\PostTariffSeeder;
 use Modules\Shipment\Infrastructure\Persistence\Seeders\ShipmentPermissionsSeeder;
 use Modules\Shipment\Infrastructure\Persistence\Seeders\ShipmentSampleDataSeeder;
 use Modules\Shipment\Infrastructure\Persistence\Seeders\ShipmentScheduleSeeder;
@@ -52,7 +52,7 @@ class DatabaseSeeder extends Seeder
             // Dynamic Post shipping engine data (idempotent, additive). Neighbours are
             // seeded inside IdentityModuleSeeder; these two hold the tariffs + tunables.
             ShippingParameterSeeder::class,
-            PostTarifffSeeder::class,
+            PostTariffSeeder::class,
             NotificationPermissionsSeeder::class,
             PromotionPermissionsSeeder::class,
             AnalyticsPermissionsSeeder::class,

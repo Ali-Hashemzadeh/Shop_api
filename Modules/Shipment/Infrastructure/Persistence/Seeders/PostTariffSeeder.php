@@ -16,7 +16,7 @@ use Modules\Shipment\Domain\Models\PostTariff;
  * Brackets are half-open on weight: [weight_from, weight_to) with weight_to = null the
  * open-ended top bracket that carries the per-kg extra_weight_price. All prices TOMANS.
  */
-class PostTarifffSeeder extends Seeder
+class PostTariffSeeder extends Seeder
 {
     /**
      * service_type => distance_type => list of [weight_from, weight_to, base_price, extra_weight_price].
