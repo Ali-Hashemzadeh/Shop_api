@@ -83,7 +83,7 @@ Handles OTP + password authentication, user profiles, multi-role RBAC, shipping 
 - **Key entities:** `User`, `Address` (province/city/postal code plus a map pin — `latitude`/`longitude`, required on create, and an optional `map_address` line), `Province`, `City`
 - **Public contract:** `IdentityManagerInterface` — `isAdmin()`, `isDeliveryUser()`, `getUserSummary()`, `getAdminUserIds()`, `getDeliveryUserIds()`, `getOwnedAddressSnapshot()`. The only authorized way for other modules to ask about a user or freeze one of their addresses without importing Identity's models.
 - **Roles:** `admin`, `customer`, and `delivery`. **A delivery worker holds `customer` *and* `delivery`** — a courier is a shopper who also delivers, so the `delivery` role carries only the two extra fulfillment permissions and never duplicates the customer bundle. Granting it is additive and idempotent; it never removes an existing role.
-- **Admin user management:** `POST /api/v1/admin/users` creates a `customer` or `delivery` account (`admin` is not creatable). No password or temporary secret is issued — the phone number is the credential, and the new account signs in through the existing OTP flow, optionally adding a password later. `POST /api/v1/admin/users/{user}/delivery-role` turns an existing account into a delivery worker (a phone number is required), and `GET /api/v1/admin/users?role=delivery` lists drivers. Permissions: `profile.create-any`, `profile.assign-delivery` — and creating somebody directly as `delivery` needs both, so the create endpoint is not a way around the grant endpoint.
+- **Admin user management:** `POST /api/v1/admin/users` creates a `customer` or `delivery` account (`admin` is not creatable). No password or temporary secret is issued — the phone number is the credential, and the new account signs in through the existing OTP flow, optionally adding a password later. `POST /api/v1/admin/users/{user}/delivery-role` turns an existing account into a delivery worker (a phone number is required), and `GET /api/v1/admin/users?role=delivery` lists drivers. Permissions: `profile.create-any`, `profile.assign-delivery` — and creating somebody directly as `delivery` needs both, so the create endpoint is not a way around the grant endpoint. Runtime role/permission administration lives under `/api/v1/admin/roles` and `/api/v1/admin/permissions` (`rbac.view` / `rbac.manage`) — see "Admin Roles & Permissions" below.
 - **Auth pattern:** Split-auth onboarding over Sanctum tokens + Spatie roles (`admin`, `customer`). `POST /api/v1/auth/check-user` (`phone_number`) returns `is_new_user` + `allowed_methods`: unknown phones get `["otp"]` (must verify ownership first), known phones get `["password", "otp"]`. `POST /api/v1/otp/request` (phone `09xxxxxxxxx`, optional `name`) finds-or-creates the user and sends a hashed, short-TTL code; `POST /api/v1/otp/verify` (phone, code, device_name, optional `name`/`password`) consumes the single-use code, optionally sets a hashed password, and mints a token. Sign-up and login are the same flow.
 - **Password login:** `POST /api/v1/auth/login-password` (`phone_number`, `password`, optional `device_name`) verifies via `Hash::check()` and mints a Sanctum token. Bad phone / wrong password / password-less account all return a generic **401 `Invalid credentials.`** Passwords are stored hashed (`Hash::make()`); accounts may remain OTP-only (`password` is nullable).
 - **OTP delivery:** swappable `OtpSenderInterface`, bound to a log-only `LogOtpSender` placeholder until the SMS gateway is connected. Tunables in `config/identity.php` → `otp.length`, `otp.ttl_minutes`.
@@ -355,6 +355,20 @@ Auto-generated interactive API docs are available at `/docs/api` when running lo
 | `GET` | `/admin/users` | `profile.view-any` | Paginated users; `?role=customer\|delivery\|admin` picks a cohort (e.g. drivers) |
 | `POST` | `/admin/users` | `profile.create-any` (+ `profile.assign-delivery` for `role=delivery`) | Create a `customer` or `delivery` account — no password issued; the account signs in by OTP |
 | `POST` | `/admin/users/{user}/delivery-role` | `profile.assign-delivery` | Make an existing account a delivery worker — additive, idempotent, phone required |
+
+### Admin Roles & Permissions (`auth:sanctum` + `rbac.view` / `rbac.manage` required)
+
+Role and permission administration: read the catalogue, then grant/revoke permissions on existing roles or assign/revoke existing roles on users. All mutations are additive and idempotent, and take effect on the next request. The `admin` role is protected — listable, never editable or assignable through the API.
+
+| Method | Endpoint | Permission | Description |
+|---|---|---|---|
+| `GET` | `/admin/roles` | `rbac.view` | Paginated roles with `permissions_count` / `users_count` |
+| `GET` | `/admin/roles/{role}` | `rbac.view` | One role by name + its full permission set (unknown → 404) |
+| `GET` | `/admin/permissions` | `rbac.view` | Paginated seeded permission catalogue (`search`, `group` filters) |
+| `POST` | `/admin/roles/{role}/permissions` | `rbac.manage` | Grant permissions (`{permissions: [...]}`) — additive, idempotent |
+| `DELETE` | `/admin/roles/{role}/permissions` | `rbac.manage` | Revoke permissions (`{permissions: [...]}`) — idempotent |
+| `POST` | `/admin/users/{user}/roles` | `rbac.manage` | Assign a role (`{role}`) — additive, idempotent |
+| `DELETE` | `/admin/users/{user}/roles` | `rbac.manage` | Revoke a role (`{role}`) — idempotent |
 
 ### Delivery worker (`auth:sanctum` + `shipment.delivery.*-assigned` required)
 

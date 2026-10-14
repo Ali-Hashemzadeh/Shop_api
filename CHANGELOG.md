@@ -2,6 +2,33 @@
 
 ## [Unreleased]
 
+### Feature — RBAC management API (Identity)
+
+**Admins can now manage role permission bundles and user role assignments at runtime.** Identity exposes a
+generic RBAC surface under `/api/v1/admin`: read the role/permission catalogue, grant/revoke permissions on
+existing roles, and assign/revoke existing roles on users. All mutations are **additive and idempotent** —
+Spatie's `givePermissionTo`/`revokePermissionTo`/`assignRole`/`removeRole`, never `sync*` — so module-seeded
+grants and a user's other roles always survive. Spatie flushes the permission cache on write, so capability
+changes apply to the very next request.
+
+- **New permissions:** `rbac.view` (reads) and `rbac.manage` (writes), seeded to `admin` only by
+  `RolesAndPermissionsSeeder`. Authorization is permission-based like everywhere else — a non-admin holding
+  `rbac.manage` can manage (proved by tests).
+- **Endpoints:** `GET /api/v1/admin/roles` (paginated, `permissions_count` + `users_count`),
+  `GET /api/v1/admin/roles/{role}` (by name on the `web` guard + full permission set; unknown → 404),
+  `GET /api/v1/admin/permissions` (paginated; `search` + `group` filters),
+  `POST|DELETE /api/v1/admin/roles/{role}/permissions` (body `{permissions: [...]}`),
+  `POST|DELETE /api/v1/admin/users/{user}/roles` (body `{role}` — the name travels in the body so Ticket's
+  existing `.../roles/support` routes keep their own `ticket.manage-support-users` authorization).
+- **The `admin` role is protected:** listable, never editable/assignable/revocable through the API (422 on
+  `role`), consistent with "admin is not creatable" and the seeder-owned "admin receives everything" bundle.
+  Unknown permission names / malformed payloads → 422; unknown role/user → 404; writes 403-before-validation.
+- **`web` guard anchoring:** the role list builds its query from an explicitly web-guarded `Role` instance,
+  because `auth:sanctum` switches the app's default guard to `sanctum` and Spatie's `Role` constructor stamps
+  `guard_name` from that default — a plain `Role::query()` would build the `users` relation against the
+  provider-less `sanctum` guard and 500.
+- **Tests (+23):** `tests/Feature/Identity/RbacManagementTest.php`.
+
 ### Feature — Blog / CMS module
 
 **New bounded context `Modules/Blog/`: a production editorial Blog with workflow, scheduling, revisions, SEO,

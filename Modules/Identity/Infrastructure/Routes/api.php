@@ -9,5 +9,6 @@ Route::middleware('api')->prefix('api/v1')->group(function () {
     Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         require __DIR__.'/profile.php';
         require __DIR__.'/address.php';
+        require __DIR__.'/rbac.php';
     });
 });

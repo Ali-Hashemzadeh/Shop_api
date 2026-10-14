@@ -115,6 +115,7 @@
   <a href="#addresses">Addresses</a>
   <a href="#admin-users">Admin â€” Users</a>
   <a href="#admin-delivery-users">Admin - Delivery Users</a>
+  <a href="#admin-rbac">Admin &#8212; Roles &amp; Permissions</a>
 
   <div class="section-label">Media</div>
   <a href="#media">Media Library</a>
@@ -1166,6 +1167,116 @@ curl -s -X POST http://localhost:8000/api/v1/media \
       <pre>{ <span class="key">"message"</span>: <span class="str">"User deleted successfully."</span> }</pre>
     </div>
   </div>
+
+  <h2 id="admin-rbac">Admin &#8212; Roles &amp; Permissions</h2>
+  <p>Runtime RBAC administration: read the seeded role/permission catalogue, grant or revoke permissions on existing
+  roles, and assign or revoke existing roles on users. Every mutation is <strong>additive and idempotent</strong> &#8212;
+  module-seeded grants and a user's other roles always survive &#8212; and the permission cache is flushed on write, so
+  a new capability applies to the very next request. The <code>admin</code> role is <strong>protected</strong>: it can be
+  listed, but its bundle cannot be edited and the role cannot be assigned or revoked here.</p>
+  <div class="note"><strong>Permissions:</strong> reads need <code>rbac.view</code>, writes need <code>rbac.manage</code>
+  (both seeded to <code>admin</code> only; authorization is permission-based &#8212; a holder without the admin role may
+  still act). Unauthenticated &rarr; <strong>401</strong>; without the permission &rarr; <strong>403</strong>; unknown role
+  &rarr; <strong>404</strong>; unknown permission name, malformed body, or an attempt to touch <code>admin</code> &rarr;
+  <strong>422</strong>.</div>
+
+  <h3 id="admin-rbac-roles">Roles</h3>
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/admin/roles</span>
+      <span class="badge">rbac.view</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Paginated role catalogue (default 15/page, <code>per_page</code> 1&#8211;100), ordered by name.</p>
+      <pre>{
+  <span class="key">"data"</span>: [
+    { <span class="key">"id"</span>: <span class="num">1</span>, <span class="key">"name"</span>: <span class="str">"admin"</span>, <span class="key">"guard_name"</span>: <span class="str">"web"</span>, <span class="key">"permissions_count"</span>: <span class="num">74</span>, <span class="key">"users_count"</span>: <span class="num">2</span> },
+    { <span class="key">"id"</span>: <span class="num">2</span>, <span class="key">"name"</span>: <span class="str">"customer"</span>, <span class="key">"guard_name"</span>: <span class="str">"web"</span>, <span class="key">"permissions_count"</span>: <span class="num">7</span>, <span class="key">"users_count"</span>: <span class="num">128</span> }
+  ],
+  <span class="key">"meta"</span>: { ... }, <span class="key">"links"</span>: { ... }
+}</pre>
+    </div>
+  </div>
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/admin/roles/{role}</span>
+      <span class="badge">rbac.view</span>
+    </div>
+    <div class="endpoint-body">
+      <p><code>{role}</code> is the role <em>name</em> on the <code>web</code> guard (e.g. <code>customer</code>). Returns the role with its full sorted permission set. Unknown name &rarr; <strong>404</strong>.</p>
+      <pre>{
+  <span class="key">"data"</span>: {
+    <span class="key">"id"</span>: <span class="num">2</span>, <span class="key">"name"</span>: <span class="str">"customer"</span>, <span class="key">"guard_name"</span>: <span class="str">"web"</span>,
+    <span class="key">"permissions_count"</span>: <span class="num">7</span>, <span class="key">"users_count"</span>: <span class="num">128</span>,
+    <span class="key">"permissions"</span>: [<span class="str">"address.create-own"</span>, <span class="str">"..."</span>]
+  }
+}</pre>
+    </div>
+  </div>
+
+  <h3 id="admin-rbac-permissions">Permissions &amp; Grants</h3>
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/admin/permissions</span>
+      <span class="badge">rbac.view</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Paginated catalogue of every seeded permission, ordered by name. Query params: <code>per_page</code>, <code>search</code> (name contains), <code>group</code> (exact namespace before the first dot, e.g. <code>catalog</code> or <code>rbac</code>).</p>
+      <pre>{ <span class="key">"data"</span>: [ { <span class="key">"id"</span>: <span class="num">24</span>, <span class="key">"name"</span>: <span class="str">"rbac.manage"</span>, <span class="key">"group"</span>: <span class="str">"rbac"</span> } ], <span class="key">"meta"</span>: { ... }, <span class="key">"links"</span>: { ... } }</pre>
+    </div>
+  </div>
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/admin/roles/{role}/permissions</span>
+      <span class="badge">rbac.manage</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Grants the listed permissions to the role &#8212; additive and idempotent; names the role already holds are no-ops. Returns the updated role detail.</p>
+      <pre>{ <span class="key">"permissions"</span>: [<span class="str">"catalog.product.create"</span>, <span class="str">"catalog.product.update"</span>] }</pre>
+      <div class="warn"><strong>Protected:</strong> writes to the <code>admin</code> role return <strong>422</strong> on <code>role</code>. Unknown permission names return <strong>422</strong> on <code>permissions.{index}</code>.</div>
+    </div>
+  </div>
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method delete">DELETE</span>
+      <span class="endpoint-path">/admin/roles/{role}/permissions</span>
+      <span class="badge">rbac.manage</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Revokes the listed permissions from the role &#8212; idempotent; names the role does not hold are ignored. Returns the updated role detail.</p>
+      <pre>{ <span class="key">"permissions"</span>: [<span class="str">"catalog.product.create"</span>] }</pre>
+    </div>
+  </div>
+
+  <h3 id="admin-rbac-user-roles">User Roles</h3>
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/admin/users/{user_id}/roles</span>
+      <span class="badge">rbac.manage</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Assigns a role to the user &#8212; additive (never replaces existing roles) and idempotent. The role name travels in the body. Returns the user resource including the full <code>roles</code> list.</p>
+      <pre>{ <span class="key">"role"</span>: <span class="str">"support"</span> }</pre>
+      <div class="warn"><strong><code>admin</code> is refused</strong> with <strong>422</strong> on <code>role</code>. Unknown role &rarr; 422; unknown user &rarr; 404.</div>
+    </div>
+  </div>
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method delete">DELETE</span>
+      <span class="endpoint-path">/admin/users/{user_id}/roles</span>
+      <span class="badge">rbac.manage</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Removes a role from the user, leaving every other role intact &#8212; idempotent. Same body and error rules as the assign endpoint.</p>
+      <pre>{ <span class="key">"role"</span>: <span class="str">"delivery"</span> }</pre>
+    </div>
+  </div>
+  <div class="note"><strong>Existing specialized endpoints stay:</strong> delivery duty is still granted through <code>POST /admin/users/{user}/delivery-role</code> (<code>profile.assign-delivery</code>), and Ticket's support-agent management through <code>POST/DELETE /admin/users/{user}/roles/support</code> (<code>ticket.manage-support-users</code>). The generic endpoints are additive alternatives, not replacements.</div>
 
   <div class="endpoint">
     <div class="endpoint-header">

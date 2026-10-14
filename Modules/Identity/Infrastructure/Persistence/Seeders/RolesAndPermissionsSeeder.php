@@ -28,6 +28,11 @@ class RolesAndPermissionsSeeder extends Seeder
             'address.view-any',
             'address.update-any',
             'address.delete-any',
+            // RBAC management: who may read the role/permission catalogue and who
+            // may change it (grant/revoke permissions on roles, assign/revoke roles
+            // on users). Granted to `admin` via the sync below, like everything else.
+            'rbac.view',
+            'rbac.manage',
         ];
 
         foreach ($permissions as $permission) {
