@@ -20,10 +20,11 @@ interface ShipmentManagerInterface
     /**
      * Config-backed fulfillment methods with capabilities calculated for the
      * given user/address (e.g. local delivery marked unavailable when ineligible).
+     * Postal prices are calculated from the cart weight, the same way checkout does.
      *
      * @return ShipmentMethodDTO[]
      */
-    public function getAvailableMethods(int $userId, ?int $addressId): array;
+    public function getAvailableMethods(int $userId, ?int $addressId, int $totalWeightGrams = 0): array;
 
     /**
      * Bookable local-delivery sessions grouped by date for the selectable window.

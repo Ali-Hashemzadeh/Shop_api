@@ -91,6 +91,31 @@ class DynamicPostShippingTest extends ShipmentTestCase
     }
 
     /** @test */
+    public function the_methods_list_shows_the_same_calculated_post_price_as_checkout(): void
+    {
+        config(['shipping.origin_province_id' => $this->originProvinceId]);
+
+        $user = $this->actingAsCustomer();
+        $addressId = $this->createAddress($user->id, $this->destinationProvinceId, null);
+        // 2000g => bracket [1000,3000) non_neighbor post_standard => base 90000.
+        $this->createWeightedVariant('LIST-POST', 2000, 50000, 10);
+        $this->addToCart($user->id, 'LIST-POST', 1);
+
+        $methods = collect($this->getJson("/api/v1/shipment/methods?address_id={$addressId}")
+            ->assertOk()
+            ->json('data'));
+
+        $this->assertSame(90000, $methods->firstWhere('code', 'post_standard')['price']);
+
+        $orderId = $this->postJson('/api/v1/orders', [
+            'shipment_method_code' => 'post_standard',
+            'address_id' => $addressId,
+        ])->assertStatus(201)->json('id');
+
+        $this->assertDatabaseHas('orders', ['id' => $orderId, 'shipping_cost' => 90000]);
+    }
+
+    /** @test */
     public function it_falls_back_to_the_static_price_when_no_origin_is_configured(): void
     {
         // Origin left unset (the production-safe default) — dynamic pricing cannot run.

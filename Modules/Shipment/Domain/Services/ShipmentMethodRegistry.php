@@ -67,7 +67,7 @@ class ShipmentMethodRegistry
         return is_array($location) ? $location : null;
     }
 
-    public function toDTO(string $code, bool $available = true, ?string $unavailableReason = null): ShipmentMethodDTO
+    public function toDTO(string $code, bool $available = true, ?string $unavailableReason = null, ?int $price = null): ShipmentMethodDTO
     {
         $method = $this->find($code) ?? [];
 
@@ -75,7 +75,7 @@ class ShipmentMethodRegistry
             code: $code,
             title: (string) ($method['title'] ?? $code),
             type: (string) ($method['type'] ?? ''),
-            price: (int) ($method['price'] ?? 0),
+            price: $price ?? (int) ($method['price'] ?? 0),
             requiresAddress: (bool) ($method['requires_address'] ?? false),
             requiresDeliverySlot: (bool) ($method['requires_delivery_slot'] ?? false),
             supportsTracking: (bool) ($method['supports_tracking'] ?? false),

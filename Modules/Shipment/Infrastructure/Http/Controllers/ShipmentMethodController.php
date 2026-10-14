@@ -9,6 +9,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Validation\Rule;
+use Modules\Cart\Domain\Contracts\CartManagerInterface;
 use Modules\Shipment\Domain\Contracts\ShipmentManagerInterface;
 use Modules\Shipment\Infrastructure\Http\Resources\DeliverySlotResource;
 use Modules\Shipment\Infrastructure\Http\Resources\ShipmentMethodResource;
@@ -17,6 +18,7 @@ class ShipmentMethodController extends Controller
 {
     public function __construct(
         private readonly ShipmentManagerInterface $shipment,
+        private readonly CartManagerInterface $cart,
     ) {}
 
     /**
@@ -27,7 +29,10 @@ class ShipmentMethodController extends Controller
     {
         $addressId = $request->filled('address_id') ? (int) $request->query('address_id') : null;
 
-        $methods = $this->shipment->getAvailableMethods($request->user()->id, $addressId);
+        $userId = $request->user()->id;
+        $totalWeightGrams = $this->cart->findOrCreateCart($userId, null)->totalWeightGrams;
+
+        $methods = $this->shipment->getAvailableMethods($userId, $addressId, $totalWeightGrams);
 
         return response()->json([
             'data' => ShipmentMethodResource::collection($methods)->resolve(),

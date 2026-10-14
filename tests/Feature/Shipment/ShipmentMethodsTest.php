@@ -67,6 +67,7 @@ class ShipmentMethodsTest extends ShipmentTestCase
         $addressId = $this->createAddress($user->id);
         $this->createVariantWithStock('SP-1', 40000, 5);
         $this->addToCart($user->id, 'SP-1', 1);
+        $postPrice = (int) config('shipment.methods.post_standard.price');
 
         $this->postJson('/api/v1/orders', [
             'shipment_method_code' => 'post_standard',
@@ -74,8 +75,8 @@ class ShipmentMethodsTest extends ShipmentTestCase
         ])
             ->assertStatus(201)
             ->assertJsonPath('shipment_method_code', 'post_standard')
-            ->assertJsonPath('shipping_cost', 850000)
-            ->assertJsonPath('total_amount', 40000 + 850000);
+            ->assertJsonPath('shipping_cost', $postPrice)
+            ->assertJsonPath('total_amount', 40000 + $postPrice);
     }
 
     /** @test */
@@ -144,7 +145,7 @@ class ShipmentMethodsTest extends ShipmentTestCase
         ])
             ->assertStatus(201)
             ->assertJsonPath('shipment_method_code', 'local_delivery')
-            ->assertJsonPath('shipping_cost', 1200000);
+            ->assertJsonPath('shipping_cost', (int) config('shipment.methods.local_delivery.price'));
 
         $orderId = $response->json('id');
         $this->assertDatabaseHas('delivery_slot_reservations', [
@@ -237,6 +238,7 @@ class ShipmentMethodsTest extends ShipmentTestCase
         $addressId = $this->createAddress($user->id);
         $this->createVariantWithStock('SNAP-1', 10000, 5);
         $this->addToCart($user->id, 'SNAP-1', 1);
+        $postPrice = (int) config('shipment.methods.post_standard.price');
 
         $orderId = $this->postJson('/api/v1/orders', [
             'shipment_method_code' => 'post_standard',
@@ -247,8 +249,8 @@ class ShipmentMethodsTest extends ShipmentTestCase
         Config::set('shipment.methods.post_standard.price', 5_000_000);
 
         $order = Order::find($orderId);
-        $this->assertSame(850000, $order->shipment_snapshot['shipping_cost']);
-        $this->assertSame(850000, $order->shipping_cost);
+        $this->assertSame($postPrice, $order->shipment_snapshot['shipping_cost']);
+        $this->assertSame($postPrice, $order->shipping_cost);
         $this->assertSame('Standard Post', $order->shipment_snapshot['method_title']);
     }
 
@@ -270,7 +272,7 @@ class ShipmentMethodsTest extends ShipmentTestCase
         ])->assertStatus(201)->json('id');
 
         $order = Order::find($orderId);
-        $this->assertSame(1200000, $order->shipping_cost);
+        $this->assertSame((int) config('shipment.methods.local_delivery.price'), $order->shipping_cost);
         $this->assertSame($slot->dateString(), $order->shipment_snapshot['delivery_slot']['date']);
     }
 }

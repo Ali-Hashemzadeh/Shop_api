@@ -41,7 +41,7 @@ class EloquentShipmentManager implements ShipmentManagerInterface
         private readonly ShippingCostCalculatorInterface $shippingCalculator,
     ) {}
 
-    public function getAvailableMethods(int $userId, ?int $addressId): array
+    public function getAvailableMethods(int $userId, ?int $addressId, int $totalWeightGrams = 0): array
     {
         $addressSnapshot = $addressId !== null ? $this->findOwnedAddress($userId, $addressId) : null;
 
@@ -74,7 +74,11 @@ class EloquentShipmentManager implements ShipmentManagerInterface
                 $reason = 'Your address is inside the local delivery area — please choose local delivery or in-store pickup.';
             }
 
-            $methods[] = $this->registry->toDTO($code, $available, $reason);
+            $price = $type === ShipmentMethodType::Postal->value && $available && $addressSnapshot !== null
+                ? $this->postalPrice($type, $code, $this->registry->price($code), $addressSnapshot, $totalWeightGrams)
+                : null;
+
+            $methods[] = $this->registry->toDTO($code, $available, $reason, $price);
         }
 
         return $methods;
@@ -300,21 +304,38 @@ class EloquentShipmentManager implements ShipmentManagerInterface
 
     public function resolveShippingCostForSelection(ShipmentSelectionDTO $selection, int $totalWeightGrams): int
     {
+        return $this->postalPrice(
+            $selection->methodType,
+            $selection->methodCode,
+            $selection->shippingCost,
+            $selection->address,
+            $totalWeightGrams,
+        );
+    }
+
+    /**
+     * Single pricing path shared by the methods list and checkout, so the price a
+     * customer sees is the price they are charged.
+     *
+     * @param  array<string, mixed>|null  $address
+     */
+    private function postalPrice(string $methodType, string $methodCode, int $staticPrice, ?array $address, int $totalWeightGrams): int
+    {
         // Only postal methods are priced by the Post tariff engine. Local delivery and
         // pickup keep their static configured price.
-        if ($selection->methodType !== ShipmentMethodType::Postal->value) {
-            return $selection->shippingCost;
+        if ($methodType !== ShipmentMethodType::Postal->value) {
+            return $staticPrice;
         }
 
         $originProvinceId = (int) config('shipping.origin_province_id', 0) ?: null;
-        $destinationProvinceId = isset($selection->address['province_id'])
-            ? (int) $selection->address['province_id']
+        $destinationProvinceId = isset($address['province_id'])
+            ? (int) $address['province_id']
             : null;
 
         // Cannot price dynamically without an origin, a destination, and real weight —
         // fall back to the static price rather than block or mis-price checkout.
         if ($originProvinceId === null || $destinationProvinceId === null || $totalWeightGrams <= 0) {
-            return $selection->shippingCost;
+            return $staticPrice;
         }
 
         try {
@@ -322,7 +343,7 @@ class EloquentShipmentManager implements ShipmentManagerInterface
                 originProvinceId: $originProvinceId,
                 destinationProvinceId: $destinationProvinceId,
                 weightGrams: $totalWeightGrams,
-                serviceType: $selection->methodCode,
+                serviceType: $methodCode,
                 packageType: (string) config('shipping.default_package_type', 'standard'),
             ));
 
@@ -331,13 +352,13 @@ class EloquentShipmentManager implements ShipmentManagerInterface
             // No tariff configured for this parcel yet — safe static fallback + a log so
             // the gap is visible without failing a customer's checkout.
             Log::info('Post shipping tariff missing; falling back to static price.', [
-                'method_code' => $selection->methodCode,
+                'method_code' => $methodCode,
                 'destination_province_id' => $destinationProvinceId,
                 'weight_grams' => $totalWeightGrams,
                 'reason' => $e->getMessage(),
             ]);
 
-            return $selection->shippingCost;
+            return $staticPrice;
         }
     }
 
