@@ -7,8 +7,10 @@ namespace Modules\ProductReviewAI\Infrastructure\AI;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Modules\ProductReviewAI\Domain\Contracts\AIProviderInterface;
+use Modules\ProductReviewAI\Domain\Enums\GenerationFailureCode;
 use Modules\ProductReviewAI\Domain\Exceptions\AiGenerationException;
 use Modules\ProductReviewAI\Domain\Exceptions\IntegrationUnavailableException;
+use Modules\ProductReviewAI\Infrastructure\Support\HttpFailure;
 
 /**
  * AvalAI provider over its OpenAI-compatible chat-completions surface.
@@ -36,16 +38,21 @@ class AvalAIProvider implements AIProviderInterface
 
         if (trim($apiKey) === '') {
             throw new IntegrationUnavailableException(
-                'AvalAI is not configured: set AVALAI_API_KEY. AI generation cannot start.'
+                'AvalAI is not configured: set AVALAI_API_KEY. AI generation cannot start.',
+                0,
+                null,
+                GenerationFailureCode::AiConfigurationError,
             );
         }
 
         $baseUrl = rtrim((string) $this->config('base_url', 'https://api.avalai.ir/v1'), '/');
         $url = $baseUrl.'/chat/completions';
+        // A run may pin the model it was requested with; otherwise the configured one.
+        $model = is_string($options['model'] ?? null) && $options['model'] !== '' ? $options['model'] : $this->model();
 
         Log::info('ProductReviewAI AvalAI request', [
             'url' => $url,
-            'model' => $this->model(),
+            'model' => $model,
             'system_prompt' => mb_substr($systemPrompt, 0, 2000),
             'user_prompt' => mb_substr($userPrompt, 0, 4000),
         ]);
@@ -55,7 +62,7 @@ class AvalAIProvider implements AIProviderInterface
                 ->acceptJson()
                 ->timeout((int) $this->config('timeout', 120))
                 ->post($url, [
-                    'model' => $this->model(),
+                    'model' => $model,
                     'messages' => [
                         ['role' => 'system', 'content' => $systemPrompt],
                         ['role' => 'user', 'content' => $userPrompt],
@@ -66,7 +73,12 @@ class AvalAIProvider implements AIProviderInterface
         } catch (\Throwable $e) {
             Log::warning('ProductReviewAI AvalAI request errored', ['url' => $url, 'error' => $e->getMessage()]);
 
-            throw new AiGenerationException("AvalAI request failed: {$e->getMessage()}", 0, $e);
+            throw new AiGenerationException(
+                "AvalAI request failed: {$e->getMessage()}",
+                0,
+                $e,
+                HttpFailure::isTimeout($e) ? GenerationFailureCode::AiTimeout : GenerationFailureCode::AiGenerationFailed,
+            );
         }
 
         if ($response->failed()) {
@@ -77,7 +89,10 @@ class AvalAIProvider implements AIProviderInterface
             ]);
 
             throw new AiGenerationException(
-                "AvalAI returned HTTP {$response->status()}: ".mb_substr($response->body(), 0, 500)
+                "AvalAI returned HTTP {$response->status()}: ".mb_substr($response->body(), 0, 500),
+                0,
+                null,
+                $response->status() === 429 ? GenerationFailureCode::AiRateLimited : GenerationFailureCode::AiGenerationFailed,
             );
         }
 
@@ -90,7 +105,7 @@ class AvalAIProvider implements AIProviderInterface
         $content = data_get($response->json(), 'choices.0.message.content');
 
         if (! is_string($content) || trim($content) === '') {
-            throw new AiGenerationException('AvalAI returned an empty completion.');
+            throw new AiGenerationException('AvalAI returned an empty completion.', 0, null, GenerationFailureCode::AiResponseInvalid);
         }
 
         return $content;

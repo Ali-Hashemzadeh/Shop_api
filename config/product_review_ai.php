@@ -70,4 +70,57 @@ return [
         'default_count' => (int) env('PRODUCT_REVIEW_AI_DEFAULT_COUNT', 3),
         'max_count' => (int) env('PRODUCT_REVIEW_AI_MAX_COUNT', 20),
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Queue job
+    |--------------------------------------------------------------------------
+    | `job_timeout` is GenerateProductAIReviewsJob::$timeout (seconds). The
+    | default (1200 s) covers the worst case of the current HTTP limits:
+    | collection ≤ DIGIKALA_MAX_PAGES × DIGIKALA_TIMEOUT (30 × 30 s = 900 s) plus
+    | two AI calls ≤ 2 × AVALAI_TIMEOUT (240 s).
+    |
+    | The queue connection's `retry_after` (DB_QUEUE_RETRY_AFTER for the database
+    | driver, default 90) MUST be larger than this value, otherwise a second
+    | worker may receive the same job while the first is still running. The
+    | atomic claim still prevents a second pipeline, but the redelivery is
+    | wasted. Laravel only enforces $timeout where pcntl is available (Linux).
+    |
+    | The job never retries automatically ($tries = 1): an automatic re-run would
+    | repeat paid AI calls. Recovery is the admin retry endpoint.
+    */
+    'queue' => [
+        'job_timeout' => (int) env('PRODUCT_REVIEW_AI_JOB_TIMEOUT', 1200),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Monitoring & stuck-generation detection
+    |--------------------------------------------------------------------------
+    | Used by both the monitoring API (`is_suspected_stuck`, stats) and the
+    | `ai-reviews:detect-stuck-generations` command — one rule set, no drift.
+    |
+    | pending_threshold_seconds     a `pending` run older than this is SUSPECTED
+    |                               (no worker picked it up). Never auto-failed:
+    |                               a backlog or stopped worker is not proof the
+    |                               job is lost.
+    | inactivity_threshold_seconds  a `processing` run whose last heartbeat is
+    |                               older than this is SUSPECTED. The effective
+    |                               value is never below the longest single
+    |                               blocking stage derived from the HTTP timeouts
+    |                               (heartbeats are written at stage boundaries,
+    |                               not during a long HTTP call).
+    | processing_timeout_seconds    a `processing` run started longer ago than this
+    |                               AND inactive is treated as ABANDONED and may be
+    |                               failed (PROCESSING_TIMEOUT) — only when this is
+    |                               larger than queue.job_timeout, so no live
+    |                               worker can still legitimately own it.
+    | auto_fail_abandoned           false = only report, never change state.
+    */
+    'monitoring' => [
+        'pending_threshold_seconds' => (int) env('PRODUCT_REVIEW_AI_PENDING_STUCK_AFTER', 900),
+        'inactivity_threshold_seconds' => (int) env('PRODUCT_REVIEW_AI_INACTIVITY_STUCK_AFTER', 1200),
+        'processing_timeout_seconds' => (int) env('PRODUCT_REVIEW_AI_PROCESSING_TIMEOUT', 1800),
+        'auto_fail_abandoned' => (bool) env('PRODUCT_REVIEW_AI_AUTO_FAIL_ABANDONED', true),
+    ],
 ];

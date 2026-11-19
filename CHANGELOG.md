@@ -2,6 +2,45 @@
 
 ## [Unreleased]
 
+### Feature — AI review generation monitoring, diagnostics & recovery (ProductReviewAI)
+
+**Admins can now monitor every AI review generation run, see exactly where and why one failed, read its sanitized
+execution log, and retry it safely; stuck runs are detected on a schedule.** Scope is AI review generation only.
+
+- **Endpoints** (`auth:sanctum` + `product-review-ai.manage`): `GET /api/v1/admin/ai-reviews/generations` (all products;
+  filters `status`/`product_uuid`/`source_id`/`created_by`/`model`/`date_from`/`date_to`, `sort=newest|oldest|longest_duration`,
+  `per_page` 1–100 default 20), `GET …/generations/stats` (counts, `suspected_stuck`, `success_rate` as a 0–1 fraction,
+  `average_duration_ms`), `GET …/generations/{id}` (execution status + draft moderation counts),
+  `GET …/generations/{id}/logs` (sanitized, chronological), `POST …/generations/{id}/retry` (202; 409 / 503).
+- **New permissions** (admin only, additive to `manage`): `product-review-ai.view-logs` (redacted full diagnostics,
+  `?diagnostics=1`) and `product-review-ai.retry`. Re-run `ProductReviewAIPermissionsSeeder` on deploy.
+- **Reliable lifecycle:** atomic `pending → processing` claim (duplicate/redelivered jobs never run a second pipeline);
+  explicit stages (`queued → initializing → collecting_reviews → analyzing_reviews → generating_reviews → saving_drafts →
+  finished`); structured `failure_code` (14 codes, from exception types / HTTP status / cURL errno — never message text) +
+  `failed_stage` + sanitized `failure_reason`; `started_at`/`finished_at`/`duration_ms`/stage-boundary `last_heartbeat_at`/
+  `attempt_count`. All transitions are conditional updates — terminal states are never overwritten and a late worker
+  cannot complete a reconciled run. New job `failed()` handler for failures that escape the pipeline.
+- **Retry** creates a new run linked by `retry_of_id` (unique → linear chain, concurrent duplicates impossible) from an
+  immutable **request snapshot** (`request_context`: product context, source, mapped external id, count, provider/model,
+  pinned prompt versions, collection limit). The pipeline now executes from that snapshot, so the run's recorded prompt
+  version is the one actually used. Historical runs without a snapshot are refused (409), never guessed.
+- **Queue dispatch** happens after commit; a failed push marks the run `failed` (`QUEUE_PROCESSING_ERROR`) and returns 503
+  (also for generate/regenerate) instead of leaving an orphaned `pending` row. `$tries = 1` is kept — no automatic
+  re-running of paid AI calls; job `$timeout` is now `PRODUCT_REVIEW_AI_JOB_TIMEOUT` (1200 s).
+- **Stuck detection:** `ai-reviews:detect-stuck-generations` (every 5 minutes, `--dry-run`) — old pending runs are reported
+  only; processing runs are failed (`PROCESSING_TIMEOUT`) only when provably abandoned. Same rule as the API's
+  `is_suspected_stuck` and the stats count. New `PRODUCT_REVIEW_AI_*` monitoring env keys.
+- **Log sanitization:** raw stored payloads are never returned by default — allow-listed summaries + `omitted_fields`;
+  secrets, emails, phone numbers and stack traces are redacted on read (historical logs included, never modified).
+- **Backward compatible:** existing per-product history, `GET /admin/ai-reviews/{generation}` and moderation endpoints are
+  unchanged; the per-run object gains additive execution keys. Migration
+  `2026_11_15_000101_add_execution_tracking_to_ai_review_generations_table` is additive (nullable, no backfill).
+- **Catalog:** new `CatalogManagerInterface::getProductReferencesByIds()` (`ProductReferenceDTO`, one query, any status).
+- **Deployment note:** set `DB_QUEUE_RETRY_AFTER` above the job timeout (e.g. 1500) or a second worker may receive a
+  long-running generation job.
+- **Tests (+63):** `GenerationLifecycleTest`, `GenerationMonitoringApiTest`, `GenerationLogsApiTest`,
+  `GenerationRetryTest`, `StuckGenerationDetectionTest` under `tests/Feature/ProductReviewAI/`.
+
 ### Feature — RBAC management API (Identity)
 
 **Admins can now manage role permission bundles and user role assignments at runtime.** Identity exposes a

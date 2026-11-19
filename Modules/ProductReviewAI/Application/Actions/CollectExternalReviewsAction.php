@@ -7,6 +7,7 @@ namespace Modules\ProductReviewAI\Application\Actions;
 use Modules\ProductReviewAI\Application\Support\GenerationLogWriter;
 use Modules\ProductReviewAI\Domain\Contracts\ReviewSourceInterface;
 use Modules\ProductReviewAI\Domain\DTOs\ExternalReviewDTO;
+use Modules\ProductReviewAI\Domain\Enums\GenerationFailureCode;
 use Modules\ProductReviewAI\Domain\Enums\GenerationLogType;
 use Modules\ProductReviewAI\Domain\Exceptions\ExternalSourceException;
 use Modules\ProductReviewAI\Domain\Models\ExternalProductMapping;
@@ -25,9 +26,10 @@ class CollectExternalReviewsAction
     /**
      * @return list<ExternalReviewDTO>
      */
-    public function handle(int $generationId, ExternalProductMapping $mapping, ReviewSourceInterface $adapter): array
+    public function handle(int $generationId, ExternalProductMapping $mapping, ReviewSourceInterface $adapter, ?int $limit = null): array
     {
-        $limit = max(1, (int) config('product_review_ai.collection.review_limit', 100));
+        // A run pins its collection limit in its request snapshot; otherwise config.
+        $limit = max(1, $limit ?? (int) config('product_review_ai.collection.review_limit', 100));
 
         try {
             $reviews = $adapter->getReviews($mapping->external_id, $limit);
@@ -47,7 +49,7 @@ class CollectExternalReviewsAction
                 'limit' => $limit,
             ]);
 
-            throw new ExternalSourceException($message);
+            throw new ExternalSourceException($message, 0, null, GenerationFailureCode::SourceNoReviews);
         }
 
         foreach ($reviews as $review) {

@@ -423,6 +423,23 @@ Scoped to the caller's own assigned local deliveries; anything else is `404`, ne
 | `GET`/`POST`/`DELETE` | `/admin/blog/comments[/{id}/{approve,reject,spam,restore}]`, `/admin/blog/comment-reports[/{id}/{review,dismiss,action}]` | `blog.comment.view-admin` / `moderate` / `delete` |
 | `GET` | `/admin/blog/analytics` · `/admin/analytics/blog` | `blog.analytics.view` · `analytics.view` |
 
+### AI Review Generation Monitoring — Admin (`auth:sanctum` + `product-review-ai.manage`)
+
+Monitoring, diagnostics and recovery for AI product-review generation runs across all products (AI review generation
+only — not a generic queue monitor). Full reference: `API_DOCUMENTATION.html` → *Generation Monitoring*.
+
+| Method | Endpoint | Permission |
+|---|---|---|
+| `GET` | `/admin/ai-reviews/generations` (filters `status`, `product_uuid`, `source_id`, `created_by`, `model`, `date_from`, `date_to`; `sort=newest\|oldest\|longest_duration`; `per_page` 1–100, default 20) | `product-review-ai.manage` |
+| `GET` | `/admin/ai-reviews/generations/stats` (`date_from`, `date_to`, `product_uuid`) | `product-review-ai.manage` |
+| `GET` | `/admin/ai-reviews/generations/{id}` | `product-review-ai.manage` |
+| `GET` | `/admin/ai-reviews/generations/{id}/logs` (sanitized; `diagnostics=1` for redacted payloads) | `product-review-ai.manage` (+ `product-review-ai.view-logs` for diagnostics) |
+| `POST` | `/admin/ai-reviews/generations/{id}/retry` → new linked run (202), 409 if not failed / already retried / not reproducible, 503 if it cannot be queued | `product-review-ai.manage` + `product-review-ai.retry` |
+
+Execution status (`pending → processing → completed | failed`) is separate from draft moderation: a completed run has
+produced drafts that still need approval. Run `php artisan db:seed --class="Modules\ProductReviewAI\Infrastructure\Persistence\Seeders\ProductReviewAIPermissionsSeeder"`
+after deploying to create the two new elevated permissions (granted to `admin`).
+
 ---
 
 ## Getting Started
@@ -486,6 +503,15 @@ php artisan serve
 php artisan queue:listen
 ```
 
+**Queue worker.** AI review generation (`GenerateProductAIReviewsJob`) is queued on the default connection
+(`QUEUE_CONNECTION=database`) by the generate/regenerate/retry endpoints — nothing runs inside the HTTP request, so a
+worker must be running (`composer dev` starts `queue:listen`; in production run `php artisan queue:work` under your process
+manager). The job never retries automatically (`$tries = 1`); recover failed runs with the admin retry endpoint. Its timeout
+is `PRODUCT_REVIEW_AI_JOB_TIMEOUT` (default 1200 s), so the connection's `retry_after` (`DB_QUEUE_RETRY_AFTER`, Laravel
+default 90) must be set **higher** (e.g. 1500), otherwise a second worker receives the same job while the first is still
+running (the run's atomic claim stops a second pipeline, but the delivery is wasted). A run that fails for a business
+reason (source/AI error) is recorded on the generation and the job itself succeeds — it does not appear in `failed_jobs`.
+
 ---
 
 ## Scheduled Tasks & Cron
@@ -500,6 +526,7 @@ Several modules rely on Laravel's scheduler (defined in `routes/console.php`):
 | `reviews:sync-product-ratings` | hourly | Push rating summaries (approved + rated reviews) to Catalog |
 | `shipment:generate-delivery-slots` | daily at 00:30 | Generate dated local-delivery sessions from the recurring working periods |
 | `blogs:publish-scheduled` | every minute | Publish Blog posts whose scheduled time has come and unpublish posts whose `unpublish_at` passed (idempotent) |
+| `ai-reviews:detect-stuck-generations` | every 5 minutes | Flag AI review generations stuck in `pending`/`processing`; conservatively fail provably abandoned runs (`PROCESSING_TIMEOUT`). Idempotent, multi-server safe. `--dry-run` reports without changing state |
 
 These fire **only if Laravel's scheduler is itself driven by the system cron**. In production add this **single** cron entry (it runs `schedule:run` every minute; Laravel then decides which commands are due):
 
@@ -507,7 +534,15 @@ These fire **only if Laravel's scheduler is itself driven by the system cron**. 
 * * * * * cd /path/to/Shop_api && php artisan schedule:run >> /dev/null 2>&1
 ```
 
-That one line is all that's needed — do **not** add a separate cron entry per command. Delivery-slot generation is idempotent and safe to run daily: it never duplicates existing slots, overwrites operator-modified slots, or reopens administratively closed slots, so a missed run simply catches up on the next tick.
+That one line is all that's needed — do **not** add a separate cron entry per command. The scheduler and the queue worker
+are different processes: the scheduler runs commands such as `ai-reviews:detect-stuck-generations` on a clock, the worker
+runs queued jobs such as the AI generations themselves — production needs both.
+
+**Stuck AI generations.** Thresholds are env-backed (`PRODUCT_REVIEW_AI_PENDING_STUCK_AFTER` 900 s,
+`PRODUCT_REVIEW_AI_INACTIVITY_STUCK_AFTER` 1200 s, `PRODUCT_REVIEW_AI_PROCESSING_TIMEOUT` 1800 s,
+`PRODUCT_REVIEW_AI_AUTO_FAIL_ABANDONED` true). An old `pending` run is only reported, never failed. A `processing` run is
+failed only when it started longer ago than the processing timeout *and* shows no activity, and only while the processing
+timeout exceeds `PRODUCT_REVIEW_AI_JOB_TIMEOUT`. Run it by hand with `php artisan ai-reviews:detect-stuck-generations [--dry-run]`. Delivery-slot generation is idempotent and safe to run daily: it never duplicates existing slots, overwrites operator-modified slots, or reopens administratively closed slots, so a missed run simply catches up on the next tick.
 
 **Generate slots manually / on demand** (e.g. first deploy, or to widen the horizon):
 

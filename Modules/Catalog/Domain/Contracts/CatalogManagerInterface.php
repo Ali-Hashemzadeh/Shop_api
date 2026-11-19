@@ -7,6 +7,7 @@ use Modules\Catalog\Domain\DTOs\BrandDTO;
 use Modules\Catalog\Domain\DTOs\CategoryDTO;
 use Modules\Catalog\Domain\DTOs\ProductDTO;
 use Modules\Catalog\Domain\DTOs\ProductImageDTO;
+use Modules\Catalog\Domain\DTOs\ProductReferenceDTO;
 use Modules\Catalog\Domain\DTOs\ProductVariantDTO;
 
 interface CatalogManagerInterface
@@ -136,6 +137,17 @@ interface CatalogManagerInterface
      * @return list<int>
      */
     public function getExistingProductIds(array $ids): array;
+
+    /**
+     * Minimal references (public code + title + status) for the given internal
+     * product ids, in any status, keyed by id. Unknown/deleted ids are absent.
+     * One query, no media/stock/pricing enrichment — for labelling loose product
+     * references in admin listings (e.g. ProductReviewAI generation monitoring).
+     *
+     * @param  list<int>  $ids
+     * @return array<int, ProductReferenceDTO>
+     */
+    public function getProductReferencesByIds(array $ids): array;
 
     public function addProductImage(int $productId, int $mediaId, int $sortOrder = 0): ProductImageDTO;
 

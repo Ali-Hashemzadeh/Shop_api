@@ -4,13 +4,17 @@ declare(strict_types=1);
 
 namespace Modules\ProductReviewAI\Domain\Contracts;
 
+use Carbon\CarbonInterface;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Modules\ProductReviewAI\Domain\DTOs\AiGeneratedReviewDTO;
 use Modules\ProductReviewAI\Domain\DTOs\AiPromptDTO;
 use Modules\ProductReviewAI\Domain\DTOs\ExternalProductDTO;
 use Modules\ProductReviewAI\Domain\DTOs\ExternalProductMappingDTO;
 use Modules\ProductReviewAI\Domain\DTOs\GenerationDetailDTO;
+use Modules\ProductReviewAI\Domain\DTOs\GenerationLogDTO;
+use Modules\ProductReviewAI\Domain\DTOs\GenerationMonitorDTO;
 use Modules\ProductReviewAI\Domain\DTOs\GenerationRequestResultDTO;
+use Modules\ProductReviewAI\Domain\DTOs\GenerationStatsDTO;
 
 /**
  * The module facade the HTTP layer depends on. Orchestration lives in the
@@ -78,6 +82,39 @@ interface ProductReviewAIManagerInterface
     public function getPrompt(int $promptId): AiPromptDTO;
 
     public function getGeneration(int $generationId): GenerationDetailDTO;
+
+    // ── Generation monitoring (all products) ─────────────────────────────────
+
+    /**
+     * Global, paginated generation listing.
+     *
+     * @param  array{status?: string, product_uuid?: string, source_id?: int, created_by?: int, model?: string, date_from?: CarbonInterface, date_to?: CarbonInterface, sort?: string}  $filters
+     * @return LengthAwarePaginator<GenerationMonitorDTO>
+     */
+    public function listAllGenerations(array $filters, int $perPage = 20): LengthAwarePaginator;
+
+    /** Execution status + diagnostics of one run (404 when missing). */
+    public function getGenerationMonitor(int $generationId): GenerationMonitorDTO;
+
+    /**
+     * Sanitized execution log, chronological (404 when the run is missing).
+     * `$includeDiagnostics` adds redacted payloads — the caller must have
+     * checked product-review-ai.view-logs.
+     *
+     * @return LengthAwarePaginator<GenerationLogDTO>
+     */
+    public function listGenerationLogs(int $generationId, bool $includeDiagnostics, int $perPage = 20): LengthAwarePaginator;
+
+    /**
+     * @param  array{product_uuid?: string, date_from?: CarbonInterface, date_to?: CarbonInterface}  $filters
+     */
+    public function generationStats(array $filters): GenerationStatsDTO;
+
+    /**
+     * Retry a failed run as a NEW linked run (409 when not allowed / not
+     * reproducible; 503 when it could not be queued).
+     */
+    public function retryGeneration(int $generationId, int $adminUserId): GenerationMonitorDTO;
 
     /**
      * @param  array<string, mixed>  $changes  editable: name, rating, title, body

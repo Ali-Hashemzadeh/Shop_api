@@ -3,6 +3,7 @@
 use App\Support\PublicCodeEntity;
 use App\Support\PublicCodeGenerator;
 use Illuminate\Support\Facades\Route;
+use Modules\ProductReviewAI\Infrastructure\Http\Controllers\AiGenerationMonitorController;
 use Modules\ProductReviewAI\Infrastructure\Http\Controllers\AiPromptController;
 use Modules\ProductReviewAI\Infrastructure\Http\Controllers\AiReviewController;
 use Modules\ProductReviewAI\Infrastructure\Http\Controllers\ProductAiReviewController;
@@ -25,6 +26,21 @@ Route::middleware(['api', 'auth:sanctum', 'throttle:api'])
         Route::post('generate', [ProductAiReviewController::class, 'generate']);
         Route::post('regenerate', [ProductAiReviewController::class, 'regenerate']);
         Route::get('generations', [ProductAiReviewController::class, 'generations']);
+    });
+
+// ── Generation monitoring, diagnostics + recovery (all products) ─────────────
+// Registered before the generic /admin/ai-reviews/{id} routes. There is no
+// ambiguity either way: those are constrained to numeric ids, so the literal
+// `generations` segment can never match them. manage for reads; logs with
+// `diagnostics=1` also need view-logs; retry also needs retry.
+Route::middleware(['api', 'auth:sanctum', 'throttle:api'])
+    ->prefix('api/v1/admin/ai-reviews/generations')
+    ->group(function () {
+        Route::get('/', [AiGenerationMonitorController::class, 'index']);
+        Route::get('stats', [AiGenerationMonitorController::class, 'stats']);
+        Route::get('{generation}', [AiGenerationMonitorController::class, 'show'])->whereNumber('generation');
+        Route::get('{generation}/logs', [AiGenerationMonitorController::class, 'logs'])->whereNumber('generation');
+        Route::post('{generation}/retry', [AiGenerationMonitorController::class, 'retry'])->whereNumber('generation');
     });
 
 // ── Generation detail + draft moderation ─────────────────────────────────────

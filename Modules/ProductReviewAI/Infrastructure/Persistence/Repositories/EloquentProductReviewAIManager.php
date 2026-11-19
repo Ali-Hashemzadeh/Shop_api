@@ -5,11 +5,13 @@ declare(strict_types=1);
 namespace Modules\ProductReviewAI\Infrastructure\Persistence\Repositories;
 
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Validation\ValidationException;
 use Modules\Catalog\Domain\Contracts\CatalogManagerInterface;
 use Modules\Catalog\Domain\DTOs\ProductDTO;
 use Modules\ProductReviewAI\Application\Actions\ApproveDraftAction;
 use Modules\ProductReviewAI\Application\Actions\RejectDraftAction;
 use Modules\ProductReviewAI\Application\Actions\RequestGenerationAction;
+use Modules\ProductReviewAI\Application\Actions\RetryGenerationAction;
 use Modules\ProductReviewAI\Application\Actions\SaveProductMappingAction;
 use Modules\ProductReviewAI\Application\Actions\SearchExternalProductsAction;
 use Modules\ProductReviewAI\Application\Actions\UpdateDraftAction;
@@ -19,7 +21,9 @@ use Modules\ProductReviewAI\Domain\DTOs\AiPromptDTO;
 use Modules\ProductReviewAI\Domain\DTOs\AiReviewGenerationDTO;
 use Modules\ProductReviewAI\Domain\DTOs\ExternalProductMappingDTO;
 use Modules\ProductReviewAI\Domain\DTOs\GenerationDetailDTO;
+use Modules\ProductReviewAI\Domain\DTOs\GenerationMonitorDTO;
 use Modules\ProductReviewAI\Domain\DTOs\GenerationRequestResultDTO;
+use Modules\ProductReviewAI\Domain\DTOs\GenerationStatsDTO;
 use Modules\ProductReviewAI\Domain\Models\AiGeneratedReview;
 use Modules\ProductReviewAI\Domain\Models\AiPrompt;
 use Modules\ProductReviewAI\Domain\Models\AiReviewGeneration;
@@ -40,6 +44,8 @@ class EloquentProductReviewAIManager implements ProductReviewAIManagerInterface
         private readonly UpdateDraftAction $updateDraft,
         private readonly ApproveDraftAction $approveDraft,
         private readonly RejectDraftAction $rejectDraft,
+        private readonly RetryGenerationAction $retryGeneration,
+        private readonly GenerationMonitorRepository $monitor,
     ) {}
 
     public function searchExternalProducts(string $productUuid, string $sourceCode, string $query): array
@@ -160,6 +166,39 @@ class EloquentProductReviewAIManager implements ProductReviewAIManagerInterface
         );
     }
 
+    public function listAllGenerations(array $filters, int $perPage = 20): LengthAwarePaginator
+    {
+        $resolved = $this->resolveProductFilter($filters);
+
+        return $this->monitor->paginate($resolved, min(max($perPage, 1), 100));
+    }
+
+    public function getGenerationMonitor(int $generationId): GenerationMonitorDTO
+    {
+        return $this->monitor->find($generationId) ?? abort(404, 'Generation not found.');
+    }
+
+    public function listGenerationLogs(int $generationId, bool $includeDiagnostics, int $perPage = 20): LengthAwarePaginator
+    {
+        if (! $this->monitor->exists($generationId)) {
+            abort(404, 'Generation not found.');
+        }
+
+        return $this->monitor->logs($generationId, $includeDiagnostics, min(max($perPage, 1), 100));
+    }
+
+    public function generationStats(array $filters): GenerationStatsDTO
+    {
+        return $this->monitor->stats($this->resolveProductFilter($filters));
+    }
+
+    public function retryGeneration(int $generationId, int $adminUserId): GenerationMonitorDTO
+    {
+        $retry = $this->retryGeneration->handle($generationId, $adminUserId);
+
+        return $this->monitor->find((int) $retry->id) ?? abort(404, 'Generation not found.');
+    }
+
     public function updateDraft(int $draftId, int $adminUserId, array $changes): AiGeneratedReviewDTO
     {
         return AiGeneratedReviewDTO::fromModel($this->updateDraft->handle($draftId, $adminUserId, $changes));
@@ -188,12 +227,39 @@ class EloquentProductReviewAIManager implements ProductReviewAIManagerInterface
     }
 
     /**
+     * Replace a `product_uuid` filter (public code) with the internal id, via the
+     * Catalog contract. An unknown code is a validation error, not an empty list.
+     *
+     * @param  array<string, mixed>  $filters
+     * @return array<string, mixed>
+     */
+    private function resolveProductFilter(array $filters): array
+    {
+        if (isset($filters['product_uuid'])) {
+            $product = $this->catalog->findProductAdmin((string) $filters['product_uuid']);
+
+            if ($product === null) {
+                throw ValidationException::withMessages([
+                    'product_uuid' => 'The selected product does not exist.',
+                ]);
+            }
+
+            $filters['product_id'] = (int) $product->id;
+        }
+
+        unset($filters['product_uuid']);
+
+        return $filters;
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function contextFor(ProductDTO $product): array
     {
         return [
             'product_id' => $product->id,
+            'uuid' => $product->uuid,
             'title' => $product->title,
             'description' => $product->description,
         ];

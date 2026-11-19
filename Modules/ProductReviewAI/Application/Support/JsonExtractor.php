@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Modules\ProductReviewAI\Application\Support;
 
+use Modules\ProductReviewAI\Domain\Enums\GenerationFailureCode;
 use Modules\ProductReviewAI\Domain\Exceptions\AiGenerationException;
 
 /**
@@ -39,7 +40,7 @@ class JsonExtractor
         }
 
         if (! is_array($decoded)) {
-            throw new AiGenerationException('AI response was not valid JSON: '.mb_substr($raw, 0, 300));
+            throw new AiGenerationException('AI response was not valid JSON: '.mb_substr($raw, 0, 300), 0, null, GenerationFailureCode::AiResponseInvalid);
         }
 
         return $decoded;

@@ -9,8 +9,10 @@ use Illuminate\Support\Facades\Log;
 use Modules\ProductReviewAI\Domain\Contracts\ReviewSourceInterface;
 use Modules\ProductReviewAI\Domain\DTOs\ExternalProductDTO;
 use Modules\ProductReviewAI\Domain\DTOs\ExternalReviewDTO;
+use Modules\ProductReviewAI\Domain\Enums\GenerationFailureCode;
 use Modules\ProductReviewAI\Domain\Exceptions\ExternalSourceException;
 use Modules\ProductReviewAI\Domain\Exceptions\IntegrationUnavailableException;
+use Modules\ProductReviewAI\Infrastructure\Support\HttpFailure;
 
 /**
  * Digikala marketplace adapter. Uses the public Digikala JSON APIs — no HTML
@@ -225,7 +227,10 @@ class DigikalaSource implements ReviewSourceInterface
 
         if ($baseUrl === '') {
             throw new IntegrationUnavailableException(
-                'Digikala is not configured: set DIGIKALA_BASE_URL. External review collection cannot start.'
+                'Digikala is not configured: set DIGIKALA_BASE_URL. External review collection cannot start.',
+                0,
+                null,
+                GenerationFailureCode::SourceConfigurationError,
             );
         }
 
@@ -243,7 +248,12 @@ class DigikalaSource implements ReviewSourceInterface
                 'error' => $e->getMessage(),
             ]);
 
-            throw new ExternalSourceException("Digikala request to [{$path}] failed: {$e->getMessage()}", 0, $e);
+            throw new ExternalSourceException(
+                "Digikala request to [{$path}] failed: {$e->getMessage()}",
+                0,
+                $e,
+                HttpFailure::isTimeout($e) ? GenerationFailureCode::SourceTimeout : GenerationFailureCode::SourceRequestFailed,
+            );
         }
 
         if ($response->failed()) {
@@ -254,7 +264,12 @@ class DigikalaSource implements ReviewSourceInterface
                 'response' => mb_substr($response->body(), 0, 4000),
             ]);
 
-            throw new ExternalSourceException("Digikala request to [{$path}] returned HTTP {$response->status()}.");
+            throw new ExternalSourceException(
+                "Digikala request to [{$path}] returned HTTP {$response->status()}.",
+                0,
+                null,
+                GenerationFailureCode::SourceRequestFailed,
+            );
         }
 
         Log::info('ProductReviewAI Digikala request', [

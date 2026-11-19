@@ -2,6 +2,7 @@
 
 namespace Modules\ProductReviewAI\Infrastructure\Providers;
 
+use App\Console\Commands\AiReviewsDetectStuckGenerationsCommand;
 use Illuminate\Support\ServiceProvider;
 use Modules\ProductReviewAI\Domain\Contracts\ProductReviewAIManagerInterface;
 use Modules\ProductReviewAI\Infrastructure\Persistence\Repositories\EloquentProductReviewAIManager;
@@ -24,5 +25,10 @@ class ProductReviewAIServiceProvider extends ServiceProvider
     {
         $this->loadRoutesFrom(__DIR__.'/../Routes/api.php');
         $this->loadMigrationsFrom(__DIR__.'/../Persistence/Migrations');
+
+        // Scheduled every five minutes in routes/console.php.
+        $this->commands([
+            AiReviewsDetectStuckGenerationsCommand::class,
+        ]);
     }
 }

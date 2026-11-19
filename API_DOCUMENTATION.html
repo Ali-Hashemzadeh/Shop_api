@@ -224,6 +224,13 @@
   <a href="#prai-draft-edit">Edit Draft</a>
   <a href="#prai-draft-approve">Approve / Reject</a>
   <a href="#prai-prompts">Prompts (read-only)</a>
+  <a href="#prai-monitoring">Generation Monitoring &mdash; Overview</a>
+  <a href="#prai-monitor-list">List All Generations</a>
+  <a href="#prai-monitor-stats">Dashboard Stats</a>
+  <a href="#prai-monitor-show">Generation Status</a>
+  <a href="#prai-monitor-logs">Execution Logs</a>
+  <a href="#prai-monitor-retry">Retry a Failed Generation</a>
+  <a href="#prai-monitor-reference">Stages, Failure Codes &amp; Stuck Detection</a>
 
   <div class="section-label">Blog / CMS</div>
   <a href="#blog-overview">Overview, Content &amp; Permissions</a>
@@ -5972,9 +5979,9 @@ await fetch(`/api/v1/admin/reviews/${reviewCode}/reply`, {
   reviews, then routes them through an admin approval workflow. Approved drafts are published as <strong>ordinary
   product reviews</strong> (see the Reviews section) &#8212; there is no separate "AI reviews" section on the storefront.
   The backend keeps full provenance: which generation, which AI model, which prompt version, and which admin approved.</p>
-  <div class="note"><strong>Permission.</strong> Every endpoint requires <code>product-review-ai.manage</code> (admin only &#8212; never customer, never support). Unauthenticated &rarr; <strong>401</strong>; authenticated without the permission &rarr; <strong>403</strong>.</div>
+  <div class="note"><strong>Permission.</strong> Every endpoint requires <code>product-review-ai.manage</code> (admin only &#8212; never customer, never support). Two elevated permissions are required <em>in addition</em> for specific actions: <code>product-review-ai.view-logs</code> (redacted full diagnostics in execution logs) and <code>product-review-ai.retry</code> (manual retry). All three are seeded to <code>admin</code> only. Unauthenticated &rarr; <strong>401</strong>; authenticated without the permission &rarr; <strong>403</strong>.</div>
   <div class="note"><strong>Real integrations, fail-loud.</strong> External collection uses the live Digikala API; drafting uses the AvalAI provider (OpenAI-compatible, default model <code>deepseek-v4.1-flash</code>). If a required key/URL is missing, the run does not silently fall back or fabricate data &#8212; it is marked <code>failed</code> with a reason and every failure is written to the generation log.</div>
-  <div class="note"><strong>Async.</strong> Generation runs in a queued job (<code>GenerateProductAIReviewsJob</code>) &#8212; scraping and AI calls never happen inside the HTTP request. The generate/regenerate endpoints return <strong>202</strong> with the run; poll the generation to see <code>pending &rarr; processing &rarr; completed|failed</code>.</div>
+  <div class="note"><strong>Async.</strong> Generation runs in a queued job (<code>GenerateProductAIReviewsJob</code>) &#8212; scraping and AI calls never happen inside the HTTP request. The generate/regenerate endpoints return <strong>202</strong> with the run; poll the generation to see <code>pending &rarr; processing &rarr; completed|failed</code> (see <a href="#prai-monitoring">Generation Monitoring</a> for stages, failure codes and retry). If the job cannot be pushed onto the queue, the run is marked <code>failed</code> (<code>QUEUE_PROCESSING_ERROR</code>) and the endpoint returns <strong>503</strong> <code>{ "message": "...", "generation_id": 7 }</code> &#8212; never an orphaned <code>pending</code> run.</div>
 
   <p><strong>Workflow:</strong> search a source &rarr; save a mapping (admin confirms which external product) &rarr; generate drafts &rarr; review/edit drafts &rarr; approve (publishes a normal review) or reject.</p>
 
@@ -6019,7 +6026,8 @@ await fetch(`/api/v1/admin/reviews/${reviewCode}/reply`, {
   <h3 id="prai-generations">Admin &#8212; List Generations</h3>
   <div class="endpoint">
     <div class="endpoint-header"><span class="method get">GET</span><span class="endpoint-path">/api/v1/admin/products/{product}/ai-reviews/generations</span><span class="badge">product-review-ai.manage</span></div>
-    <div class="endpoint-body"><p>Paginated (<code>{data, links, meta}</code>) run history, newest first. A <code>failed</code> run carries a <code>failure_reason</code>.</p></div>
+    <div class="endpoint-body"><p>Paginated (<code>{data, links, meta}</code>) run history, newest first. A <code>failed</code> run carries a <code>failure_reason</code> (sanitized &#8212; secrets, emails and phone numbers are redacted).</p>
+      <p>Each run additionally carries the execution-tracking fields <code>current_stage</code>, <code>failure_code</code>, <code>failed_stage</code>, <code>started_at</code>, <code>finished_at</code>, <code>duration_ms</code>, <code>last_heartbeat_at</code>, <code>attempt_count</code>, <code>retry_of_id</code> (all nullable except <code>attempt_count</code>; <code>null</code> on runs created before execution tracking existed). These keys are additive &#8212; every original key is unchanged. The same applies to the generate/regenerate responses and to the <code>generation</code> object of <code>GET /admin/ai-reviews/{generation}</code>.</p></div>
   </div>
 
   <h3 id="prai-generation-show">Admin &#8212; View a Generation + its Drafts</h3>
@@ -6066,7 +6074,232 @@ await fetch(`/api/v1/admin/reviews/${reviewCode}/reply`, {
     <div class="endpoint-body"><p><code>{prompt}</code> is a numeric id. Returns the full prompt (system + user templates).</p></div>
   </div>
 
-  <div class="note"><strong>Logging &amp; debugging visibility.</strong> Every external and AI call logs its target <strong>URL</strong> and the <strong>response</strong> (success and failure) to the application log (<code>ProductReviewAI Digikala request</code> / <code>ProductReviewAI AvalAI request|response</code>). Inside a run, the same is captured in <code>ai_review_generation_logs</code> (per-stage request/response, including the raw AI output), visible via the generation detail endpoint.</div>
+  <div class="note"><strong>Logging &amp; debugging visibility.</strong> Every external and AI call logs its target <strong>URL</strong> and the <strong>response</strong> (success and failure) to the application log (<code>ProductReviewAI Digikala request</code> / <code>ProductReviewAI AvalAI request|response</code>). Inside a run, the same is captured in <code>ai_review_generation_logs</code> (per-stage request/response, including the raw AI output). It is exposed through the <a href="#prai-monitor-logs">execution logs endpoint</a> as sanitized summaries; raw payloads are never returned by default.</div>
+
+  <h3 id="prai-monitoring">Generation Monitoring &#8212; Overview</h3>
+  <p>Admin endpoints for watching, diagnosing and recovering AI review generation runs across <strong>all</strong> products. Scope is AI review generation only &#8212; this is not a generic queue monitor. All routes are under <code>/api/v1/admin/ai-reviews/generations</code>, use <code>auth:sanctum</code> + the authenticated <code>api</code> limiter, and require <code>product-review-ai.manage</code>; the elevated permissions are noted per endpoint.</p>
+  <table>
+    <tr><th>Method</th><th>Path</th><th>Permission(s)</th><th>Purpose</th></tr>
+    <tr><td>GET</td><td><code>/api/v1/admin/ai-reviews/generations</code></td><td><code>product-review-ai.manage</code></td><td>Global listing (filter, sort, paginate)</td></tr>
+    <tr><td>GET</td><td><code>/api/v1/admin/ai-reviews/generations/stats</code></td><td><code>product-review-ai.manage</code></td><td>Dashboard aggregates</td></tr>
+    <tr><td>GET</td><td><code>/api/v1/admin/ai-reviews/generations/{generation}</code></td><td><code>product-review-ai.manage</code></td><td>Execution status + diagnostics of one run</td></tr>
+    <tr><td>GET</td><td><code>/api/v1/admin/ai-reviews/generations/{generation}/logs</code></td><td><code>product-review-ai.manage</code> (+ <code>product-review-ai.view-logs</code> for <code>diagnostics=1</code>)</td><td>Sanitized execution log</td></tr>
+    <tr><td>POST</td><td><code>/api/v1/admin/ai-reviews/generations/{generation}/retry</code></td><td><code>product-review-ai.manage</code> + <code>product-review-ai.retry</code></td><td>Retry a failed run as a new run</td></tr>
+  </table>
+  <div class="note"><strong>Execution status is not moderation.</strong> <code>status</code> describes the <em>job</em>: <code>pending</code> (queued, not yet claimed by a worker) &rarr; <code>processing</code> &rarr; <code>completed</code> | <code>failed</code>. A <code>completed</code> run has <em>produced drafts</em>; it has not published anything. Drafts are still moderated separately (approve/reject above) &#8212; the detail endpoint reports their moderation counts under <code>drafts</code>.</div>
+  <div class="note"><strong>Historical runs.</strong> Runs created before execution tracking existed have <code>null</code> for <code>current_stage</code>, <code>started_at</code>, <code>finished_at</code>, <code>duration_ms</code>, <code>last_heartbeat_at</code>, <code>failure.code</code>, <code>failure.stage</code>, <code>failure.retryable</code>, and <code>attempt_count</code> = 0. Nothing is backfilled or estimated. They also have no request snapshot, so they cannot be retried exactly (<code>can_retry: false</code>; the retry endpoint returns <strong>409</strong> <code>RETRY_CONTEXT_UNAVAILABLE</code>).</div>
+  <div class="note"><strong>Timestamps</strong> are ISO-8601 in UTC (e.g. <code>2026-11-11T08:00:03.000000Z</code>), stored with second precision. <code>duration_ms</code> is measured by the worker (claim &rarr; terminal transition) and is only set for finished runs.</div>
+
+  <h3 id="prai-monitor-list">Admin &#8212; List All Generations</h3>
+  <div class="endpoint">
+    <div class="endpoint-header"><span class="method get">GET</span><span class="endpoint-path">/api/v1/admin/ai-reviews/generations</span><span class="badge">product-review-ai.manage</span></div>
+    <div class="endpoint-body">
+      <p>Paginated <code>{data, links, meta}</code>. Default 20 per page, maximum 100. Out-of-range values are <strong>rejected with 422</strong> (not clamped). The heavy JSON (<code>analysis</code>, request snapshot) is never included in list rows.</p>
+      <div class="block-label">Query parameters (all optional)</div>
+      <table>
+        <tr><th>Param</th><th>Rule</th><th>Meaning</th></tr>
+        <tr><td><code>status</code></td><td><code>pending|processing|completed|failed</code></td><td>Execution status</td></tr>
+        <tr><td><code>product_uuid</code></td><td>string &le; 64</td><td>Product public code (<code>bdp-XXXXXX</code> or legacy hex). Unknown code &rarr; <strong>422</strong> on <code>product_uuid</code></td></tr>
+        <tr><td><code>source_id</code></td><td>integer &ge; 1</td><td>Review source id</td></tr>
+        <tr><td><code>created_by</code></td><td>integer &ge; 1</td><td>Requesting admin's user id</td></tr>
+        <tr><td><code>model</code></td><td>string &le; 255</td><td>Exact AI model id</td></tr>
+        <tr><td><code>date_from</code> / <code>date_to</code></td><td>date; <code>date_to</code> &ge; <code>date_from</code></td><td>Filters <code>created_at</code>, inclusive. A plain date (<code>2026-11-05</code>) covers the whole day in the application timezone (UTC); a full ISO-8601 datetime honours its offset and is converted to UTC</td></tr>
+        <tr><td><code>sort</code></td><td><code>newest</code> (default) | <code>oldest</code> | <code>longest_duration</code></td><td><code>newest</code>/<code>oldest</code> order by <code>created_at</code>, then <code>id</code> (stable when timestamps tie). <code>longest_duration</code> orders by recorded <code>duration_ms</code> descending; runs without a duration (unfinished or historical) come last</td></tr>
+        <tr><td><code>page</code></td><td>integer &ge; 1</td><td></td></tr>
+        <tr><td><code>per_page</code></td><td>integer 1&#8211;100</td><td>Default 20</td></tr>
+      </table>
+      <div class="block-label">Request</div>
+      <pre>GET /api/v1/admin/ai-reviews/generations?status=failed&amp;date_from=2026-11-01&amp;sort=newest&amp;per_page=20</pre>
+      <div class="block-label">Response &#8212; 200 OK</div>
+      <pre>{
+  <span class="key">"data"</span>: [
+    {
+      <span class="key">"id"</span>: <span class="num">206</span>,
+      <span class="key">"status"</span>: <span class="str">"failed"</span>,
+      <span class="key">"current_stage"</span>: <span class="str">"collecting_reviews"</span>,
+      <span class="key">"product"</span>: { <span class="key">"id"</span>: <span class="num">10</span>, <span class="key">"uuid"</span>: <span class="str">"bdp-K92XMQ"</span>, <span class="key">"title"</span>: <span class="str">"گوشی سامسونگ S25"</span> },
+      <span class="key">"source"</span>: { <span class="key">"id"</span>: <span class="num">1</span>, <span class="key">"code"</span>: <span class="str">"digikala"</span>, <span class="key">"name"</span>: <span class="str">"Digikala"</span> },
+      <span class="key">"model"</span>: <span class="str">"deepseek-v4.1-flash"</span>,
+      <span class="key">"prompt_name"</span>: <span class="str">"review_generation"</span>,
+      <span class="key">"prompt_version"</span>: <span class="num">1</span>,
+      <span class="key">"count_requested"</span>: <span class="num">12</span>,
+      <span class="key">"count_generated"</span>: <span class="num">0</span>,
+      <span class="key">"failure"</span>: {
+        <span class="key">"code"</span>: <span class="str">"SOURCE_TIMEOUT"</span>,
+        <span class="key">"message"</span>: <span class="str">"Digikala request to [/v1/rate-review/products/123/] failed: cURL error 28: Operation timed out"</span>,
+        <span class="key">"stage"</span>: <span class="str">"collecting_reviews"</span>,
+        <span class="key">"retryable"</span>: <span class="bool">true</span>
+      },
+      <span class="key">"created_by"</span>: <span class="num">3</span>,
+      <span class="key">"created_at"</span>: <span class="str">"2026-11-11T08:00:00.000000Z"</span>,
+      <span class="key">"started_at"</span>: <span class="str">"2026-11-11T08:00:03.000000Z"</span>,
+      <span class="key">"finished_at"</span>: <span class="str">"2026-11-11T08:00:25.000000Z"</span>,
+      <span class="key">"duration_ms"</span>: <span class="num">22000</span>,
+      <span class="key">"last_heartbeat_at"</span>: <span class="str">"2026-11-11T08:00:03.000000Z"</span>,
+      <span class="key">"attempt_count"</span>: <span class="num">1</span>,
+      <span class="key">"retry_of_id"</span>: <span class="null-val">null</span>,
+      <span class="key">"retry_generation_id"</span>: <span class="null-val">null</span>,
+      <span class="key">"is_suspected_stuck"</span>: <span class="bool">false</span>,
+      <span class="key">"can_retry"</span>: <span class="bool">true</span>
+    }
+  ],
+  <span class="key">"links"</span>: { <span class="comment">…</span> },
+  <span class="key">"meta"</span>: { <span class="key">"current_page"</span>: <span class="num">1</span>, <span class="key">"per_page"</span>: <span class="num">20</span>, <span class="key">"total"</span>: <span class="num">1</span>, <span class="comment">…</span> }
+}</pre>
+      <div class="block-label">Fields</div>
+      <table>
+        <tr><th>Field</th><th>Nullable</th><th>Meaning</th></tr>
+        <tr><td><code>status</code></td><td>no</td><td>Execution status (see overview)</td></tr>
+        <tr><td><code>current_stage</code></td><td>yes</td><td>Last stage the worker recorded (see <a href="#prai-monitor-reference">stages</a>). A failed run keeps the stage it failed in</td></tr>
+        <tr><td><code>product.uuid</code>, <code>product.title</code></td><td>yes</td><td>Resolved through the Catalog contract in one batch per page; <code>null</code> if the product no longer exists (<code>product.id</code> is always present)</td></tr>
+        <tr><td><code>source.*</code></td><td>yes</td><td><code>null</code> if the source row is gone</td></tr>
+        <tr><td><code>count_generated</code></td><td>no</td><td>Drafts saved by the run (0 until completion)</td></tr>
+        <tr><td><code>failure</code></td><td>yes</td><td><code>null</code> unless <code>status = failed</code>. <code>code</code>: structured failure code; <code>message</code>: sanitized, &le; 500 chars; <code>stage</code>: where it failed; <code>retryable</code>: hint (<code>true</code> = transient, <code>false</code> = fix configuration/data first). Inner fields are <code>null</code> on historical runs</td></tr>
+        <tr><td><code>started_at</code> / <code>finished_at</code></td><td>yes</td><td>Claim time / terminal-transition time</td></tr>
+        <tr><td><code>duration_ms</code></td><td>yes</td><td>Recorded execution duration; only for finished runs</td></tr>
+        <tr><td><code>last_heartbeat_at</code></td><td>yes</td><td>Last durable progress write at a <strong>stage boundary</strong>. It is <em>not</em> a continuous heartbeat: a worker blocked in one long HTTP call writes nothing until the call returns</td></tr>
+        <tr><td><code>attempt_count</code></td><td>no</td><td>Queue deliveries that reached a worker. &gt; 1 means the job was redelivered; only the first delivery ever runs the pipeline</td></tr>
+        <tr><td><code>retry_of_id</code></td><td>yes</td><td>The failed run this run retries</td></tr>
+        <tr><td><code>retry_generation_id</code></td><td>yes</td><td>The run that retried this one (a run is retried at most once)</td></tr>
+        <tr><td><code>is_suspected_stuck</code></td><td>no</td><td>Same rule as the detection command and the <code>suspected_stuck</code> stat</td></tr>
+        <tr><td><code>can_retry</code></td><td>no</td><td>State-wise eligibility: <code>failed</code>, not already retried, and has a request snapshot. The caller still needs <code>product-review-ai.retry</code>; source/mapping/prompt availability is checked at retry time</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <h3 id="prai-monitor-stats">Admin &#8212; Dashboard Stats</h3>
+  <div class="endpoint">
+    <div class="endpoint-header"><span class="method get">GET</span><span class="endpoint-path">/api/v1/admin/ai-reviews/generations/stats</span><span class="badge">product-review-ai.manage</span></div>
+    <div class="endpoint-body">
+      <p>Optional filters: <code>date_from</code>, <code>date_to</code> (same semantics as the list) and <code>product_uuid</code> (unknown &rarr; 422). Computed with three aggregate queries; not cached, so it is always current.</p>
+      <div class="block-label">Response &#8212; 200 OK</div>
+      <pre>{
+  <span class="key">"total"</span>: <span class="num">48</span>,
+  <span class="key">"pending"</span>: <span class="num">1</span>,
+  <span class="key">"processing"</span>: <span class="num">2</span>,
+  <span class="key">"completed"</span>: <span class="num">39</span>,
+  <span class="key">"failed"</span>: <span class="num">6</span>,
+  <span class="key">"suspected_stuck"</span>: <span class="num">1</span>,
+  <span class="key">"success_rate"</span>: <span class="num">0.8667</span>,
+  <span class="key">"average_duration_ms"</span>: <span class="num">41250</span>,
+  <span class="key">"duration_sample_size"</span>: <span class="num">31</span>,
+  <span class="key">"thresholds"</span>: { <span class="key">"pending_threshold_seconds"</span>: <span class="num">900</span>, <span class="key">"inactivity_threshold_seconds"</span>: <span class="num">1200</span>, <span class="key">"processing_timeout_seconds"</span>: <span class="num">1800</span> }
+}</pre>
+      <ul>
+        <li><code>success_rate</code> = <code>completed / (completed + failed)</code>, always a <strong>fraction 0&#8211;1</strong> (4 decimals), never a percentage. Pending/processing runs are excluded. <code>null</code> when no run has finished.</li>
+        <li><code>average_duration_ms</code> averages <strong>completed</strong> runs that have a recorded duration; historical runs without one are excluded (not counted as zero). <code>duration_sample_size</code> is how many runs were averaged. <code>null</code> when there are none.</li>
+        <li><code>suspected_stuck</code> uses exactly the same rule as <code>is_suspected_stuck</code> and the detection command. <code>thresholds</code> shows the effective values in seconds.</li>
+        <li>Empty result: all counts <code>0</code>, <code>success_rate</code> and <code>average_duration_ms</code> <code>null</code>.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3 id="prai-monitor-show">Admin &#8212; Generation Status</h3>
+  <div class="endpoint">
+    <div class="endpoint-header"><span class="method get">GET</span><span class="endpoint-path">/api/v1/admin/ai-reviews/generations/{generation}</span><span class="badge">product-review-ai.manage</span></div>
+    <div class="endpoint-body">
+      <p><code>{generation}</code> is the numeric id (non-numeric &rarr; 404). Missing &rarr; <strong>404</strong> <code>{ "message": "Generation not found." }</code>. Returns the same object as a list row plus <code>drafts</code> &#8212; the drafts' <em>moderation</em> counts:</p>
+      <pre>{ <span class="key">"id"</span>: <span class="num">207</span>, <span class="key">"status"</span>: <span class="str">"completed"</span>, <span class="key">"current_stage"</span>: <span class="str">"finished"</span>, <span class="comment">… same fields as a list row …</span>,
+  <span class="key">"failure"</span>: <span class="null-val">null</span>, <span class="key">"retry_of_id"</span>: <span class="num">206</span>, <span class="key">"can_retry"</span>: <span class="bool">false</span>,
+  <span class="key">"drafts"</span>: { <span class="key">"pending"</span>: <span class="num">8</span>, <span class="key">"edited"</span>: <span class="num">1</span>, <span class="key">"approved"</span>: <span class="num">3</span>, <span class="key">"rejected"</span>: <span class="num">0</span> } }</pre>
+      <p>The existing <code>GET /api/v1/admin/ai-reviews/{generation}</code> (run + full draft bodies, including <code>analysis</code>) is unchanged and remains the moderation view.</p>
+    </div>
+  </div>
+
+  <h3 id="prai-monitor-logs">Admin &#8212; Execution Logs</h3>
+  <div class="endpoint">
+    <div class="endpoint-header"><span class="method get">GET</span><span class="endpoint-path">/api/v1/admin/ai-reviews/generations/{generation}/logs</span><span class="badge">product-review-ai.manage</span></div>
+    <div class="endpoint-body">
+      <p>The run's append-only ledger (<code>ai_review_generation_logs</code>), paginated <code>{data, links, meta}</code>, <strong>chronological</strong> (<code>created_at</code> then <code>id</code>). Query: <code>page</code>, <code>per_page</code> (1&#8211;100, default 20; out of range &rarr; 422), <code>diagnostics</code> (boolean, see below). Missing generation &rarr; 404.</p>
+      <div class="block-label">Response &#8212; 200 OK</div>
+      <pre>{
+  <span class="key">"data"</span>: [
+    { <span class="key">"id"</span>: <span class="num">900</span>, <span class="key">"generation_id"</span>: <span class="num">206</span>, <span class="key">"type"</span>: <span class="str">"PROCESSING_STARTED"</span>, <span class="key">"status"</span>: <span class="str">"success"</span>, <span class="key">"stage"</span>: <span class="str">"initializing"</span>,
+      <span class="key">"error"</span>: <span class="null-val">null</span>, <span class="key">"request_summary"</span>: { <span class="key">"stage"</span>: <span class="str">"initializing"</span>, <span class="key">"attempt"</span>: <span class="num">1</span> }, <span class="key">"response_summary"</span>: <span class="null-val">null</span>,
+      <span class="key">"omitted_fields"</span>: [], <span class="key">"created_at"</span>: <span class="str">"2026-11-11T08:00:03.000000Z"</span> },
+    { <span class="key">"id"</span>: <span class="num">901</span>, <span class="key">"generation_id"</span>: <span class="num">206</span>, <span class="key">"type"</span>: <span class="str">"AI_ANALYSIS_RESPONSE"</span>, <span class="key">"status"</span>: <span class="str">"success"</span>, <span class="key">"stage"</span>: <span class="str">"analyzing_reviews"</span>,
+      <span class="key">"error"</span>: <span class="null-val">null</span>, <span class="key">"request_summary"</span>: <span class="null-val">null</span>,
+      <span class="key">"response_summary"</span>: { <span class="key">"analysis"</span>: { <span class="key">"positive_points_count"</span>: <span class="num">4</span>, <span class="key">"negative_points_count"</span>: <span class="num">2</span>, <span class="key">"customer_profiles_count"</span>: <span class="num">3</span>, <span class="key">"important_features_count"</span>: <span class="num">5</span> } },
+      <span class="key">"omitted_fields"</span>: [<span class="str">"response.raw"</span>], <span class="key">"created_at"</span>: <span class="str">"2026-11-11T08:00:12.000000Z"</span> }
+  ],
+  <span class="key">"links"</span>: { <span class="comment">…</span> }, <span class="key">"meta"</span>: { <span class="comment">…</span> }
+}</pre>
+      <p><code>stage</code> is derived from the event type (<code>SOURCE_REVIEWS_FETCH</code> &rarr; <code>collecting_reviews</code>, <code>AI_ANALYSIS_*</code> &rarr; <code>analyzing_reviews</code>, <code>AI_GENERATION_*</code> &rarr; <code>generating_reviews</code>) or, for lifecycle events, from the stage they recorded; moderation events have <code>null</code>.</p>
+      <div class="block-label">Event types</div>
+      <p>Pipeline: <code>SOURCE_SEARCH</code>, <code>SOURCE_REVIEWS_FETCH</code>, <code>AI_ANALYSIS_REQUEST</code>, <code>AI_ANALYSIS_RESPONSE</code>, <code>AI_GENERATION_REQUEST</code>, <code>AI_GENERATION_RESPONSE</code>. Moderation: <code>APPROVAL</code>, <code>REJECTION</code>, <code>REGENERATION</code>. Lifecycle: <code>PROCESSING_STARTED</code> (claimed), <code>PROCESSING_SKIPPED</code> (a duplicate/redelivered job was ignored), <code>PROCESSING_COMPLETED</code>, <code>PROCESSING_FAILED</code>, <code>RETRY_REQUESTED</code> (written on the original run, names <code>retry_generation_id</code>), <code>STUCK_RECONCILED</code>.</p>
+      <div class="warn"><strong>Sanitization (always on).</strong> Stored logs can contain raw AI output, external review text, provider error bodies and potentially echoed credentials, so raw payloads are <strong>never</strong> returned by default. <code>request_summary</code>/<code>response_summary</code> contain only an allow-list of scalar operational fields (ids, counts, model, prompt name/version, stage, failure code, …); the analysis is reduced to counts; everything else is dropped and its key listed in <code>omitted_fields</code>. Every string &#8212; including <code>error</code> and <code>failure.message</code> &#8212; is scrubbed of bearer tokens, API-key-shaped strings, <code>key=value</code> secrets, JWTs, long hex secrets, the literal configured API keys, emails and Iranian mobile numbers, has stack traces removed, and is truncated. A run's failure reason for a database error is reduced to its SQLSTATE (the raw message embeds SQL and bindings). Sanitization happens on read, so historical logs are covered too; they are never modified or deleted.</div>
+      <div class="block-label">Elevated diagnostics &#8212; <code>?diagnostics=1</code></div>
+      <p>Requires <code>product-review-ai.view-logs</code> in addition to <code>manage</code> (otherwise <strong>403</strong>). Adds a <code>diagnostics</code> object with the full stored <code>request</code>/<code>response</code> structure &#8212; still redacted: credential-like keys (<code>api_key</code>, <code>token</code>, <code>authorization</code>, <code>password</code>, <code>secret</code>, <code>cookie</code>, …) become <code>"[REDACTED]"</code>, all strings get the same scrubbing and are truncated to 2,000 characters.</p>
+      <pre>{ <span class="comment">… summary fields …</span>, <span class="key">"diagnostics"</span>: { <span class="key">"request"</span>: { <span class="key">"model"</span>: <span class="str">"deepseek-v4.1-flash"</span>, <span class="key">"api_key"</span>: <span class="str">"[REDACTED]"</span> }, <span class="key">"response"</span>: { <span class="key">"raw"</span>: <span class="str">"{\"reviews\": … contact [REDACTED_EMAIL] …"</span> } } }</pre>
+    </div>
+  </div>
+
+  <h3 id="prai-monitor-retry">Admin &#8212; Retry a Failed Generation</h3>
+  <div class="endpoint">
+    <div class="endpoint-header"><span class="method post">POST</span><span class="endpoint-path">/api/v1/admin/ai-reviews/generations/{generation}/retry</span><span class="badge">product-review-ai.manage + product-review-ai.retry</span></div>
+    <div class="endpoint-body">
+      <p>No body. Creates a <strong>new</strong> generation linked by <code>retry_of_id</code>, copying the original's immutable request snapshot, and queues it. The original run is never reset: its <code>failed</code> status, failure details and logs are preserved (a <code>RETRY_REQUESTED</code> entry is appended to its log).</p>
+      <p>The snapshot pins what the run was asked to do &#8212; product title/description at request time, source, mapped external product id, requested count, AI provider + model, prompt versions, collection limit &#8212; so a retry reproduces the original request instead of silently using today's description, model, prompt or mapping. If any of those is no longer available the retry is refused rather than approximated.</p>
+      <div class="block-label">Response &#8212; 202 Accepted</div>
+      <pre>{ <span class="key">"id"</span>: <span class="num">207</span>, <span class="key">"status"</span>: <span class="str">"pending"</span>, <span class="key">"current_stage"</span>: <span class="str">"queued"</span>, <span class="key">"retry_of_id"</span>: <span class="num">206</span>, <span class="key">"started_at"</span>: <span class="null-val">null</span>, <span class="key">"can_retry"</span>: <span class="bool">false</span>, <span class="comment">… same shape as a list row …</span> }</pre>
+      <div class="block-label">Errors</div>
+      <table>
+        <tr><th>Status</th><th>Body</th><th>When</th></tr>
+        <tr><td>401</td><td><code>{ "message": "Unauthenticated." }</code></td><td>No token</td></tr>
+        <tr><td>403</td><td><code>{ "message": "This action is unauthorized." }</code></td><td>Missing <code>manage</code> or <code>retry</code></td></tr>
+        <tr><td>404</td><td><code>{ "message": "Generation not found." }</code></td><td>Unknown id</td></tr>
+        <tr><td>409</td><td><code>{ "message": "Only failed generations can be retried.", "reason": "GENERATION_NOT_FAILED", "status": "completed" }</code></td><td>Run is <code>pending</code>, <code>processing</code> or <code>completed</code></td></tr>
+        <tr><td>409</td><td><code>{ "message": "A retry of this generation is already in progress.", "reason": "RETRY_ALREADY_EXISTS", "retry_generation_id": 207, "retry_status": "pending" }</code></td><td>Already retried. If that retry also failed the message says to retry the latest attempt &#8212; retry <code>retry_generation_id</code> instead (the chain stays linear: A &rarr; B &rarr; C)</td></tr>
+        <tr><td>409</td><td><code>{ "message": "…", "reason": "RETRY_CONTEXT_UNAVAILABLE" }</code></td><td>Historical run without a snapshot, or its source, external mapping, prompt version or AI provider changed. Start a new generation instead</td></tr>
+        <tr><td>503</td><td><code>{ "message": "The generation was created but could not be queued. …", "generation_id": 207 }</code></td><td>The queue push failed; the new run is marked <code>failed</code> (<code>QUEUE_PROCESSING_ERROR</code>, stage <code>queued</code>) and can itself be retried</td></tr>
+      </table>
+      <div class="note"><strong>Concurrency.</strong> <code>retry_of_id</code> is unique, so two simultaneous retry requests can never both create a run: the loser receives <strong>409</strong> <code>RETRY_ALREADY_EXISTS</code>. The job is dispatched only after the new row commits. Delivery is at-least-once at the queue level; duplicate deliveries are neutralised by the worker's atomic claim (see below) &#8212; no exactly-once guarantee is claimed.</div>
+      <div class="note"><strong>Three different "retries".</strong> (1) <em>HTTP retry</em> &#8212; none: the Digikala and AvalAI adapters make one request per call. (2) <em>Queue delivery retry</em> &#8212; disabled (<code>$tries = 1</code>); re-running the pipeline automatically would repeat paid AI calls. (3) <em>Admin retry</em> &#8212; this endpoint, the intended recovery mechanism. The existing generate/regenerate endpoints remain separate workflows that always use the current configuration.</div>
+    </div>
+  </div>
+
+  <h3 id="prai-monitor-reference">Stages, Failure Codes &amp; Stuck Detection</h3>
+  <div class="block-label">Execution stages (<code>current_stage</code> / <code>failure.stage</code>)</div>
+  <table>
+    <tr><th>Stage</th><th>Meaning</th></tr>
+    <tr><td><code>queued</code></td><td>Row created, job dispatched, not yet claimed</td></tr>
+    <tr><td><code>initializing</code></td><td>Claimed by a worker; resolving source, mapping, provider</td></tr>
+    <tr><td><code>collecting_reviews</code></td><td>Fetching external reviews (Digikala)</td></tr>
+    <tr><td><code>analyzing_reviews</code></td><td>AI stage 1 (analysis)</td></tr>
+    <tr><td><code>generating_reviews</code></td><td>AI stage 2 (draft generation)</td></tr>
+    <tr><td><code>saving_drafts</code></td><td>Persisting drafts</td></tr>
+    <tr><td><code>finished</code></td><td>Completed. <code>failed</code> is a <em>status</em>, never a stage &#8212; a failed run keeps the stage it failed in</td></tr>
+  </table>
+  <p>Stages are actual recorded transitions, written before each stage executes. No progress percentage is reported.</p>
+  <div class="block-label">Failure codes (<code>failure.code</code>)</div>
+  <table>
+    <tr><th>Code</th><th>Retryable hint</th><th>Meaning</th></tr>
+    <tr><td><code>SOURCE_CONFIGURATION_ERROR</code></td><td>false</td><td>Source unknown/inactive or not configured (e.g. <code>DIGIKALA_BASE_URL</code>)</td></tr>
+    <tr><td><code>SOURCE_MAPPING_MISSING</code></td><td>false</td><td>No (or a changed) external product mapping</td></tr>
+    <tr><td><code>SOURCE_TIMEOUT</code></td><td>true</td><td>Source request timed out (cURL errno 28)</td></tr>
+    <tr><td><code>SOURCE_REQUEST_FAILED</code></td><td>true</td><td>Source connection error or non-2xx response</td></tr>
+    <tr><td><code>SOURCE_NO_REVIEWS</code></td><td>false</td><td>Source returned no reviews for the mapped product</td></tr>
+    <tr><td><code>AI_CONFIGURATION_ERROR</code></td><td>false</td><td>AI provider not configured (<code>AVALAI_API_KEY</code>) or prompt missing</td></tr>
+    <tr><td><code>AI_TIMEOUT</code></td><td>true</td><td>AI request timed out</td></tr>
+    <tr><td><code>AI_RATE_LIMITED</code></td><td>true</td><td>AI provider returned HTTP 429</td></tr>
+    <tr><td><code>AI_RESPONSE_INVALID</code></td><td>true</td><td>Empty completion, invalid JSON, or no usable reviews</td></tr>
+    <tr><td><code>AI_GENERATION_FAILED</code></td><td>true</td><td>Other AI request failure</td></tr>
+    <tr><td><code>DATABASE_ERROR</code></td><td>true</td><td>A database error interrupted processing</td></tr>
+    <tr><td><code>QUEUE_PROCESSING_ERROR</code></td><td>true</td><td>Failure outside the pipeline (queue push failed, worker crashed before claiming, redelivered past max attempts)</td></tr>
+    <tr><td><code>PROCESSING_TIMEOUT</code></td><td>true</td><td>Worker stopped the job at its timeout, or the run was reconciled as abandoned</td></tr>
+    <tr><td><code>UNKNOWN_ERROR</code></td><td>false</td><td>Anything unrecognised</td></tr>
+  </table>
+  <p>Codes come from exception types, provider HTTP status and cURL errno plus the stage &#8212; never from matching words in error messages. A business-level failure (e.g. an AI error) is recorded on the run while the queue job itself finishes normally, so it does <strong>not</strong> appear in Laravel's <code>failed_jobs</code> table.</p>
+  <div class="block-label">Duplicate-execution protection</div>
+  <p>A worker claims a run with one conditional update (<code>pending &rarr; processing</code>); only one delivery can win. Every later write (stage, completion, failure) requires the claim to still be held. A duplicate or redelivered job therefore never starts a second pipeline (it logs <code>PROCESSING_SKIPPED</code>), completed/failed runs are never reprocessed or overwritten, and a late worker whose run was reconciled cannot turn <code>failed</code> into <code>completed</code> (its drafts are discarded). No database lock is held during HTTP/AI calls.</p>
+  <div class="block-label">Stuck detection (<code>ai-reviews:detect-stuck-generations</code>, every 5 minutes)</div>
+  <table>
+    <tr><th>Condition</th><th>Result</th></tr>
+    <tr><td><code>pending</code> older than <code>pending_threshold_seconds</code> (default 900)</td><td><strong>Suspected</strong> only &#8212; never auto-failed (a stopped worker or backlog is not proof the job is lost)</td></tr>
+    <tr><td><code>processing</code> with last activity older than the inactivity threshold (default 1200, never below the longest single blocking HTTP stage + 60 s), or started longer ago than <code>processing_timeout_seconds</code> (default 1800)</td><td><strong>Suspected</strong></td></tr>
+    <tr><td><code>processing</code>, started longer ago than the processing timeout <em>and</em> inactive beyond the inactivity threshold</td><td><strong>Abandoned</strong>: failed with <code>PROCESSING_TIMEOUT</code> &#8212; only if automatic failing is enabled and the processing timeout is longer than the job timeout, and only if the row is unchanged since inspection</td></tr>
+  </table>
+  <p>Historical runs without timestamps are judged by their real <code>updated_at</code>. The command is idempotent and safe on several servers.</p>
 
   <div class="note"><strong>Model &amp; prompt history.</strong> Every generation stores the AI <code>model</code> and the prompt <code>name</code>/<code>version</code> it used. Prompts are versioned (<code>ai_prompts</code>), so editing a prompt is a new version and never rewrites past runs. Every external/AI request+response and every approval/rejection is recorded in <code>ai_review_generation_logs</code> for full debugging visibility.</div>
 

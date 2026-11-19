@@ -8,6 +8,7 @@ use Modules\ProductReviewAI\Application\Support\GenerationLogWriter;
 use Modules\ProductReviewAI\Application\Support\JsonExtractor;
 use Modules\ProductReviewAI\Application\Support\PromptRenderer;
 use Modules\ProductReviewAI\Application\Support\PromptResolver;
+use Modules\ProductReviewAI\Domain\Contracts\AIProviderInterface;
 use Modules\ProductReviewAI\Domain\DTOs\AnalysisResultDTO;
 use Modules\ProductReviewAI\Domain\DTOs\ExternalReviewDTO;
 use Modules\ProductReviewAI\Domain\Enums\GenerationLogType;
@@ -16,6 +17,10 @@ use Modules\ProductReviewAI\Infrastructure\Support\AIProviderFactory;
 /**
  * AI stage 1 — distil the collected external reviews into structured analysis
  * (positives, negatives, customer profiles, key features). Output must be JSON.
+ *
+ * The provider, model and prompt version may be pinned by the run's request
+ * snapshot; when omitted the configured provider/model and the latest active
+ * prompt are used (the original behaviour).
  */
 class RunAnalysisAction
 {
@@ -29,10 +34,17 @@ class RunAnalysisAction
      * @param  list<ExternalReviewDTO>  $reviews
      * @param  array<string, mixed>  $productContext
      */
-    public function handle(int $generationId, array $reviews, array $productContext): AnalysisResultDTO
-    {
-        $prompt = $this->prompts->active(PromptResolver::ANALYSIS);
-        $provider = $this->providers->make();
+    public function handle(
+        int $generationId,
+        array $reviews,
+        array $productContext,
+        ?AIProviderInterface $provider = null,
+        ?string $model = null,
+        ?int $promptVersion = null,
+    ): AnalysisResultDTO {
+        $prompt = $this->prompts->resolve(PromptResolver::ANALYSIS, $promptVersion);
+        $provider ??= $this->providers->make();
+        $model ??= $provider->model();
 
         $reviewsPayload = array_map(static fn (ExternalReviewDTO $r): array => [
             'rating' => $r->rating,
@@ -51,13 +63,13 @@ class RunAnalysisAction
         $user = PromptRenderer::render($prompt->user_prompt, $vars);
 
         $this->log->success($generationId, GenerationLogType::AiAnalysisRequest, [
-            'model' => $provider->model(),
+            'model' => $model,
             'prompt' => ['name' => $prompt->name, 'version' => $prompt->version],
             'review_count' => count($reviews),
         ]);
 
         try {
-            $raw = $provider->complete($system, $user);
+            $raw = $provider->complete($system, $user, ['model' => $model]);
         } catch (\Throwable $e) {
             $this->log->failure($generationId, GenerationLogType::AiAnalysisResponse, $e->getMessage());
 

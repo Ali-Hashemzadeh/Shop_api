@@ -14,6 +14,7 @@ use Modules\Catalog\Domain\DTOs\BrandDTO;
 use Modules\Catalog\Domain\DTOs\CategoryDTO;
 use Modules\Catalog\Domain\DTOs\ProductDTO;
 use Modules\Catalog\Domain\DTOs\ProductImageDTO;
+use Modules\Catalog\Domain\DTOs\ProductReferenceDTO;
 use Modules\Catalog\Domain\DTOs\ProductVariantDTO;
 use Modules\Catalog\Domain\Models\Brand;
 use Modules\Catalog\Domain\Models\Category;
@@ -378,6 +379,21 @@ class EloquentCatalogManager implements CatalogManagerInterface
             ->pluck('id')
             ->map(fn ($id) => (int) $id)
             ->values()
+            ->all();
+    }
+
+    public function getProductReferencesByIds(array $ids): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids), fn (int $id) => $id > 0)));
+
+        if ($ids === []) {
+            return [];
+        }
+
+        return Product::query()
+            ->whereIn('id', $ids)
+            ->get(['id', 'uuid', 'title', 'status'])
+            ->mapWithKeys(fn (Product $p): array => [(int) $p->id => ProductReferenceDTO::fromModel($p)])
             ->all();
     }
 

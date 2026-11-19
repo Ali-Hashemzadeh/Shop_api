@@ -8,8 +8,10 @@ use Modules\ProductReviewAI\Application\Support\GenerationLogWriter;
 use Modules\ProductReviewAI\Application\Support\JsonExtractor;
 use Modules\ProductReviewAI\Application\Support\PromptRenderer;
 use Modules\ProductReviewAI\Application\Support\PromptResolver;
+use Modules\ProductReviewAI\Domain\Contracts\AIProviderInterface;
 use Modules\ProductReviewAI\Domain\DTOs\AnalysisResultDTO;
 use Modules\ProductReviewAI\Domain\DTOs\GeneratedReviewDraftDTO;
+use Modules\ProductReviewAI\Domain\Enums\GenerationFailureCode;
 use Modules\ProductReviewAI\Domain\Enums\GenerationLogType;
 use Modules\ProductReviewAI\Domain\Exceptions\AiGenerationException;
 use Modules\ProductReviewAI\Infrastructure\Support\AIProviderFactory;
@@ -28,13 +30,25 @@ class RunGenerationAction
     ) {}
 
     /**
+     * The provider, model and prompt version may be pinned by the run's request
+     * snapshot; when omitted the configured provider/model and the latest active
+     * prompt are used (the original behaviour).
+     *
      * @param  array<string, mixed>  $productContext
      * @return list<GeneratedReviewDraftDTO>
      */
-    public function handle(int $generationId, array $productContext, AnalysisResultDTO $analysis, int $count): array
-    {
-        $prompt = $this->prompts->active(PromptResolver::GENERATION);
-        $provider = $this->providers->make();
+    public function handle(
+        int $generationId,
+        array $productContext,
+        AnalysisResultDTO $analysis,
+        int $count,
+        ?AIProviderInterface $provider = null,
+        ?string $model = null,
+        ?int $promptVersion = null,
+    ): array {
+        $prompt = $this->prompts->resolve(PromptResolver::GENERATION, $promptVersion);
+        $provider ??= $this->providers->make();
+        $model ??= $provider->model();
 
         $vars = [
             'product_title' => (string) ($productContext['title'] ?? ''),
@@ -47,13 +61,13 @@ class RunGenerationAction
         $user = PromptRenderer::render($prompt->user_prompt, $vars);
 
         $this->log->success($generationId, GenerationLogType::AiGenerationRequest, [
-            'model' => $provider->model(),
+            'model' => $model,
             'prompt' => ['name' => $prompt->name, 'version' => $prompt->version],
             'count' => $count,
         ]);
 
         try {
-            $raw = $provider->complete($system, $user);
+            $raw = $provider->complete($system, $user, ['model' => $model]);
         } catch (\Throwable $e) {
             $this->log->failure($generationId, GenerationLogType::AiGenerationResponse, $e->getMessage());
 
@@ -78,7 +92,7 @@ class RunGenerationAction
                 'raw' => mb_substr($raw, 0, 2000),
             ]);
 
-            throw new AiGenerationException($message);
+            throw new AiGenerationException($message, 0, null, GenerationFailureCode::AiResponseInvalid);
         }
 
         $this->log->success($generationId, GenerationLogType::AiGenerationResponse, null, [

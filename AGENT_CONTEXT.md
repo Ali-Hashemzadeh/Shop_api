@@ -679,7 +679,10 @@ replaces no primary key, foreign key, relation, cron input, internal query, or a
   * **HTTP (all `auth:sanctum` + `throttle:api` + `product-review-ai.manage`, admin only — never support/customer):**
     `GET/POST /api/v1/admin/products/{product}/ai-reviews/{search,mappings}`, `POST .../generate` (returns
     `{warning, existing_ai_reviews}` unless `confirm:true`; **202** when queued), `POST .../regenerate` (keeps history),
-    `GET .../generations`; `GET /api/v1/admin/ai-reviews/{generation}` (run + drafts), `PATCH /api/v1/admin/ai-reviews/{draft}`
+    `GET .../generations`; **monitoring** `GET /api/v1/admin/ai-reviews/generations` (all products; filters/sort/paginate),
+    `GET .../generations/stats`, `GET .../generations/{id}`, `GET .../generations/{id}/logs` (sanitized; `diagnostics=1` needs
+    view-logs), `POST .../generations/{id}/retry` (needs retry; 202 / 409 / 503);
+    `GET /api/v1/admin/ai-reviews/{generation}` (run + drafts), `PATCH /api/v1/admin/ai-reviews/{draft}`
     (edit → version snapshot, `edited`; approved draft → 422), `POST .../{draft}/approve`, `POST .../{draft}/reject`.
     `{product}` is the Catalog public code; `{generation}`/`{draft}` are numeric. **Read-only prompt browsing:**
     `GET /api/v1/admin/ai-prompts` (filter `name`/`active`, paginated) + `GET /api/v1/admin/ai-prompts/{id}`. Prompts are
@@ -691,7 +694,8 @@ replaces no primary key, foreign key, relation, cron input, internal query, or a
     **Digikala real shapes:** `/discovery/api/v2/search` nests each product as a `{type:"product", data:{…}}` entry inside
     the listing widget's own `data.widgets[]` (walked recursively; filter/brand nodes ignored); reviews return under
     `data.comments[]`. Both parsed defensively with flat fallbacks.
-  * **Permission:** `product-review-ai.manage` (admin only). Seeders: `ProductReviewAIPermissionsSeeder`,
+  * **Permission:** `product-review-ai.manage` (admin only), plus elevated `product-review-ai.view-logs` (redacted log
+    diagnostics) and `product-review-ai.retry` (manual retry) — required in addition to `manage`, seeded to admin only. Seeders: `ProductReviewAIPermissionsSeeder`,
     `ReviewSourceSeeder` (Digikala), `AiPromptSeeder` (v1 `review_analysis` + `review_generation`).
   * **Config/env:** `config/product_review_ai.php` + `AVALAI_*`, `DIGIKALA_*`, `PRODUCT_REVIEW_AI_*`.
   * **Tests:** `tests/Feature/ProductReviewAI/` — **27 tests** (DigikalaSourceTest 6 via faked HTTP incl. the widget-based
@@ -700,6 +704,37 @@ replaces no primary key, foreign key, relation, cron input, internal query, or a
     logging, AI-failure → failed+logged, no-mapping 422, existing-AI warning/confirm, approval→normal-review + provenance,
     published AI review served as an ordinary review, edit version history, reject + frozen-approved, search→save mapping,
     prompt list/filter/show + auth, URL+response logging for the source and AI transports, and the 401/403 matrix.
+    **Plus 63 monitoring/lifecycle tests** (GenerationLifecycleTest 19, GenerationMonitoringApiTest 14, GenerationLogsApiTest 5,
+    GenerationRetryTest 12, StuckGenerationDetectionTest 13 + the shared `Concerns/InteractsWithAiReviewPipeline` fixtures) —
+    90 in the module.
+  * **Generation monitoring, lifecycle & recovery (added 2026-11-15).** Where future work goes:
+    * **State transitions → `Application/Support/GenerationLifecycle` only.** Every execution write is a conditional UPDATE
+      (claim `WHERE status=pending`; stage/heartbeat/complete/fail `WHERE status=processing AND execution_token=mine`;
+      reconcile = compare-and-set on status/stage/heartbeat/updated_at). Never `save()` an execution column. A write that
+      matches no row throws `GenerationOwnershipLostException`; the worker stops and writes nothing (no draft insert).
+    * **New stages → `Domain/Enums/GenerationStage`** and an `enterStage()` call in `ProcessGenerationAction` *before* the stage
+      runs. `failed` is a status, never a stage. If the new stage can block on HTTP, include its worst case in
+      `StuckGenerationPolicy::longestBlockingStageSeconds()`.
+    * **New failure classifications → `Domain/Enums/GenerationFailureCode`** (with `isRetryable()` + `description()`), set
+      by the thrower on a `HasFailureCode` exception (`AiGenerationException`/`ExternalSourceException`/
+      `IntegrationUnavailableException` take an optional 4th ctor arg) from an explicit signal; `FailureClassifier` falls
+      back to type + stage. Never classify by message text. Timeouts: `Infrastructure/Support/HttpFailure::isTimeout()`
+      (cURL errno 28 on the Guzzle `ConnectException` in the chain).
+    * **Retry behaviour → `Application/Actions/RetryGenerationAction`** (+ `GenerationRequestContext` for what is
+      reproducible). `retry_of_id` UNIQUE keeps chains linear and blocks concurrent duplicates. Dispatch always via
+      `GenerationDispatcher` after commit (push failure → `failed`/`QUEUE_PROCESSING_ERROR` + 503).
+    * **Monitoring reads → `Infrastructure/Persistence/Repositories/GenerationMonitorRepository`** behind the five new
+      `ProductReviewAIManagerInterface` methods (`listAllGenerations`, `getGenerationMonitor`, `listGenerationLogs`,
+      `generationStats`, `retryGeneration`). Keep list queries on the explicit column list and the page-wide Catalog batch.
+    * **"Stuck" has one definition → `Application/Support/StuckGenerationPolicy`** (row flag, stats count, command).
+    * **Anything leaving the API from logs/failure reasons → `Application/Support/DiagnosticSanitizer`.** Extend its
+      allow-list (`SUMMARY_KEYS`) deliberately; never return stored request/response JSON raw.
+    * Job: `$tries = 1`, `$timeout = queue.job_timeout`, `failOnTimeout`; `failed()` → `RecordJobFailureAction` (never
+      throws; fails only `pending` or own-claim runs; ignores terminal runs and `MaxAttemptsExceeded` redeliveries).
+      Business failures are recorded on the run and the job succeeds — there is no `failed_jobs` row for them.
+    * Command `ai-reviews:detect-stuck-generations` (`app/Console/Commands/AiReviewsDetectStuckGenerationsCommand`, registered in
+      `ProductReviewAIServiceProvider::boot()`, scheduled every five minutes in `routes/console.php`).
+    * Catalog gained `getProductReferencesByIds()` → `ProductReferenceDTO` (additive; batch, any status, no enrichment).
 
 ### Module: Blog (`Modules/Blog/`) — Editorial Blog / CMS ✅
 
@@ -846,7 +881,7 @@ replaces no primary key, foreign key, relation, cron input, internal query, or a
 | Review | ✅ Complete | 35 passing across 4 feature test classes |
 | Wishlist | ✅ Complete | 32 passing (ProductLikesTest, AvailabilitySubscriptionTest, RestockNotificationTest, RestockEventTest) |
 | Ticket | ✅ Complete | 39 passing (TicketTest 14, SupportTicketTest 7, AdminTicketTest 7, TicketNotificationTest 4, TicketAttachmentTest 7) |
-| ProductReviewAI | ✅ Complete | 27 passing (DigikalaSourceTest 6, GenerationWorkflowTest 5, ModerationTest 5, AuthorizationTest 4, PromptEndpointsTest 4, SourceAndAiLoggingTest 3) |
+| ProductReviewAI | ✅ Complete | 90 passing (DigikalaSourceTest 6, GenerationWorkflowTest 5, ModerationTest 5, AuthorizationTest 4, PromptEndpointsTest 4, SourceAndAiLoggingTest 3, GenerationLifecycleTest 19, GenerationMonitoringApiTest 14, GenerationLogsApiTest 5, GenerationRetryTest 12, StuckGenerationDetectionTest 13) |
 | Blog | ✅ Complete | 119 passing across 12 feature test classes (`tests/Feature/Blog/`) |
 
 **Full suite after Blog (2026-10-12): 1054 tests, 1032 passing.** All 22 failures are pre-existing and fail identically
