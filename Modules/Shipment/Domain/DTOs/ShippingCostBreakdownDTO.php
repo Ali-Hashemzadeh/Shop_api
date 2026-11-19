@@ -5,39 +5,74 @@ declare(strict_types=1);
 namespace Modules\Shipment\Domain\DTOs;
 
 /**
- * The itemised result of a shipping cost calculation. `total` is the payable amount
- * in TOMANS (integer, Money Unit Rule); the components are exposed for transparency,
- * logging, and admin display. Every field is a whole toman — no float ever appears.
+ * The itemised result of a 1405 postal quote. Every amount is a whole TOMAN (Money
+ * Unit Rule — no float ever appears) and `total` is exactly the sum of the parts:
+ *
+ *   total = base_price + extra_weight                         (postal service charge)
+ *         + delivery_surcharge + large_province_surcharge
+ *         + island_surcharge + fragile_surcharge
+ *         + electronic_service_charge + compensation
+ *         + postal_tax                                         (10 % of the taxable parts, floored)
+ *         + packaging                                          (flat shop fee, untaxed)
  */
 class ShippingCostBreakdownDTO
 {
     public function __construct(
-        public readonly int $total,
-        public readonly string $distanceType,
-        public readonly int $basePrice,
-        public readonly int $extraWeightCost,
-        public readonly int $islandSurcharge,
-        public readonly int $largeProvinceSurcharge,
-        public readonly int $tehranSurcharge,
-        public readonly int $fragileSurcharge,
+        public readonly string $serviceCode,
+        public readonly int $tariffYear,
+        public readonly string $rateZone,
         public readonly int $weightGrams,
+        public readonly int $basePrice,
+        public readonly int $extraWeight,
+        public readonly int $deliverySurcharge,
+        // 'tehran_alborz' | 'metropolitan' | null — which delivery-area rule applied.
+        public readonly ?string $deliverySurchargeRule,
+        public readonly int $largeProvinceSurcharge,
+        public readonly int $islandSurcharge,
+        public readonly int $fragileSurcharge,
+        public readonly int $electronicServiceCharge,
+        public readonly int $compensation,
+        public readonly int $postalTax,
+        public readonly int $packaging,
     ) {}
 
+    public function postalServiceCharge(): int
+    {
+        return $this->basePrice + $this->extraWeight;
+    }
+
+    public function total(): int
+    {
+        return $this->postalServiceCharge()
+            + $this->deliverySurcharge
+            + $this->largeProvinceSurcharge
+            + $this->islandSurcharge
+            + $this->fragileSurcharge
+            + $this->electronicServiceCharge
+            + $this->compensation
+            + $this->postalTax
+            + $this->packaging;
+    }
+
     /**
-     * @return array<string, int|string>
+     * The public `price_breakdown` shape (method list, order snapshot, shipment).
+     *
+     * @return array<string, int>
      */
     public function toArray(): array
     {
         return [
-            'total' => $this->total,
-            'distance_type' => $this->distanceType,
             'base_price' => $this->basePrice,
-            'extra_weight_cost' => $this->extraWeightCost,
-            'island_surcharge' => $this->islandSurcharge,
+            'extra_weight' => $this->extraWeight,
+            'delivery_surcharge' => $this->deliverySurcharge,
             'large_province_surcharge' => $this->largeProvinceSurcharge,
-            'tehran_surcharge' => $this->tehranSurcharge,
+            'island_surcharge' => $this->islandSurcharge,
             'fragile_surcharge' => $this->fragileSurcharge,
-            'weight_grams' => $this->weightGrams,
+            'electronic_service_charge' => $this->electronicServiceCharge,
+            'compensation' => $this->compensation,
+            'postal_tax' => $this->postalTax,
+            'packaging' => $this->packaging,
+            'total' => $this->total(),
         ];
     }
 }

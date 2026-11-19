@@ -3,6 +3,7 @@
 namespace Modules\Shipment\Infrastructure\Providers;
 
 use App\Console\Commands\ShipmentGenerateDeliverySlotsCommand;
+use App\Console\Commands\ShippingPost1405VerifyCommand;
 use Illuminate\Support\ServiceProvider;
 use Modules\Shipment\Domain\Contracts\LocalDeliveryEligibilityInterface;
 use Modules\Shipment\Domain\Contracts\ShipmentManagerInterface;
@@ -22,7 +23,7 @@ class ShipmentServiceProvider extends ServiceProvider
         $this->app->bind(LocalDeliveryEligibilityInterface::class, ConfigLocalDeliveryEligibility::class);
         $this->app->bind(ShipmentManagerInterface::class, EloquentShipmentManager::class);
 
-        // The Post tariff engine — the sole owner of shipping-cost calculation. Swap
+        // The Iran Post 1405 engine — the sole owner of postal pricing (fail-closed). Swap
         // this binding to price a different carrier behind the same contract.
         $this->app->bind(ShippingCostCalculatorInterface::class, PostShippingCalculator::class);
 
@@ -37,6 +38,7 @@ class ShipmentServiceProvider extends ServiceProvider
 
         $this->commands([
             ShipmentGenerateDeliverySlotsCommand::class,
+            ShippingPost1405VerifyCommand::class,
         ]);
     }
 }

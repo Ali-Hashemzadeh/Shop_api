@@ -16,42 +16,50 @@ $idList = static fn (string $key): array => array_values(array_unique(array_filt
 return [
     /*
     |--------------------------------------------------------------------------
-    | Fixed fulfillment methods
+    | Fixed non-postal methods (+ retired legacy postal codes)
     |--------------------------------------------------------------------------
-    | The application supports exactly four fixed fulfillment methods. They are
-    | intentionally config-backed (never a database table) so operators cannot
-    | create, delete, rename, reorder, enable, disable, or reprice them through
-    | the admin panel. Methods are identified by their stable string code — never
-    | a database id.
+    | Config-backed (never a database table) so operators cannot create, delete,
+    | rename, or reprice them through the admin panel. Methods are identified by
+    | their stable string code — never a database id.
     |
-    | Prices are env-backed so a deployment can be repriced without a code change.
-    | All are integer rials (the Cents Rule) — the (int) cast is required because
-    | env() hands back strings, and a float price would violate financial integrity.
-    | The value beside each env() call is the fallback when the key is absent.
+    | POSTAL methods are not defined here any more. The 21 Iran Post 1405 methods
+    | (post_registered_parcel, post_intercity_d3_parcel, …) come from
+    | Post1405Catalog + the toggles in config/shipping.php → post_1405.services,
+    | and are priced only by the 1405 engine — there is no static postal price.
+    |
+    | `post_standard` / `post_express` are RETIRED: kept only so historical orders
+    | and shipments carrying these codes stay readable (title/type). A `retired`
+    | method can never be selected at checkout, whatever `enabled` says, and old
+    | orders are never repriced.
+    |
+    | Prices are integer TOMANS (Money Unit Rule) — the (int) cast is required
+    | because env() hands back strings.
     */
     'methods' => [
         'post_standard' => [
             'title' => 'Standard Post',
             'type' => 'postal',
-            'price' => (int) env('SHIPMENT_POST_STANDARD_PRICE', 850_000),
+            'price' => null,
             'requires_address' => true,
             'requires_delivery_slot' => false,
             'supports_tracking' => true,
             'estimated_min_days' => 3,
             'estimated_max_days' => 7,
-            'enabled' => true,
+            'enabled' => false,
+            'retired' => true,
         ],
 
         'post_express' => [
             'title' => 'Express Post',
             'type' => 'postal',
-            'price' => (int) env('SHIPMENT_POST_EXPRESS_PRICE', 1_400_000),
+            'price' => null,
             'requires_address' => true,
             'requires_delivery_slot' => false,
             'supports_tracking' => true,
             'estimated_min_days' => 1,
             'estimated_max_days' => 3,
-            'enabled' => true,
+            'enabled' => false,
+            'retired' => true,
         ],
 
         'local_delivery' => [
@@ -101,7 +109,7 @@ return [
     | the safe default — it is also why the exclusion cannot simply be "postal
     | is off wherever local delivery is on".
     |
-    | Inside the service area the store delivers itself, so the two postal
+    | Inside the service area the store delivers itself, so every postal
     | methods are withdrawn: they are reported unavailable by
     | GET /shipment/methods and rejected with 422 at checkout. Pickup is never
     | affected — the customer may always collect in person.

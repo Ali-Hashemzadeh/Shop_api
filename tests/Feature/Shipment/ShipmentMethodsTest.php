@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature\Shipment;
 
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Modules\Identity\Domain\Models\User;
 use Modules\Order\Domain\Models\Order;
@@ -12,18 +13,27 @@ use Modules\Order\Domain\Models\Order;
 class ShipmentMethodsTest extends ShipmentTestCase
 {
     /** @test */
-    public function it_lists_all_enabled_config_backed_methods_for_a_valid_address_without_a_methods_table(): void
+    public function it_lists_all_enabled_methods_for_a_valid_address_without_a_methods_table(): void
     {
         $user = $this->actingAsCustomer();
         $addressId = $this->createAddress($user->id);
 
         $response = $this->getJson("/api/v1/shipment/methods?address_id={$addressId}")->assertOk();
 
+        // Default toggles: every parcel service on, every envelope/document/specialised
+        // service off, the retired legacy codes never listed.
         $codes = collect($response->json('data'))->pluck('code')->all();
         $this->assertEqualsCanonicalizing(
-            ['post_standard', 'post_express', 'local_delivery', 'in_person_pickup'],
+            [
+                'post_registered_parcel',
+                'post_urban_3h_parcel', 'post_urban_sameday_parcel', 'post_urban_nextday_parcel',
+                'post_intercity_sameday_parcel', 'post_intercity_d1_parcel', 'post_intercity_d2_parcel', 'post_intercity_d3_parcel',
+                'local_delivery', 'in_person_pickup',
+            ],
             $codes,
         );
+        $this->assertNotContains('post_standard', $codes);
+        $this->assertNotContains('post_express', $codes);
         $this->assertFalse(Schema::hasTable('shipment_methods'));
     }
 
@@ -61,47 +71,67 @@ class ShipmentMethodsTest extends ShipmentTestCase
     // ── Checkout validation matrix ─────────────────────────────────────────────
 
     /** @test */
-    public function standard_post_succeeds_with_a_valid_address(): void
+    public function postal_checkout_succeeds_with_a_valid_address(): void
     {
         $user = $this->actingAsCustomer();
-        $addressId = $this->createAddress($user->id);
+        $addressId = $this->postalAddress($user->id, self::AHVAZ);
         $this->createVariantWithStock('SP-1', 40000, 5);
         $this->addToCart($user->id, 'SP-1', 1);
-        $postPrice = (int) config('shipment.methods.post_standard.price');
 
+        // 500 g D+3 parcel Qom → Ahvaz: 100,000 + 15 % metro + 10 % tax + 50,000 packaging.
         $this->postJson('/api/v1/orders', [
-            'shipment_method_code' => 'post_standard',
+            'shipment_method_code' => 'post_intercity_d3_parcel',
             'address_id' => $addressId,
         ])
             ->assertStatus(201)
-            ->assertJsonPath('shipment_method_code', 'post_standard')
-            ->assertJsonPath('shipping_cost', $postPrice)
-            ->assertJsonPath('total_amount', 40000 + $postPrice);
+            ->assertJsonPath('shipment_method_code', 'post_intercity_d3_parcel')
+            ->assertJsonPath('shipping_cost', 176500)
+            ->assertJsonPath('total_amount', 40000 + 176500);
     }
 
     /** @test */
-    public function standard_post_rejects_missing_address(): void
+    public function postal_checkout_rejects_missing_address(): void
     {
         $user = $this->actingAsCustomer();
         $this->createVariantWithStock('SP-2');
         $this->addToCart($user->id, 'SP-2', 1);
 
-        $this->postJson('/api/v1/orders', ['shipment_method_code' => 'post_standard'])
+        $this->postJson('/api/v1/orders', ['shipment_method_code' => self::POSTAL_METHOD])
             ->assertStatus(422)
             ->assertJsonValidationErrors('address_id');
+    }
+
+    /** @test */
+    public function retired_legacy_postal_codes_cannot_be_selected(): void
+    {
+        $user = $this->actingAsCustomer();
+        $addressId = $this->postalAddress($user->id);
+        $this->createVariantWithStock('SP-LEG');
+        $this->addToCart($user->id, 'SP-LEG', 1);
+
+        foreach (['post_standard', 'post_express'] as $legacy) {
+            // Even re-enabling the config entry cannot revive a retired code.
+            Config::set("shipment.methods.{$legacy}.enabled", true);
+
+            $this->postJson('/api/v1/orders', ['shipment_method_code' => $legacy, 'address_id' => $addressId])
+                ->assertStatus(422)
+                ->assertJsonValidationErrors('shipment_method_code');
+        }
+
+        $this->assertDatabaseCount('orders', 0);
     }
 
     /** @test */
     public function postal_methods_reject_a_delivery_slot(): void
     {
         $user = $this->actingAsCustomer();
-        $addressId = $this->createAddress($user->id);
+        $addressId = $this->postalAddress($user->id);
         $slot = $this->createBookableSlot();
         $this->createVariantWithStock('SP-3');
         $this->addToCart($user->id, 'SP-3', 1);
 
         $this->postJson('/api/v1/orders', [
-            'shipment_method_code' => 'post_express',
+            'shipment_method_code' => self::POSTAL_METHOD,
             'address_id' => $addressId,
             'delivery_slot_id' => $slot->id,
         ])
@@ -214,15 +244,15 @@ class ShipmentMethodsTest extends ShipmentTestCase
     /** @test */
     public function disabled_method_cannot_be_selected(): void
     {
-        Config::set('shipment.methods.post_standard.enabled', false);
+        Config::set('shipping.post_1405.services.post_intercity_d3_parcel', false);
 
         $user = $this->actingAsCustomer();
-        $addressId = $this->createAddress($user->id);
+        $addressId = $this->postalAddress($user->id);
         $this->createVariantWithStock('DM-1');
         $this->addToCart($user->id, 'DM-1', 1);
 
         $this->postJson('/api/v1/orders', [
-            'shipment_method_code' => 'post_standard',
+            'shipment_method_code' => 'post_intercity_d3_parcel',
             'address_id' => $addressId,
         ])
             ->assertStatus(422)
@@ -232,26 +262,27 @@ class ShipmentMethodsTest extends ShipmentTestCase
     // ── Snapshot immutability ──────────────────────────────────────────────────
 
     /** @test */
-    public function order_snapshot_is_immutable_when_config_changes_later(): void
+    public function order_snapshot_is_immutable_when_tariffs_or_config_change_later(): void
     {
         $user = $this->actingAsCustomer();
-        $addressId = $this->createAddress($user->id);
+        $addressId = $this->postalAddress($user->id, self::AHVAZ);
         $this->createVariantWithStock('SNAP-1', 10000, 5);
         $this->addToCart($user->id, 'SNAP-1', 1);
-        $postPrice = (int) config('shipment.methods.post_standard.price');
 
         $orderId = $this->postJson('/api/v1/orders', [
-            'shipment_method_code' => 'post_standard',
+            'shipment_method_code' => 'post_intercity_d3_parcel',
             'address_id' => $addressId,
         ])->json('id');
 
-        // Reprice the method after the order exists.
-        Config::set('shipment.methods.post_standard.price', 5_000_000);
+        // Reprice everything after the order exists.
+        DB::table('postal_tariffs_1405')->update(['base_price_toman' => 999_999]);
+        Config::set('shipping.post_1405.packaging_price_toman', 1);
 
         $order = Order::find($orderId);
-        $this->assertSame($postPrice, $order->shipment_snapshot['shipping_cost']);
-        $this->assertSame($postPrice, $order->shipping_cost);
-        $this->assertSame('Standard Post', $order->shipment_snapshot['method_title']);
+        $this->assertSame(176500, $order->shipment_snapshot['shipping_cost']);
+        $this->assertSame(176500, $order->shipping_cost);
+        $this->assertSame(176500, $order->shipment_snapshot['price_breakdown']['total']);
+        $this->assertSame('پیشتاز D+3 — بسته', $order->shipment_snapshot['method_title']);
     }
 
     /** @test */

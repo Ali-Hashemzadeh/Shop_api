@@ -6,20 +6,21 @@ namespace Modules\Shipment\Domain\Contracts;
 
 use Modules\Shipment\Domain\DTOs\ShippingCostBreakdownDTO;
 use Modules\Shipment\Domain\DTOs\ShippingCostRequestDTO;
-use Modules\Shipment\Domain\Exceptions\ShippingTariffNotFoundException;
+use Modules\Shipment\Domain\Exceptions\PostalServiceUnavailableException;
 
 /**
- * A pluggable shipping cost engine. The Post implementation is the first; a courier
- * or a second carrier can be bound behind the same contract later. Keeps the Shipment
- * module the sole owner of shipping-cost calculation.
+ * The postal pricing engine (Iran Post 1405). Keeps the Shipment module the sole
+ * owner of shipping-cost calculation; a second carrier can be bound behind the same
+ * contract later.
  */
 interface ShippingCostCalculatorInterface
 {
     /**
-     * Calculate the shipping cost (TOMANS) for the given request.
+     * Price one postal service for one parcel and route, in integer TOMANS.
      *
-     * @throws ShippingTariffNotFoundException
-     *                                         when no tariff matches the request.
+     * @throws PostalServiceUnavailableException when the service is disabled or
+     *                                           cannot be priced from approved data
+     *                                           (fail-closed — never a fallback).
      */
     public function calculate(ShippingCostRequestDTO $request): ShippingCostBreakdownDTO;
 }

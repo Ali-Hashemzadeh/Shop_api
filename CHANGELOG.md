@@ -2,6 +2,42 @@
 
 ## [Unreleased]
 
+### Feature — Iran Post 1405 shipping engine (Shipment) — BREAKING for postal method codes
+
+**Every enabled postal method in `GET /api/v1/shipment/methods` now carries its own price, calculated from the 1405 Iran
+Post tariff, with an itemised breakdown, a 10 % postal tax and a 50,000-toman packaging fee per postal order.**
+Full write-up, deployment plan, open carrier questions and frontend guide: `POST_1405_SHIPPING.md`.
+
+- **21 official postal methods** (`Post1405Catalog`), each with its own `SHIPPING_ENABLE_POST_*` toggle. Parcel services
+  are on by default; envelope/document/M-bag/periodical services are off. `true` only *permits* evaluation — D+1, D+2,
+  intercity same-day and urban services also need explicit route-coverage allow-lists (empty by default).
+- **New tables** `postal_services_1405` (21) + `postal_tariffs_1405` (66 rows, closed gram brackets, `extra_above_grams`),
+  additive and safe when the tables already exist; `shipments.price_breakdown` (nullable JSON).
+- **Formula:** base + started-kg extra weight → 20 % Tehran/Alborz (provinces 8, 5) *or* 15 % metropolitan (7 approved
+  cities, `SHIPPING_METROPOLITAN_ENABLED`) → 5 % large province (8 provinces, not Khuzestan) → island 25,500/started kg
+  (explicit lists only) → fragile 25 % → electronic service 7,700 (registered non-priority) → compensation (off) → 10 %
+  postal tax → 50,000 packaging. All percentages on the postal service charge only; integer tomans, floored.
+- **Fail-closed:** no static postal price and no fallback. Unpriceable methods return `available:false`, `price:null`,
+  `unavailable_code`; checkout returns 422 (`items.{sku}.weight_grams` for a missing product weight — weights are never
+  treated as 0; `shipment_method_code` / `address_id` otherwise). Unknown origin/destination is never "non-neighbour".
+- **One pricing path** for the list and checkout: `ShipmentManagerInterface::quoteSelection()` replaces
+  `resolveShippingCostForSelection()`; `getAvailableMethods()` takes a primitives-only `ShipmentParcelDTO`. Postal tax and
+  packaging live inside `orders.shipping_cost` (`tax_amount` untouched) and are copied — never recalculated — to the
+  shipment at activation.
+- **Method resource** adds `unavailable_code`, `currency`, `tariff_year`, `scope`, `package_kind`, `weight_grams`,
+  `rate_zone`, `price_breakdown` (+ `missing_weight_skus`); `price` is now nullable. Existing keys unchanged.
+- **Retired:** `post_standard` / `post_express` can no longer be selected (422) or repriced; historical orders keep their
+  snapshot. `PostTariffSeeder` is a no-op, legacy `post_tariffs` rows are untouched, `PostTariffRepository` /
+  `ShippingTariffNotFoundException` removed. `SHIPMENT_POST_{STANDARD,EXPRESS}_PRICE`,
+  `SHIPPING_{LARGE,TEHRAN_ALBORZ}_PROVINCE_IDS` are no longer read.
+- **Seeders** insert missing rows only, never overwrite operator edits, and report conflicts. `ShippingParameterSeeder`
+  now seeds the island fee as 25,500 tomans (it previously wrote the rial figure) and adds `metropolitan_percentage`.
+- **New command** `php artisan shipping:post-1405:verify` (read-only): catalog integrity + every configured geography id,
+  via the new `IdentityManagerInterface::getLocationReferences()`.
+- **Flagged, not corrected:** the PDF's same-province 3–5 kg registered-parcel rate (27,000) is below the 2–3 kg rate.
+- Tests: `tests/Feature/Shipment/Post1405/*` (catalog/seeder, calculator, endpoint + checkout); legacy engine tests removed;
+  existing Shipment tests moved to the new codes via the `Post1405Fixtures` trait (production province/city ids).
+
 ### Feature — AI review generation monitoring, diagnostics & recovery (ProductReviewAI)
 
 **Admins can now monitor every AI review generation run, see exactly where and why one failed, read its sanitized

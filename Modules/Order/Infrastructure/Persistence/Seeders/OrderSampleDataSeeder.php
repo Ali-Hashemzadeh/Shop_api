@@ -6,6 +6,7 @@ use Illuminate\Database\Seeder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Modules\Cart\Domain\Models\Cart;
 use Modules\Cart\Domain\Models\CartItem;
 use Modules\Catalog\Domain\Contracts\CatalogManagerInterface;
@@ -18,6 +19,7 @@ use Modules\Order\Application\Actions\SyncSalesCountsAction;
 use Modules\Order\Domain\Models\Order;
 use Modules\Order\Domain\Models\OrderItem;
 use Modules\Shipment\Domain\Contracts\ShipmentManagerInterface;
+use Modules\Shipment\Domain\DTOs\ShipmentParcelDTO;
 
 /**
  * Seeds carts + orders + order items and drives the real Inventory reservation
@@ -34,6 +36,13 @@ use Modules\Shipment\Domain\Contracts\ShipmentManagerInterface;
  */
 class OrderSampleDataSeeder extends Seeder
 {
+    /**
+     * Demo-only unit weight for sample variants that have no captured weight, so the
+     * postal demo orders can be priced through the real 1405 engine. Never used
+     * outside this seeder — production checkout rejects a missing weight.
+     */
+    private const DEMO_UNIT_WEIGHT_GRAMS = 400;
+
     private InventoryManagerInterface $inventory;
 
     private CatalogManagerInterface $catalog;
@@ -94,11 +103,11 @@ class OrderSampleDataSeeder extends Seeder
         // real, future slot; backdating them further would read as a delivery in the past.
         $blueprints = [
             // ── Postal workflow (pending → preparing → ready_for_post → handed_to_post) ──
-            [$sara, 'paid', 'online', 9,  [[0, 1], [7, 2]], 'post_standard',    'pending'],
-            [$reza, 'paid', 'online', 7,  [[1, 1]],         'post_standard',    'preparing'],
-            [$nima, 'paid', 'online', 6,  [[3, 1]],         'post_express',     'ready_for_post'],
-            [$reza, 'paid', 'online', 20, [[3, 1]],         'post_standard',    'handed_to_post'],
-            [$sara, 'paid', 'online', 15, [[8, 1]],         'post_express',     'cancelled'],
+            [$sara, 'paid', 'online', 9,  [[0, 1], [7, 2]], 'post_intercity_d3_parcel', 'pending'],
+            [$reza, 'paid', 'online', 7,  [[1, 1]],         'post_intercity_d3_parcel', 'preparing'],
+            [$nima, 'paid', 'online', 6,  [[3, 1]],         'post_intercity_d3_parcel', 'ready_for_post'],
+            [$reza, 'paid', 'online', 20, [[3, 1]],         'post_intercity_d3_parcel', 'handed_to_post'],
+            [$sara, 'paid', 'online', 15, [[8, 1]],         'post_intercity_d3_parcel', 'cancelled'],
 
             // ── Local delivery (pending → preparing → ready_for_dispatch → out_for_delivery
             //    → delivered / delivery_failed), each booking its own session ──
@@ -121,8 +130,8 @@ class OrderSampleDataSeeder extends Seeder
             // Open order: inventory reservation AND delivery-slot hold both still held.
             [$reza, 'pending',   'online', 0, [[5, 1]], 'local_delivery', null],
             // Abandoned / failed — reservations released, no physical stock change.
-            [$sara, 'cancelled', 'online', 3, [[3, 1]], 'post_standard',  null],
-            [$nima, 'failed',    'online', 1, [[6, 1]], 'post_express',   null],
+            [$sara, 'cancelled', 'online', 3, [[3, 1]], 'post_intercity_d3_parcel', null],
+            [$nima, 'failed',    'online', 1, [[6, 1]], 'post_intercity_d3_parcel', null],
         ];
 
         foreach ($blueprints as [$user, $status, $method, $daysAgo, $lines, $shipmentMethod, $shipmentState]) {
@@ -301,9 +310,11 @@ class OrderSampleDataSeeder extends Seeder
         $placedAt = Carbon::now()->subDays($daysAgo)->subHours(random_int(0, 12));
 
         $items = [];
+        $unitWeights = [];
         $total = 0;
         foreach ($lines as [$index, $qty]) {
             $variant = $this->variants[$index];
+            $unitWeights[$variant->sku] = $variant->weight_grams > 0 ? (int) $variant->weight_grams : null;
             $lineTotal = $variant->base_price * $qty;
             $total += $lineTotal;
             $title = $variant->product?->title ?? 'Product';
@@ -331,8 +342,9 @@ class OrderSampleDataSeeder extends Seeder
         // Postal orders ship from the out-of-area address, everything else from the
         // in-area one — the same choice a real customer faces, since the two rules
         // (local delivery only inside, post only outside) never overlap.
+        $isPostal = ! in_array($shipmentMethod, ['local_delivery', 'in_person_pickup'], true);
         $address = $user->addresses()
-            ->where('title', config("shipment.methods.{$shipmentMethod}.type") === 'postal' ? 'Work' : 'Home')
+            ->where('title', $isPostal ? 'Work' : 'Home')
             ->first();
 
         // Resolve the fulfillment selection through the Shipment contract exactly like
@@ -344,6 +356,24 @@ class OrderSampleDataSeeder extends Seeder
             addressId: $address?->id,
             deliverySlotId: $shipmentMethod === 'local_delivery' ? $this->nextDeliverySlotId($user->id, (int) $address?->id) : null,
         );
+
+        // Price through the same server-side path checkout uses. A postal demo order
+        // the 1405 engine cannot price (tariffs not seeded, origin ids not present in
+        // this database, …) is skipped rather than given an invented price.
+        try {
+            $quote = $this->shipment->quoteSelection($selection, ShipmentParcelDTO::fromLines(array_map(
+                fn (array $item): array => [
+                    'sku' => $item['sku'],
+                    'quantity' => $item['quantity'],
+                    'weight_grams' => $unitWeights[$item['sku']] ?? self::DEMO_UNIT_WEIGHT_GRAMS,
+                ],
+                $items,
+            )));
+        } catch (ValidationException $e) {
+            $this->command?->warn("Skipped demo {$shipmentMethod} order: ".collect($e->errors())->flatten()->first());
+
+            return;
+        }
 
         $snapshot = $selection->address ?? [
             'id' => $address?->id,
@@ -375,12 +405,12 @@ class OrderSampleDataSeeder extends Seeder
         $order = new Order([
             'user_id' => $user->id,
             'status' => 'pending',
-            'total_amount' => $total + $selection->shippingCost,
-            'shipping_cost' => $selection->shippingCost,
+            'total_amount' => $total + $quote->total,
+            'shipping_cost' => $quote->total,
             'tax_amount' => 0,
             'shipment_method_code' => $selection->methodCode,
             'shipping_address' => $snapshot,
-            'shipment_snapshot' => $selection->toSnapshot(),
+            'shipment_snapshot' => array_merge($selection->toSnapshot(), $quote->toSnapshot()),
             'customer_snapshot' => $customerSnapshot,
             'notes' => $note,
         ]);

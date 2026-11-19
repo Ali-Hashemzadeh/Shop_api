@@ -122,4 +122,16 @@ interface IdentityManagerInterface
      * @return array<int, UserSummaryDTO>
      */
     public function getUserSummaries(array $userIds): array;
+
+    /**
+     * Resolve province and city ids to their names (and each city's province), in
+     * one query per table. Unknown ids are simply absent. Lets another module verify
+     * that configured geographic ids really exist — e.g. Shipment's
+     * `shipping:post-1405:verify` — without querying Identity's tables.
+     *
+     * @param  list<int>  $provinceIds
+     * @param  list<int>  $cityIds
+     * @return array{provinces: array<int, string>, cities: array<int, array{name: string, province_id: int}>}
+     */
+    public function getLocationReferences(array $provinceIds, array $cityIds): array;
 }

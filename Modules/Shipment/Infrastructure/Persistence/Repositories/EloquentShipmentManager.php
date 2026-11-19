@@ -8,7 +8,6 @@ use Carbon\Carbon;
 use DateTimeInterface;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Modules\Identity\Domain\Contracts\IdentityManagerInterface;
 use Modules\Shipment\Application\Services\DeliverySlotAvailabilityService;
@@ -18,16 +17,23 @@ use Modules\Shipment\Domain\Contracts\ShipmentManagerInterface;
 use Modules\Shipment\Domain\Contracts\ShippingCostCalculatorInterface;
 use Modules\Shipment\Domain\DTOs\DeliverySlotReservationDTO;
 use Modules\Shipment\Domain\DTOs\ShipmentDTO;
+use Modules\Shipment\Domain\DTOs\ShipmentMethodDTO;
+use Modules\Shipment\Domain\DTOs\ShipmentParcelDTO;
 use Modules\Shipment\Domain\DTOs\ShipmentSelectionDTO;
+use Modules\Shipment\Domain\DTOs\ShippingCostBreakdownDTO;
 use Modules\Shipment\Domain\DTOs\ShippingCostRequestDTO;
+use Modules\Shipment\Domain\DTOs\ShippingQuoteDTO;
+use Modules\Shipment\Domain\Enums\PackageType;
 use Modules\Shipment\Domain\Enums\ReservationStatus;
 use Modules\Shipment\Domain\Enums\ShipmentMethodType;
 use Modules\Shipment\Domain\Enums\ShipmentStatus;
-use Modules\Shipment\Domain\Exceptions\ShippingTariffNotFoundException;
+use Modules\Shipment\Domain\Exceptions\PostalServiceUnavailableException;
 use Modules\Shipment\Domain\Models\DeliverySlot;
 use Modules\Shipment\Domain\Models\DeliverySlotReservation;
 use Modules\Shipment\Domain\Models\Shipment;
 use Modules\Shipment\Domain\Models\ShipmentStatusHistory;
+use Modules\Shipment\Domain\Postal\Post1405Catalog;
+use Modules\Shipment\Domain\Postal\PostalUnavailableReason;
 use Modules\Shipment\Domain\Services\ShipmentMethodRegistry;
 
 class EloquentShipmentManager implements ShipmentManagerInterface
@@ -41,9 +47,10 @@ class EloquentShipmentManager implements ShipmentManagerInterface
         private readonly ShippingCostCalculatorInterface $shippingCalculator,
     ) {}
 
-    public function getAvailableMethods(int $userId, ?int $addressId, int $totalWeightGrams = 0): array
+    public function getAvailableMethods(int $userId, ?int $addressId, ?ShipmentParcelDTO $parcel = null): array
     {
         $addressSnapshot = $addressId !== null ? $this->findOwnedAddress($userId, $addressId) : null;
+        $parcel ??= ShipmentParcelDTO::empty();
 
         $methods = [];
 
@@ -52,9 +59,16 @@ class EloquentShipmentManager implements ShipmentManagerInterface
                 continue;
             }
 
+            $type = (string) $method['type'];
+
+            if ($type === ShipmentMethodType::Postal->value) {
+                $methods[] = $this->postalMethod($code, $addressSnapshot, $parcel);
+
+                continue;
+            }
+
             $available = true;
             $reason = null;
-            $type = $this->registry->find($code)['type'];
 
             if ($type === ShipmentMethodType::LocalDelivery->value) {
                 $eligible = $addressSnapshot !== null
@@ -68,20 +82,36 @@ class EloquentShipmentManager implements ShipmentManagerInterface
                 }
             }
 
-            // Inside the service area the store delivers itself — post is withdrawn.
-            if ($type === ShipmentMethodType::Postal->value && $this->isInsideServiceArea($addressSnapshot)) {
-                $available = false;
-                $reason = 'Your address is inside the local delivery area — please choose local delivery or in-store pickup.';
-            }
-
-            $price = $type === ShipmentMethodType::Postal->value && $available && $addressSnapshot !== null
-                ? $this->postalPrice($type, $code, $this->registry->price($code), $addressSnapshot, $totalWeightGrams)
-                : null;
-
-            $methods[] = $this->registry->toDTO($code, $available, $reason, $price);
+            $methods[] = $this->registry->toDTO($code, $available, $reason);
         }
 
         return $methods;
+    }
+
+    /**
+     * One postal method for the list: priced by the same path checkout uses, or
+     * reported unavailable with a machine-readable code and a null price.
+     *
+     * @param  array<string, mixed>|null  $address
+     */
+    private function postalMethod(string $code, ?array $address, ShipmentParcelDTO $parcel): ShipmentMethodDTO
+    {
+        try {
+            $breakdown = $this->quotePostal($code, $address, $parcel);
+
+            return $this->registry->toDTO($code, true, null, $breakdown->total(), [
+                'weightGrams' => $breakdown->weightGrams,
+                'rateZone' => $breakdown->rateZone,
+                'priceBreakdown' => $breakdown->toArray(),
+            ]);
+        } catch (PostalServiceUnavailableException $e) {
+            return $this->registry->toDTO($code, false, $e->reason->message(), null, [
+                'unavailableCode' => $e->reason->value,
+                'weightGrams' => $parcel->skusMissingWeight() === [] && ! $parcel->isEmpty() ? $parcel->totalWeightGrams() : null,
+                'rateZone' => $e->rateZone,
+                'missingWeightSkus' => $e->skus,
+            ]);
+        }
     }
 
     public function getAvailableDeliverySlots(
@@ -184,7 +214,9 @@ class EloquentShipmentManager implements ShipmentManagerInterface
             methodCode: $methodCode,
             methodTitle: (string) $method['title'],
             methodType: $type,
-            shippingCost: (int) $method['price'],
+            // Postal methods have no static price: 0 here is a placeholder and the
+            // charged amount always comes from quoteSelection().
+            shippingCost: (int) ($method['price'] ?? 0),
             requiresAddress: $requiresAddress,
             requiresDeliverySlot: $requiresSlot,
             addressId: $requiresAddress ? $addressId : null,
@@ -262,7 +294,10 @@ class EloquentShipmentManager implements ShipmentManagerInterface
                     'method_code' => $shipmentSnapshot['method_code'],
                     'method_title' => $shipmentSnapshot['method_title'],
                     'method_type' => $shipmentSnapshot['method_type'],
+                    // Copied from the checkout snapshot, never recalculated: packaging
+                    // and postal tax were charged once, at checkout.
                     'shipping_cost' => (int) ($shipmentSnapshot['shipping_cost'] ?? 0),
+                    'price_breakdown' => $shipmentSnapshot['price_breakdown'] ?? null,
                     'status' => ShipmentStatus::Pending->value,
                     'address_snapshot' => $shipmentSnapshot['address'] ?? null,
                     'delivery_slot_snapshot' => $shipmentSnapshot['delivery_slot'] ?? null,
@@ -302,64 +337,82 @@ class EloquentShipmentManager implements ShipmentManagerInterface
         return $shipment ? $this->transitions->toDTO($shipment) : null;
     }
 
-    public function resolveShippingCostForSelection(ShipmentSelectionDTO $selection, int $totalWeightGrams): int
+    public function quoteSelection(ShipmentSelectionDTO $selection, ShipmentParcelDTO $parcel): ShippingQuoteDTO
     {
-        return $this->postalPrice(
-            $selection->methodType,
-            $selection->methodCode,
-            $selection->shippingCost,
-            $selection->address,
-            $totalWeightGrams,
-        );
-    }
-
-    /**
-     * Single pricing path shared by the methods list and checkout, so the price a
-     * customer sees is the price they are charged.
-     *
-     * @param  array<string, mixed>|null  $address
-     */
-    private function postalPrice(string $methodType, string $methodCode, int $staticPrice, ?array $address, int $totalWeightGrams): int
-    {
-        // Only postal methods are priced by the Post tariff engine. Local delivery and
-        // pickup keep their static configured price.
-        if ($methodType !== ShipmentMethodType::Postal->value) {
-            return $staticPrice;
-        }
-
-        $originProvinceId = (int) config('shipping.origin_province_id', 0) ?: null;
-        $destinationProvinceId = isset($address['province_id'])
-            ? (int) $address['province_id']
-            : null;
-
-        // Cannot price dynamically without an origin, a destination, and real weight —
-        // fall back to the static price rather than block or mis-price checkout.
-        if ($originProvinceId === null || $destinationProvinceId === null || $totalWeightGrams <= 0) {
-            return $staticPrice;
+        // Local delivery and pickup keep their static configured price — no
+        // packaging, no postal tax.
+        if ($selection->methodType !== ShipmentMethodType::Postal->value) {
+            return new ShippingQuoteDTO($selection->shippingCost);
         }
 
         try {
-            $breakdown = $this->shippingCalculator->calculate(new ShippingCostRequestDTO(
-                originProvinceId: $originProvinceId,
-                destinationProvinceId: $destinationProvinceId,
-                weightGrams: $totalWeightGrams,
-                serviceType: $methodCode,
-                packageType: (string) config('shipping.default_package_type', 'standard'),
-            ));
-
-            return $breakdown->total;
-        } catch (ShippingTariffNotFoundException $e) {
-            // No tariff configured for this parcel yet — safe static fallback + a log so
-            // the gap is visible without failing a customer's checkout.
-            Log::info('Post shipping tariff missing; falling back to static price.', [
-                'method_code' => $methodCode,
-                'destination_province_id' => $destinationProvinceId,
-                'weight_grams' => $totalWeightGrams,
-                'reason' => $e->getMessage(),
-            ]);
-
-            return $staticPrice;
+            $breakdown = $this->quotePostal($selection->methodCode, $selection->address, $parcel);
+        } catch (PostalServiceUnavailableException $e) {
+            throw $this->checkoutValidationError($e);
         }
+
+        return new ShippingQuoteDTO($breakdown->total(), $breakdown);
+    }
+
+    /**
+     * The single postal pricing path shared by the method list and checkout, so the
+     * price a customer sees is the price they are charged. Fail-closed: throws when
+     * anything required for a real quote is missing.
+     *
+     * @param  array<string, mixed>|null  $address
+     *
+     * @throws PostalServiceUnavailableException
+     */
+    private function quotePostal(string $methodCode, ?array $address, ShipmentParcelDTO $parcel): ShippingCostBreakdownDTO
+    {
+        // Retired legacy codes (post_standard/post_express) are never priced again.
+        if (Post1405Catalog::find($methodCode) === null) {
+            throw new PostalServiceUnavailableException(PostalUnavailableReason::UnknownService);
+        }
+
+        // Inside the service area the store delivers itself — post is withdrawn.
+        if ($this->isInsideServiceArea($address)) {
+            throw new PostalServiceUnavailableException(PostalUnavailableReason::InsideLocalDeliveryArea);
+        }
+
+        if ($parcel->isEmpty()) {
+            throw new PostalServiceUnavailableException(PostalUnavailableReason::CartEmpty);
+        }
+
+        // An unknown weight is never treated as zero.
+        $missing = $parcel->skusMissingWeight();
+        if ($missing !== []) {
+            throw new PostalServiceUnavailableException(PostalUnavailableReason::WeightMissing, skus: $missing);
+        }
+
+        return $this->shippingCalculator->calculate(new ShippingCostRequestDTO(
+            serviceCode: $methodCode,
+            weightGrams: $parcel->totalWeightGrams(),
+            originProvinceId: config('shipping.origin_province_id'),
+            originCityId: config('shipping.origin_city_id'),
+            destinationProvinceId: isset($address['province_id']) ? (int) $address['province_id'] : null,
+            destinationCityId: isset($address['city_id']) ? (int) $address['city_id'] : null,
+            fragile: config('shipping.default_package_type', PackageType::Standard->value) === PackageType::Fragile->value,
+            contentKind: (string) config('shipping.post_1405.content_kind', Post1405Catalog::CONTENT_GOODS),
+            cartonSize: config('shipping.post_1405.carton_size'),
+        ));
+    }
+
+    /** Map an unquotable postal selection onto the 422 field the client can fix. */
+    private function checkoutValidationError(PostalServiceUnavailableException $e): ValidationException
+    {
+        if ($e->reason === PostalUnavailableReason::WeightMissing) {
+            $messages = [];
+            foreach ($e->skus as $sku) {
+                $messages["items.{$sku}.weight_grams"] = ["Shipping weight is not set for item {$sku}, so postage cannot be calculated."];
+            }
+
+            return ValidationException::withMessages($messages);
+        }
+
+        $field = $e->reason === PostalUnavailableReason::DestinationIncomplete ? 'address_id' : 'shipment_method_code';
+
+        return ValidationException::withMessages([$field => [$e->reason->message()]]);
     }
 
     /**

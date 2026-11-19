@@ -6,6 +6,8 @@ use Modules\Identity\Domain\Contracts\IdentityManagerInterface;
 use Modules\Identity\Domain\DTOs\AddressSnapshotDTO;
 use Modules\Identity\Domain\DTOs\UserSummaryDTO;
 use Modules\Identity\Domain\Models\Address;
+use Modules\Identity\Domain\Models\City;
+use Modules\Identity\Domain\Models\Province;
 use Modules\Identity\Domain\Models\ProvinceNeighbor;
 use Modules\Identity\Domain\Models\User;
 
@@ -163,5 +165,22 @@ class EloquentIdentityManager implements IdentityManagerInterface
             ->get()
             ->mapWithKeys(fn (User $user): array => [(int) $user->id => UserSummaryDTO::fromModel($user)])
             ->all();
+    }
+
+    public function getLocationReferences(array $provinceIds, array $cityIds): array
+    {
+        $provinces = $provinceIds === [] ? [] : Province::query()
+            ->whereIn('id', array_values(array_unique($provinceIds)))
+            ->pluck('name', 'id')
+            ->map(fn ($name): string => (string) $name)
+            ->all();
+
+        $cities = $cityIds === [] ? [] : City::query()
+            ->whereIn('id', array_values(array_unique($cityIds)))
+            ->get(['id', 'name', 'province_id'])
+            ->mapWithKeys(fn (City $city): array => [(int) $city->id => ['name' => (string) $city->name, 'province_id' => (int) $city->province_id]])
+            ->all();
+
+        return ['provinces' => $provinces, 'cities' => $cities];
     }
 }

@@ -24,7 +24,8 @@ use Modules\ProductReviewAI\Infrastructure\Persistence\Seeders\ReviewSourceSeede
 use Modules\Promotion\Infrastructure\Persistence\Seeders\PromotionPermissionsSeeder;
 use Modules\Promotion\Infrastructure\Persistence\Seeders\PromotionSampleDataSeeder;
 use Modules\Review\Infrastructure\Persistence\Seeders\ReviewPermissionsSeeder;
-use Modules\Shipment\Infrastructure\Persistence\Seeders\PostTariffSeeder;
+use Modules\Shipment\Infrastructure\Persistence\Seeders\PostalService1405Seeder;
+use Modules\Shipment\Infrastructure\Persistence\Seeders\PostalTariff1405Seeder;
 use Modules\Shipment\Infrastructure\Persistence\Seeders\ShipmentPermissionsSeeder;
 use Modules\Shipment\Infrastructure\Persistence\Seeders\ShipmentSampleDataSeeder;
 use Modules\Shipment\Infrastructure\Persistence\Seeders\ShipmentScheduleSeeder;
@@ -49,10 +50,11 @@ class DatabaseSeeder extends Seeder
             OrderPermissionsSeeder::class,
             PaymentPermissionsSeeder::class,
             ShipmentPermissionsSeeder::class,
-            // Dynamic Post shipping engine data (idempotent, additive). Neighbours are
-            // seeded inside IdentityModuleSeeder; these two hold the tariffs + tunables.
+            // Iran Post 1405 shipping data (idempotent, additive, never overwrites). Neighbours are
+            // seeded inside IdentityModuleSeeder; these hold the tunables, services + tariffs.
             ShippingParameterSeeder::class,
-            PostTariffSeeder::class,
+            PostalService1405Seeder::class,
+            PostalTariff1405Seeder::class,
             NotificationPermissionsSeeder::class,
             PromotionPermissionsSeeder::class,
             AnalyticsPermissionsSeeder::class,

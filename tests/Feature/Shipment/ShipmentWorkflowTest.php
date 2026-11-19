@@ -16,7 +16,7 @@ class ShipmentWorkflowTest extends ShipmentTestCase
         $payload = ['shipment_method_code' => $methodCode];
 
         if ($methodCode !== 'in_person_pickup') {
-            $payload['address_id'] = $this->createAddress($user->id);
+            $payload['address_id'] = $this->checkoutAddress($user->id, $methodCode);
         }
         if ($methodCode === 'local_delivery') {
             $payload['delivery_slot_id'] = ($extra['slot'] ?? $this->createBookableSlot())->id;
@@ -42,7 +42,7 @@ class ShipmentWorkflowTest extends ShipmentTestCase
     /** @test */
     public function postal_workflow_reaches_handed_to_post_and_marks_order_shipped(): void
     {
-        $shipment = $this->paidShipment('post_standard');
+        $shipment = $this->paidShipment(self::POSTAL_METHOD);
         $code = $this->code($shipment);
 
         $this->postJson("/api/v1/admin/shipments/{$code}/start-preparing")
@@ -63,7 +63,7 @@ class ShipmentWorkflowTest extends ShipmentTestCase
     /** @test */
     public function hand_to_post_requires_a_tracking_number(): void
     {
-        $shipment = $this->paidShipment('post_express');
+        $shipment = $this->paidShipment(self::POSTAL_METHOD);
         $code = $this->code($shipment);
 
         $this->postJson("/api/v1/admin/shipments/{$code}/start-preparing")->assertOk();
@@ -77,7 +77,7 @@ class ShipmentWorkflowTest extends ShipmentTestCase
     /** @test */
     public function postal_shipment_cannot_use_local_delivery_transitions(): void
     {
-        $shipment = $this->paidShipment('post_standard');
+        $shipment = $this->paidShipment(self::POSTAL_METHOD);
         $code = $this->code($shipment);
 
         $this->postJson("/api/v1/admin/shipments/{$code}/start-preparing")->assertOk();
@@ -88,7 +88,7 @@ class ShipmentWorkflowTest extends ShipmentTestCase
     /** @test */
     public function invalid_transition_from_pending_straight_to_handoff_is_rejected(): void
     {
-        $shipment = $this->paidShipment('post_standard');
+        $shipment = $this->paidShipment(self::POSTAL_METHOD);
         $code = $this->code($shipment);
 
         $this->postJson("/api/v1/admin/shipments/{$code}/hand-to-post", ['tracking_number' => 'X'])

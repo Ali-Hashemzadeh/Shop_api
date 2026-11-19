@@ -10,27 +10,29 @@ use Illuminate\Support\Facades\Config;
 /**
  * The configured local-delivery service area (SHIPMENT_LOCAL_DELIVERY_*_IDS).
  *
- * Inside it the store delivers itself, so both postal methods are withdrawn —
- * hidden from the method list and rejected at checkout. Outside it, and whenever
- * no area is configured at all, nothing changes.
+ * Inside it the store delivers itself, so every postal method is withdrawn —
+ * reported unavailable in the method list and rejected at checkout. Outside it, and
+ * whenever no area is configured at all, nothing changes. Uses the production ids:
+ * the shop is in Qom (province 19, city 599).
  */
 class LocalDeliveryServiceAreaTest extends ShipmentTestCase
 {
-    /** @return array{0:int,1:int,2:int} user id, in-area address id, outside address id */
+    /** @return array{0:int,1:int,2:int} user id, in-area (Qom) address id, outside (Ahvaz) address id */
     private function setUpArea(): array
     {
-        [$provinceId, $cityId] = $this->createProvinceCity();
-        [$otherProvinceId, $otherCityId] = $this->createProvinceCity();
+        $this->seedPost1405();
 
         Config::set('shipment.local_delivery.province_ids', []);
-        Config::set('shipment.local_delivery.city_ids', [$cityId]);
+        Config::set('shipment.local_delivery.city_ids', [self::QOM]);
 
         $user = $this->actingAsCustomer();
+        $this->createVariantWithStock('AREA-CART', 10000, 50);
+        $this->addToCart($user->id, 'AREA-CART');
 
         return [
             $user->id,
-            $this->createAddress($user->id, $provinceId, $cityId),
-            $this->createAddress($user->id, $otherProvinceId, $otherCityId),
+            $this->postalAddress($user->id, self::QOM),
+            $this->postalAddress($user->id, self::AHVAZ),
         ];
     }
 
@@ -41,6 +43,11 @@ class LocalDeliveryServiceAreaTest extends ShipmentTestCase
         return collect($this->getJson($uri)->assertOk()->json('data'))->keyBy('code');
     }
 
+    private function postal(Collection $methods): Collection
+    {
+        return $methods->where('type', 'postal');
+    }
+
     // ── Method listing ─────────────────────────────────────────────────────────
 
     /** @test */
@@ -48,11 +55,15 @@ class LocalDeliveryServiceAreaTest extends ShipmentTestCase
     {
         [, $inside] = $this->setUpArea();
 
-        $methods = $this->methods($inside);
+        $postal = $this->postal($this->methods($inside));
 
-        $this->assertFalse($methods['post_standard']['available']);
-        $this->assertFalse($methods['post_express']['available']);
-        $this->assertNotNull($methods['post_standard']['unavailable_reason']);
+        $this->assertNotEmpty($postal);
+        foreach ($postal as $method) {
+            $this->assertFalse($method['available']);
+            $this->assertNull($method['price']);
+            $this->assertSame('inside_local_delivery_area', $method['unavailable_code']);
+            $this->assertNotNull($method['unavailable_reason']);
+        }
     }
 
     /** @test */
@@ -73,25 +84,24 @@ class LocalDeliveryServiceAreaTest extends ShipmentTestCase
 
         $methods = $this->methods($outside);
 
-        $this->assertTrue($methods['post_standard']['available']);
-        $this->assertTrue($methods['post_express']['available']);
+        $this->assertTrue($methods['post_intercity_d3_parcel']['available']);
         $this->assertFalse($methods['local_delivery']['available']);
     }
 
     /** @test */
     public function a_province_only_area_also_withdraws_postal(): void
     {
-        [$provinceId] = $this->createProvinceCity();
-        [, $otherCityId] = $this->createProvinceCity();
-
-        Config::set('shipment.local_delivery.province_ids', [$provinceId]);
+        $this->seedPost1405();
+        Config::set('shipment.local_delivery.province_ids', [self::QOM_PROVINCE]);
         Config::set('shipment.local_delivery.city_ids', []);
 
         $user = $this->actingAsCustomer();
+        $this->createVariantWithStock('AREA-PROV', 10000, 5);
+        $this->addToCart($user->id, 'AREA-PROV');
         // A city that is not listed, but sits inside the configured province.
-        $addressId = $this->createAddress($user->id, $provinceId, $otherCityId);
+        $addressId = $this->postalAddress($user->id, self::QOM_OTHER_CITY);
 
-        $this->assertFalse($this->methods($addressId)['post_standard']['available']);
+        $this->assertSame('inside_local_delivery_area', $this->methods($addressId)['post_registered_parcel']['unavailable_code']);
     }
 
     /**
@@ -103,17 +113,18 @@ class LocalDeliveryServiceAreaTest extends ShipmentTestCase
      */
     public function postal_is_untouched_when_no_service_area_is_configured(): void
     {
-        [$provinceId, $cityId] = $this->createProvinceCity();
+        $this->seedPost1405();
         Config::set('shipment.local_delivery.province_ids', []);
         Config::set('shipment.local_delivery.city_ids', []);
 
         $user = $this->actingAsCustomer();
-        $addressId = $this->createAddress($user->id, $provinceId, $cityId);
+        $this->createVariantWithStock('AREA-NONE', 10000, 5);
+        $this->addToCart($user->id, 'AREA-NONE');
+        $addressId = $this->postalAddress($user->id, self::AHVAZ);
 
         $methods = $this->methods($addressId);
 
-        $this->assertTrue($methods['post_standard']['available']);
-        $this->assertTrue($methods['post_express']['available']);
+        $this->assertTrue($methods['post_intercity_d3_parcel']['available']);
         $this->assertTrue($methods['local_delivery']['available']);
     }
 
@@ -132,11 +143,9 @@ class LocalDeliveryServiceAreaTest extends ShipmentTestCase
     /** @test */
     public function checkout_rejects_a_postal_method_for_an_address_inside_the_service_area(): void
     {
-        [$userId, $inside] = $this->setUpArea();
-        $this->createVariantWithStock('AREA-SKU-1');
-        $this->addToCart($userId, 'AREA-SKU-1');
+        [, $inside] = $this->setUpArea();
 
-        foreach (['post_standard', 'post_express'] as $code) {
+        foreach (['post_intercity_d3_parcel', 'post_registered_parcel'] as $code) {
             $this->postJson('/api/v1/orders', [
                 'shipment_method_code' => $code,
                 'address_id' => $inside,
@@ -149,12 +158,10 @@ class LocalDeliveryServiceAreaTest extends ShipmentTestCase
     /** @test */
     public function checkout_accepts_a_postal_method_outside_the_service_area(): void
     {
-        [$userId, , $outside] = $this->setUpArea();
-        $this->createVariantWithStock('AREA-SKU-2');
-        $this->addToCart($userId, 'AREA-SKU-2');
+        [, , $outside] = $this->setUpArea();
 
         $this->postJson('/api/v1/orders', [
-            'shipment_method_code' => 'post_standard',
+            'shipment_method_code' => 'post_intercity_d3_parcel',
             'address_id' => $outside,
         ])->assertCreated();
     }
@@ -162,9 +169,7 @@ class LocalDeliveryServiceAreaTest extends ShipmentTestCase
     /** @test */
     public function checkout_accepts_in_store_pickup_inside_the_service_area(): void
     {
-        [$userId] = $this->setUpArea();
-        $this->createVariantWithStock('AREA-SKU-3');
-        $this->addToCart($userId, 'AREA-SKU-3');
+        $this->setUpArea();
 
         $this->postJson('/api/v1/orders', [
             'shipment_method_code' => 'in_person_pickup',

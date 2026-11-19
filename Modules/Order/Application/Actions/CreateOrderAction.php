@@ -16,6 +16,7 @@ use Modules\Order\Domain\Exceptions\EmptyCartException;
 use Modules\Order\Domain\Models\Order;
 use Modules\Order\Domain\Models\OrderItem;
 use Modules\Shipment\Domain\Contracts\ShipmentManagerInterface;
+use Modules\Shipment\Domain\DTOs\ShipmentParcelDTO;
 use Modules\Shipment\Domain\DTOs\ShipmentSelectionDTO;
 
 class CreateOrderAction
@@ -70,22 +71,29 @@ class CreateOrderAction
         // cart displayed earlier. A discount that ended while the customer was on the
         // checkout page therefore does not carry into the order.
         $subtotal = 0;
-        // Total parcel weight (grams) drives dynamic Post pricing. A variant with no
-        // captured weight contributes 0, which makes the calculator fall back safely.
-        $totalWeightGrams = 0;
+        // The parcel's lines, with unit weights from the variants just re-read from
+        // Catalog. An unknown weight stays null — it is never counted as zero; postal
+        // pricing rejects it with a per-SKU 422.
+        $parcelLines = [];
         foreach ($enrichedCart->items as $cartItem) {
             $variant = $variantsBySku[$cartItem->sku];
             $subtotal += $variant->effectivePrice() * $cartItem->quantity;
-            $totalWeightGrams += (int) ($variant->weightGrams ?? 0) * $cartItem->quantity;
+            $parcelLines[] = [
+                'sku' => $cartItem->sku,
+                'quantity' => $cartItem->quantity,
+                'weight_grams' => $variant->weightGrams,
+            ];
         }
 
-        // Shipment owns shipping-cost calculation: postal methods are priced by the Post
-        // tariff engine from origin/destination/weight; others keep their static price.
-        $shippingCost = $this->shipment->resolveShippingCostForSelection($selection, $totalWeightGrams);
-        $snapshot = $selection->toSnapshot();
-        // Persist the resolved cost onto the snapshot so activateForPaidOrder() writes it
-        // to shipments.shipping_cost — the dynamic figure flows all the way through.
-        $snapshot['shipping_cost'] = $shippingCost;
+        // Shipment owns shipping-cost calculation and recalculates it here on the
+        // server (never trusting a client price). Postal methods are priced by the
+        // Iran Post 1405 engine and fail closed with a 422; others keep their static
+        // price. Validation runs before any Order write, reservation, or slot hold.
+        $quote = $this->shipment->quoteSelection($selection, ShipmentParcelDTO::fromLines($parcelLines));
+        $shippingCost = $quote->total;
+        // The resolved cost and its itemised breakdown are frozen on the snapshot, so
+        // activateForPaidOrder() copies them to the shipment without recalculating.
+        $snapshot = array_merge($selection->toSnapshot(), $quote->toSnapshot());
         $expiresAt = now()->addMinutes((int) config('shipment.pending_order_ttl_minutes', 15));
 
         $customer = $this->identity->getUserSummary($userId);
@@ -115,6 +123,9 @@ class CreateOrderAction
                 'user_id' => $userId,
                 'status' => 'pending',
                 'total_amount' => $subtotal + $shippingCost,
+                // shipping_cost already INCLUDES the 10 % postal tax and the packaging
+                // fee (itemised in shipment_snapshot.price_breakdown). tax_amount is
+                // product tax only — postal tax must never be added here as well.
                 'shipping_cost' => $shippingCost,
                 'tax_amount' => 0,
                 'shipment_method_code' => $selection->methodCode,

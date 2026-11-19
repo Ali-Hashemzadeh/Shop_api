@@ -28,6 +28,21 @@ class ShippingParameterRepository
     }
 
     /**
+     * A parameter value cast to int, or null when the row is absent or not a whole
+     * number — so a caller can fail closed instead of silently pricing with 0.
+     */
+    public function integerOrNull(string $carrier, string $key): ?int
+    {
+        $row = $this->row($carrier, $key);
+
+        if ($row === null || ! preg_match('/^\d+$/', trim((string) $row->value))) {
+            return null;
+        }
+
+        return (int) trim((string) $row->value);
+    }
+
+    /**
      * A parameter value as a raw string, or $default when absent.
      */
     public function string(string $carrier, string $key, string $default = ''): string

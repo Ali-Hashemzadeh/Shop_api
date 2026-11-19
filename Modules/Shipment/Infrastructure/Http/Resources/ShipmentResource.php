@@ -23,6 +23,8 @@ class ShipmentResource extends JsonResource
             'method_title' => $dto->methodTitle,
             'method_type' => $dto->methodType,
             'shipping_cost' => $dto->shippingCost,
+            // Itemised postage frozen at checkout (tomans); null for legacy and non-postal shipments.
+            'price_breakdown' => $dto->priceBreakdown,
             'status' => $dto->status->value,
             'status_label' => $dto->status->label(),
             'address' => $dto->addressSnapshot,

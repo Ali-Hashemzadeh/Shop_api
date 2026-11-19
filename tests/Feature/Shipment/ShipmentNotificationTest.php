@@ -50,7 +50,7 @@ class ShipmentNotificationTest extends ShipmentTestCase
 
         // Pickup is address-less by design; every other method needs one.
         if ($methodCode !== 'in_person_pickup') {
-            $payload['address_id'] = $this->createAddress($user->id);
+            $payload['address_id'] = $this->checkoutAddress($user->id, $methodCode);
         }
 
         if ($methodCode === 'local_delivery') {
@@ -90,7 +90,7 @@ class ShipmentNotificationTest extends ShipmentTestCase
     /** @test */
     public function starting_preparation_sends_an_sms_and_no_in_app_notification(): void
     {
-        $shipment = $this->paidShipment('post_standard');
+        $shipment = $this->paidShipment(self::POSTAL_METHOD);
 
         app(StartPreparingShipmentAction::class)->handle($shipment->id, $shipment->user_id);
 
@@ -174,7 +174,7 @@ class ShipmentNotificationTest extends ShipmentTestCase
     /** @test */
     public function handing_a_postal_shipment_to_post_notifies_with_the_tracking_code(): void
     {
-        $shipment = $this->paidShipment('post_standard');
+        $shipment = $this->paidShipment(self::POSTAL_METHOD);
 
         app(StartPreparingShipmentAction::class)->handle($shipment->id, $shipment->user_id);
         app(MarkPostalShipmentReadyAction::class)->handle($shipment->id, $shipment->user_id);
@@ -200,7 +200,7 @@ class ShipmentNotificationTest extends ShipmentTestCase
     /** @test */
     public function a_postal_handoff_never_uses_the_local_delivery_template(): void
     {
-        $shipment = $this->paidShipment('post_standard');
+        $shipment = $this->paidShipment(self::POSTAL_METHOD);
 
         app(StartPreparingShipmentAction::class)->handle($shipment->id, $shipment->user_id);
         app(MarkPostalShipmentReadyAction::class)->handle($shipment->id, $shipment->user_id);
@@ -313,7 +313,7 @@ class ShipmentNotificationTest extends ShipmentTestCase
     /** @test */
     public function a_missing_shipment_template_does_not_break_the_transition(): void
     {
-        $shipment = $this->paidShipment('post_standard');
+        $shipment = $this->paidShipment(self::POSTAL_METHOD);
 
         config()->set('sms.default', 'smsir');
         config()->set('sms.providers.smsir.api_key', 'test-key');

@@ -41,7 +41,7 @@ class DeliveryAssignmentTest extends ShipmentTestCase
 
         $payload = [
             'shipment_method_code' => $methodCode,
-            'address_id' => $this->createAddress($user->id),
+            'address_id' => $this->checkoutAddress($user->id, $methodCode),
         ];
 
         if ($methodCode === 'local_delivery') {
@@ -147,7 +147,7 @@ class DeliveryAssignmentTest extends ShipmentTestCase
     {
         $driver = $this->createDeliveryUser();
 
-        foreach (['post_standard', 'in_person_pickup'] as $method) {
+        foreach ([self::POSTAL_METHOD, 'in_person_pickup'] as $method) {
             $shipment = $this->paidShipment($method);
 
             $this->assign($shipment, $driver->id)

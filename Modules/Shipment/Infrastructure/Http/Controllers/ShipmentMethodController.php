@@ -11,6 +11,7 @@ use Illuminate\Routing\Controller;
 use Illuminate\Validation\Rule;
 use Modules\Cart\Domain\Contracts\CartManagerInterface;
 use Modules\Shipment\Domain\Contracts\ShipmentManagerInterface;
+use Modules\Shipment\Domain\DTOs\ShipmentParcelDTO;
 use Modules\Shipment\Infrastructure\Http\Resources\DeliverySlotResource;
 use Modules\Shipment\Infrastructure\Http\Resources\ShipmentMethodResource;
 
@@ -22,17 +23,35 @@ class ShipmentMethodController extends Controller
     ) {}
 
     /**
-     * List the fixed, config-backed fulfillment methods with capabilities
-     * calculated for the (optional) address.
+     * List enabled fulfillment methods for the (optional) address.
+     *
+     * Every enabled Iran Post 1405 method is priced for the caller's actual cart with
+     * the same engine checkout uses, and carries its own `price` + `price_breakdown`
+     * (integer tomans). A postal method that cannot be priced is returned with
+     * `available: false`, `price: null` and an `unavailable_code`. Without an
+     * `address_id` only methods that need no address are returned.
+     *
+     * @response array{data: ShipmentMethodResource[]}
      */
     public function index(Request $request): JsonResponse
     {
+        $request->validate([
+            'address_id' => ['sometimes', 'nullable', 'integer', 'min:1'],
+        ]);
+
         $addressId = $request->filled('address_id') ? (int) $request->query('address_id') : null;
 
         $userId = $request->user()->id;
-        $totalWeightGrams = $this->cart->findOrCreateCart($userId, null)->totalWeightGrams;
+        $cart = $this->cart->findOrCreateCart($userId, null);
 
-        $methods = $this->shipment->getAvailableMethods($userId, $addressId, $totalWeightGrams);
+        // Shipment receives primitives only — never Cart's DTOs.
+        $parcel = ShipmentParcelDTO::fromLines(array_map(static fn ($item): array => [
+            'sku' => $item->sku,
+            'quantity' => $item->quantity,
+            'weight_grams' => $item->weightGrams,
+        ], $cart->items));
+
+        $methods = $this->shipment->getAvailableMethods($userId, $addressId, $parcel);
 
         return response()->json([
             'data' => ShipmentMethodResource::collection($methods)->resolve(),

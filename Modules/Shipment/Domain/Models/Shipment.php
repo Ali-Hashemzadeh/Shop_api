@@ -23,6 +23,7 @@ class Shipment extends Model
         'method_title',
         'method_type',
         'shipping_cost',
+        'price_breakdown',
         'status',
         'address_snapshot',
         'delivery_slot_snapshot',
@@ -57,6 +58,7 @@ class Shipment extends Model
 
     protected $casts = [
         'shipping_cost' => 'integer',
+        'price_breakdown' => 'array',
         'address_snapshot' => 'array',
         'delivery_slot_snapshot' => 'array',
         'pickup_location_snapshot' => 'array',

@@ -10,10 +10,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Modules\Cart\Domain\Models\Cart;
 use Modules\Cart\Domain\Models\CartItem;
-use Modules\Catalog\Domain\Models\Product;
-use Modules\Catalog\Domain\Models\ProductVariant;
 use Modules\Identity\Domain\Models\User;
-use Modules\Inventory\Domain\Models\InventoryStock;
 use Modules\Order\Domain\Contracts\OrderManagerInterface;
 use Modules\Shipment\Application\Actions\AssignShipmentDeliveryAction;
 use Modules\Shipment\Application\Actions\MarkLocalShipmentReadyAction;
@@ -26,6 +23,7 @@ use Tests\TestCase;
 
 abstract class ShipmentTestCase extends TestCase
 {
+    use Post1405Fixtures;
     use RefreshDatabase;
 
     protected function setUp(): void
@@ -58,24 +56,24 @@ abstract class ShipmentTestCase extends TestCase
         ]);
     }
 
-    protected function createVariantWithStock(string $sku, int $basePrice = 50000, int $qty = 10): void
+    /**
+     * A variant with stock. It carries a real shipping weight (500 g by default) so a
+     * postal checkout can be priced; local delivery and pickup ignore it.
+     */
+    protected function createVariantWithStock(string $sku, int $basePrice = 50000, int $qty = 10, ?int $weightGrams = 500): void
     {
-        $product = Product::create([
-            'title' => "Product {$sku}",
-            'slug' => strtolower($sku),
-            'status' => 'published',
-        ]);
+        $this->createWeightedVariant($sku, $weightGrams, $basePrice, $qty);
+    }
 
-        ProductVariant::create([
-            'product_id' => $product->id,
-            'sku' => $sku,
-            'type' => 'color',
-            'base_price' => $basePrice,
-            'is_default' => true,
-            'attributes' => [],
-        ]);
-
-        InventoryStock::create(['sku' => $sku, 'quantity' => $qty, 'reserved_quantity' => 0]);
+    /**
+     * An address a postal checkout can use: a real production city outside any
+     * local-delivery area (Ahvaz by default), with the 1405 catalog seeded.
+     */
+    protected function checkoutAddress(int $userId, string $methodCode): int
+    {
+        return $this->isPostalMethod($methodCode)
+            ? $this->postalAddress($userId)
+            : $this->createAddress($userId);
     }
 
     protected function addToCart(int $userId, string $sku, int $qty = 1): Cart

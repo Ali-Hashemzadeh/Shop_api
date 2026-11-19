@@ -44,6 +44,8 @@ class ShipmentDTO
         public readonly Carbon $createdAt,
         /** @var ShipmentStatusHistoryDTO[] */
         public readonly array $history = [],
+        /** Itemised postage (tomans) frozen at checkout; null for legacy/non-postal shipments. */
+        public readonly ?array $priceBreakdown = null,
     ) {}
 
     /** @param ShipmentStatusHistoryDTO[] $history */
@@ -77,6 +79,7 @@ class ShipmentDTO
             pickedUpAt: $shipment->picked_up_at,
             createdAt: Carbon::parse($shipment->created_at),
             history: $history,
+            priceBreakdown: $shipment->price_breakdown,
         );
     }
 }

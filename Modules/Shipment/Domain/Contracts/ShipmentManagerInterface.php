@@ -5,11 +5,14 @@ declare(strict_types=1);
 namespace Modules\Shipment\Domain\Contracts;
 
 use DateTimeInterface;
+use Illuminate\Validation\ValidationException;
 use Modules\Shipment\Domain\DTOs\DeliverySlotDTO;
 use Modules\Shipment\Domain\DTOs\DeliverySlotReservationDTO;
 use Modules\Shipment\Domain\DTOs\ShipmentDTO;
 use Modules\Shipment\Domain\DTOs\ShipmentMethodDTO;
+use Modules\Shipment\Domain\DTOs\ShipmentParcelDTO;
 use Modules\Shipment\Domain\DTOs\ShipmentSelectionDTO;
+use Modules\Shipment\Domain\DTOs\ShippingQuoteDTO;
 
 /**
  * The public boundary of the Shipment module. Every other module (notably Order)
@@ -18,13 +21,15 @@ use Modules\Shipment\Domain\DTOs\ShipmentSelectionDTO;
 interface ShipmentManagerInterface
 {
     /**
-     * Config-backed fulfillment methods with capabilities calculated for the
-     * given user/address (e.g. local delivery marked unavailable when ineligible).
-     * Postal prices are calculated from the cart weight, the same way checkout does.
+     * Enabled fulfillment methods with capabilities calculated for the given
+     * user/address/parcel. Every enabled Iran Post 1405 method is priced through the
+     * exact path checkout uses (quoteSelection) and carries its own itemised price;
+     * a postal method that cannot be priced is returned with available=false,
+     * price=null and a machine-readable unavailable code — never a fallback price.
      *
      * @return ShipmentMethodDTO[]
      */
-    public function getAvailableMethods(int $userId, ?int $addressId, int $totalWeightGrams = 0): array;
+    public function getAvailableMethods(int $userId, ?int $addressId, ?ShipmentParcelDTO $parcel = null): array;
 
     /**
      * Bookable local-delivery sessions grouped by date for the selectable window.
@@ -70,15 +75,19 @@ interface ShipmentManagerInterface
     public function findForOrder(int $orderId): ?ShipmentDTO;
 
     /**
-     * Resolve the effective shipping cost (TOMANS) for a validated selection given the
-     * parcel's total weight. Postal methods are priced dynamically through the Post
-     * tariff engine; every other method returns its static configured price. Any
-     * inability to price dynamically (no origin configured, no destination province,
-     * zero weight, or no matching tariff) falls back to the selection's static cost, so
-     * checkout is never blocked by incomplete tariff data.
+     * The authoritative, server-side shipping price (TOMANS) for a validated selection
+     * and the parcel actually being bought.
      *
-     * This keeps the Shipment module the sole owner of shipping-cost calculation —
-     * Order/Cart supply only the weight and never compute a shipping price themselves.
+     * Postal methods are priced by the Iran Post 1405 engine (base + surcharges +
+     * ancillary fees + 10 % postal tax + flat packaging) and FAIL CLOSED: a disabled
+     * method, an unsupported route, a missing tariff, or any item without a positive
+     * shipping weight throws a ValidationException (422) — there is no static-price
+     * fallback. Local delivery and pickup return their static configured price.
+     *
+     * Order/Cart supply only primitives (SKU, quantity, unit weight) and never compute
+     * a shipping price themselves. A client-submitted price is never consulted.
+     *
+     * @throws ValidationException
      */
-    public function resolveShippingCostForSelection(ShipmentSelectionDTO $selection, int $totalWeightGrams): int;
+    public function quoteSelection(ShipmentSelectionDTO $selection, ShipmentParcelDTO $parcel): ShippingQuoteDTO;
 }
