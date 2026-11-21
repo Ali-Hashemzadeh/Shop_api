@@ -17,6 +17,23 @@ $positiveIntOrNull = static fn (string $key, ?int $default = null): ?int => ($va
 
 $flag = static fn (string $key, bool $default): bool => filter_var(env($key, $default), FILTER_VALIDATE_BOOL);
 
+/**
+ * A strictly positive whole-number amount, or null. Unlike a bare (int) cast it never
+ * truncates a malformed value ("13,000" or "130000.5" → null, not 13 / 130000), so a
+ * typo disables the feature that needs the amount instead of charging a wrong price.
+ */
+$strictPositiveInt = static function (string $key, int $default): ?int {
+    $value = env($key, $default);
+
+    if (is_int($value)) {
+        return $value > 0 ? $value : null;
+    }
+
+    $value = trim((string) $value);
+
+    return ctype_digit($value) && (int) $value > 0 ? (int) $value : null;
+};
+
 return [
     /*
     |--------------------------------------------------------------------------
@@ -48,6 +65,29 @@ return [
     // `standard` or `fragile`. There is no per-product fragile flag, so this is the
     // store-wide classification; `fragile` adds fragile_percentage (PDF p.4 T5 r1).
     'default_package_type' => env('SHIPPING_DEFAULT_PACKAGE_TYPE', 'standard'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Normal Post (پست عادی) — fixed-price fallback for carts with a missing weight
+    |--------------------------------------------------------------------------
+    | The 1405 engine cannot price a parcel when any item has no positive shipping
+    | weight (and it never guesses one). Instead of blocking checkout, such a cart is
+    | offered exactly one postal option — the `post_standard` method — at this flat
+    | price, and every weight-based 1405 method is withdrawn for it. A cart whose
+    | weights are all valid never sees `post_standard`, and checkout rejects it.
+    |
+    | `price_toman` is integer TOMANS (the unit of orders.shipping_cost) and is the
+    | FINAL customer charge: no tariff, no geographic surcharge, no 10 % postal tax
+    | and no packaging fee is added on top. 130000 = 130,000 tomans. It is a
+    | shop-defined price, not Iran Post's published normal-post tariff.
+    |
+    | A blank, zero, negative or malformed price disables the fallback (fail-closed);
+    | it then behaves as before — a per-item weight 422 at checkout.
+    */
+    'missing_weight_fallback' => [
+        'enabled' => $flag('SHIPPING_MISSING_WEIGHT_FALLBACK_ENABLED', true),
+        'price_toman' => $strictPositiveInt('SHIPMENT_POST_STANDARD_PRICE', 130000),
+    ],
 
     'post_1405' => [
         'tariff_year' => 1405,

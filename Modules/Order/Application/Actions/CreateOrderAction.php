@@ -72,8 +72,10 @@ class CreateOrderAction
         // checkout page therefore does not carry into the order.
         $subtotal = 0;
         // The parcel's lines, with unit weights from the variants just re-read from
-        // Catalog. An unknown weight stays null — it is never counted as zero; postal
-        // pricing rejects it with a per-SKU 422.
+        // Catalog. An unknown weight stays null — it is never counted as zero. Shipment
+        // decides from these fresh weights whether the cart must use the fixed-price
+        // Normal Post fallback (post_standard) or the 1405 methods, so a weight edited
+        // after the method list was fetched is caught here.
         $parcelLines = [];
         foreach ($enrichedCart->items as $cartItem) {
             $variant = $variantsBySku[$cartItem->sku];
@@ -87,8 +89,9 @@ class CreateOrderAction
 
         // Shipment owns shipping-cost calculation and recalculates it here on the
         // server (never trusting a client price). Postal methods are priced by the
-        // Iran Post 1405 engine and fail closed with a 422; others keep their static
-        // price. Validation runs before any Order write, reservation, or slot hold.
+        // Iran Post 1405 engine (or the flat Normal Post fallback) and fail closed with
+        // a 422; others keep their static price. Validation runs before any Order
+        // write, reservation, or slot hold.
         $quote = $this->shipment->quoteSelection($selection, ShipmentParcelDTO::fromLines($parcelLines));
         $shippingCost = $quote->total;
         // The resolved cost and its itemised breakdown are frozen on the snapshot, so
@@ -124,8 +127,9 @@ class CreateOrderAction
                 'status' => 'pending',
                 'total_amount' => $subtotal + $shippingCost,
                 // shipping_cost already INCLUDES the 10 % postal tax and the packaging
-                // fee (itemised in shipment_snapshot.price_breakdown). tax_amount is
-                // product tax only — postal tax must never be added here as well.
+                // fee (itemised in shipment_snapshot.price_breakdown) — or is the flat
+                // Normal Post fallback price, which is final. tax_amount is product
+                // tax only — postal tax must never be added here as well.
                 'shipping_cost' => $shippingCost,
                 'tax_amount' => 0,
                 'shipment_method_code' => $selection->methodCode,

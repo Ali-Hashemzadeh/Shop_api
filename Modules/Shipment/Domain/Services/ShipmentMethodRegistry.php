@@ -6,6 +6,7 @@ namespace Modules\Shipment\Domain\Services;
 
 use Modules\Shipment\Domain\DTOs\ShipmentMethodDTO;
 use Modules\Shipment\Domain\Enums\ShipmentMethodType;
+use Modules\Shipment\Domain\Enums\ShippingPricingMode;
 use Modules\Shipment\Domain\Postal\Post1405Catalog;
 use Modules\Shipment\Domain\Postal\PostalServiceDefinition;
 
@@ -22,6 +23,10 @@ use Modules\Shipment\Domain\Postal\PostalServiceDefinition;
  * `all()` / `find()` return only SELECTABLE methods (enabled, not retired).
  * `describe()` returns any known definition — enabled or not — so historical orders
  * carrying a retired or since-disabled code stay readable.
+ *
+ * `post_standard` stays retired here. Its conditional use as the Normal Post
+ * missing-weight fallback is decided by MissingWeightFallbackPolicy in the Shipment
+ * manager, never by making it generally selectable.
  */
 class ShipmentMethodRegistry
 {
@@ -127,6 +132,13 @@ class ShipmentMethodRegistry
             'tariffYear' => $method['tariff_year'] ?? null,
             'scope' => $method['scope'] ?? null,
             'packageKind' => $method['package_kind'] ?? null,
+            // A non-1405 postal code (the Normal Post fallback) has no default mode:
+            // its caller states it explicitly via $extra.
+            'pricingMode' => match (true) {
+                $isPostal1405 => ShippingPricingMode::Post1405Tariff->value,
+                ($method['type'] ?? null) === ShipmentMethodType::Postal->value => null,
+                default => ShippingPricingMode::StaticPrice->value,
+            },
         ], $extra));
     }
 

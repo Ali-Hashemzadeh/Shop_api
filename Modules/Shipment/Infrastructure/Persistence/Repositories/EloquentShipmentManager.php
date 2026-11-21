@@ -27,6 +27,7 @@ use Modules\Shipment\Domain\Enums\PackageType;
 use Modules\Shipment\Domain\Enums\ReservationStatus;
 use Modules\Shipment\Domain\Enums\ShipmentMethodType;
 use Modules\Shipment\Domain\Enums\ShipmentStatus;
+use Modules\Shipment\Domain\Enums\ShippingPricingMode;
 use Modules\Shipment\Domain\Exceptions\PostalServiceUnavailableException;
 use Modules\Shipment\Domain\Models\DeliverySlot;
 use Modules\Shipment\Domain\Models\DeliverySlotReservation;
@@ -34,10 +35,13 @@ use Modules\Shipment\Domain\Models\Shipment;
 use Modules\Shipment\Domain\Models\ShipmentStatusHistory;
 use Modules\Shipment\Domain\Postal\Post1405Catalog;
 use Modules\Shipment\Domain\Postal\PostalUnavailableReason;
+use Modules\Shipment\Domain\Services\MissingWeightFallbackPolicy;
 use Modules\Shipment\Domain\Services\ShipmentMethodRegistry;
 
 class EloquentShipmentManager implements ShipmentManagerInterface
 {
+    private const WEIGHT_MISSING_FALLBACK_MESSAGE = 'An item in your cart has no shipping weight, so weight-based postal services are not available. Please refresh your shipping options and choose Normal Post (پست عادی).';
+
     public function __construct(
         private readonly ShipmentMethodRegistry $registry,
         private readonly LocalDeliveryEligibilityInterface $eligibility,
@@ -45,14 +49,22 @@ class EloquentShipmentManager implements ShipmentManagerInterface
         private readonly ShipmentTransitionService $transitions,
         private readonly IdentityManagerInterface $identity,
         private readonly ShippingCostCalculatorInterface $shippingCalculator,
+        private readonly MissingWeightFallbackPolicy $fallback,
     ) {}
 
     public function getAvailableMethods(int $userId, ?int $addressId, ?ShipmentParcelDTO $parcel = null): array
     {
         $addressSnapshot = $addressId !== null ? $this->findOwnedAddress($userId, $addressId) : null;
         $parcel ??= ShipmentParcelDTO::empty();
+        $fallbackApplies = $this->fallback->appliesTo($parcel);
 
         $methods = [];
+
+        // A cart with a missing item weight is offered Normal Post — the only postal
+        // option it can buy. It needs an address, like every postal method.
+        if ($fallbackApplies && $addressSnapshot !== null) {
+            $methods[] = $this->fallbackMethod($addressSnapshot, $parcel);
+        }
 
         foreach ($this->registry->all() as $code => $method) {
             if ($addressSnapshot === null && (bool) ($method['requires_address'] ?? false)) {
@@ -62,7 +74,7 @@ class EloquentShipmentManager implements ShipmentManagerInterface
             $type = (string) $method['type'];
 
             if ($type === ShipmentMethodType::Postal->value) {
-                $methods[] = $this->postalMethod($code, $addressSnapshot, $parcel);
+                $methods[] = $this->postalMethod($code, $addressSnapshot, $parcel, $fallbackApplies);
 
                 continue;
             }
@@ -92,9 +104,13 @@ class EloquentShipmentManager implements ShipmentManagerInterface
      * One postal method for the list: priced by the same path checkout uses, or
      * reported unavailable with a machine-readable code and a null price.
      *
+     * With a missing item weight the method stays `weight_missing` (never priced from
+     * the remaining known weights); when the Normal Post fallback is offered instead,
+     * the reason says so.
+     *
      * @param  array<string, mixed>|null  $address
      */
-    private function postalMethod(string $code, ?array $address, ShipmentParcelDTO $parcel): ShipmentMethodDTO
+    private function postalMethod(string $code, ?array $address, ShipmentParcelDTO $parcel, bool $fallbackApplies): ShipmentMethodDTO
     {
         try {
             $breakdown = $this->quotePostal($code, $address, $parcel);
@@ -105,11 +121,41 @@ class EloquentShipmentManager implements ShipmentManagerInterface
                 'priceBreakdown' => $breakdown->toArray(),
             ]);
         } catch (PostalServiceUnavailableException $e) {
-            return $this->registry->toDTO($code, false, $e->reason->message(), null, [
+            $reason = $e->reason === PostalUnavailableReason::WeightMissing && $fallbackApplies
+                ? self::WEIGHT_MISSING_FALLBACK_MESSAGE
+                : $e->reason->message();
+
+            return $this->registry->toDTO($code, false, $reason, null, [
                 'unavailableCode' => $e->reason->value,
                 'weightGrams' => $parcel->skusMissingWeight() === [] && ! $parcel->isEmpty() ? $parcel->totalWeightGrams() : null,
                 'rateZone' => $e->rateZone,
                 'missingWeightSkus' => $e->skus,
+            ]);
+        }
+    }
+
+    /**
+     * The Normal Post fallback entry for the list: priced by the same path checkout
+     * uses (quoteFallback), or reported unavailable with a reason code.
+     *
+     * @param  array<string, mixed>  $address
+     */
+    private function fallbackMethod(array $address, ShipmentParcelDTO $parcel): ShipmentMethodDTO
+    {
+        $code = MissingWeightFallbackPolicy::METHOD_CODE;
+        $mode = ShippingPricingMode::FixedMissingWeightFallback->value;
+
+        try {
+            $price = $this->quoteFallback($address, $parcel);
+
+            return $this->registry->toDTO($code, true, null, $price, [
+                'pricingMode' => $mode,
+                'priceBreakdown' => ShippingQuoteDTO::fixedBreakdown($price),
+            ]);
+        } catch (PostalServiceUnavailableException $e) {
+            return $this->registry->toDTO($code, false, $e->reason->message(), null, [
+                'pricingMode' => $mode,
+                'unavailableCode' => $e->reason->value,
             ]);
         }
     }
@@ -135,7 +181,14 @@ class EloquentShipmentManager implements ShipmentManagerInterface
 
     public function validateSelection(int $userId, string $methodCode, ?int $addressId, ?int $deliverySlotId): ShipmentSelectionDTO
     {
-        $method = $this->registry->find($methodCode);
+        // The retired post_standard code is let through ONLY as the enabled Normal
+        // Post fallback. This method has no cart, so it cannot tell whether the
+        // fallback applies — quoteSelection() makes that authoritative check against
+        // the re-read parcel before anything is written. post_express never passes.
+        $method = $this->registry->find($methodCode)
+            ?? ($this->fallback->isFallbackMethod($methodCode) && $this->fallback->isEnabled()
+                ? $this->registry->describe($methodCode)
+                : null);
 
         if ($method === null) {
             throw ValidationException::withMessages([
@@ -295,7 +348,8 @@ class EloquentShipmentManager implements ShipmentManagerInterface
                     'method_title' => $shipmentSnapshot['method_title'],
                     'method_type' => $shipmentSnapshot['method_type'],
                     // Copied from the checkout snapshot, never recalculated: packaging
-                    // and postal tax were charged once, at checkout.
+                    // and postal tax (or the flat Normal Post fallback price) were
+                    // charged once, at checkout.
                     'shipping_cost' => (int) ($shipmentSnapshot['shipping_cost'] ?? 0),
                     'price_breakdown' => $shipmentSnapshot['price_breakdown'] ?? null,
                     'status' => ShipmentStatus::Pending->value,
@@ -345,6 +399,18 @@ class EloquentShipmentManager implements ShipmentManagerInterface
             return new ShippingQuoteDTO($selection->shippingCost);
         }
 
+        // Normal Post fallback: the flat configured price is the final charge, and
+        // only for a parcel that really has a missing weight.
+        if ($this->fallback->isFallbackMethod($selection->methodCode)) {
+            try {
+                $price = $this->quoteFallback($selection->address, $parcel);
+            } catch (PostalServiceUnavailableException $e) {
+                throw $this->checkoutValidationError($e);
+            }
+
+            return ShippingQuoteDTO::fixedMissingWeightFallback($price);
+        }
+
         try {
             $breakdown = $this->quotePostal($selection->methodCode, $selection->address, $parcel);
         } catch (PostalServiceUnavailableException $e) {
@@ -352,6 +418,45 @@ class EloquentShipmentManager implements ShipmentManagerInterface
         }
 
         return new ShippingQuoteDTO($breakdown->total(), $breakdown);
+    }
+
+    /**
+     * The single Normal Post fallback pricing path shared by the method list and
+     * checkout. Applies the same address rules as the 1405 methods (no post inside
+     * the local-delivery area, a destination province + city is required) and then
+     * returns the configured flat price — no tariff, no surcharge, no postal tax, no
+     * packaging, and never the weight of only the items that do have one.
+     *
+     * @param  array<string, mixed>|null  $address
+     *
+     * @throws PostalServiceUnavailableException
+     */
+    private function quoteFallback(?array $address, ShipmentParcelDTO $parcel): int
+    {
+        $price = $this->fallback->price();
+
+        if (! $this->fallback->isEnabled() || $price === null) {
+            throw new PostalServiceUnavailableException(PostalUnavailableReason::ServiceDisabled);
+        }
+
+        if ($this->isInsideServiceArea($address)) {
+            throw new PostalServiceUnavailableException(PostalUnavailableReason::InsideLocalDeliveryArea);
+        }
+
+        if (empty($address['province_id']) || empty($address['city_id'])) {
+            throw new PostalServiceUnavailableException(PostalUnavailableReason::DestinationIncomplete);
+        }
+
+        if ($parcel->isEmpty()) {
+            throw new PostalServiceUnavailableException(PostalUnavailableReason::CartEmpty);
+        }
+
+        // Every weight is valid → the 1405 methods apply, never the fallback.
+        if ($parcel->skusMissingWeight() === []) {
+            throw new PostalServiceUnavailableException(PostalUnavailableReason::FallbackNotApplicable);
+        }
+
+        return $price;
     }
 
     /**
@@ -401,6 +506,14 @@ class EloquentShipmentManager implements ShipmentManagerInterface
     /** Map an unquotable postal selection onto the 422 field the client can fix. */
     private function checkoutValidationError(PostalServiceUnavailableException $e): ValidationException
     {
+        // A weight-based method for a cart that now has to use Normal Post (the
+        // weight may have been removed after the list was fetched).
+        if ($e->reason === PostalUnavailableReason::WeightMissing && $this->fallback->isEnabled()) {
+            return ValidationException::withMessages([
+                'shipment_method_code' => [self::WEIGHT_MISSING_FALLBACK_MESSAGE],
+            ]);
+        }
+
         if ($e->reason === PostalUnavailableReason::WeightMissing) {
             $messages = [];
             foreach ($e->skus as $sku) {

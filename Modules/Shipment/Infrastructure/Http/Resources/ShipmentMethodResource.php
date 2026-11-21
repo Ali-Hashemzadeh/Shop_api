@@ -15,6 +15,9 @@ use Modules\Shipment\Domain\DTOs\ShipmentMethodDTO;
  * tariff_year / scope / package_kind / weight_grams / rate_zone / price_breakdown;
  * those keys are always present (null for local delivery and pickup) so the shape is
  * stable. `price` is null when a postal method cannot be priced — never 0.
+ * `pricing_mode` says how the price was produced; the Normal Post fallback
+ * (`post_standard`, fixed_missing_weight_fallback) has tariff_year / weight_grams /
+ * rate_zone = null and a price_breakdown of {fixed_shipping_price, total}.
  *
  * @mixin ShipmentMethodDTO
  */
@@ -41,6 +44,9 @@ class ShipmentMethodResource extends JsonResource
             /** @var string|null Machine-readable reason, e.g. route_not_supported, weight_missing. */
             'unavailable_code' => $dto->unavailableCode,
             'currency' => 'TOMAN',
+            /** @var string|null post_1405_tariff | fixed_missing_weight_fallback (Normal Post, flat final price) | static */
+            'pricing_mode' => $dto->pricingMode,
+            /** @var int|null 1405 for tariff-priced methods; null for the fixed fallback and non-postal methods. */
             'tariff_year' => $dto->tariffYear,
             /** @var string|null non_priority | specialized | urban | intercity */
             'scope' => $dto->scope,
@@ -49,7 +55,7 @@ class ShipmentMethodResource extends JsonResource
             'weight_grams' => $dto->weightGrams,
             /** @var string|null same_province | neighbor | non_neighbor | metropolis | province_center | other_city */
             'rate_zone' => $dto->rateZone,
-            /** @var array{base_price: int, extra_weight: int, delivery_surcharge: int, large_province_surcharge: int, island_surcharge: int, fragile_surcharge: int, electronic_service_charge: int, compensation: int, postal_tax: int, packaging: int, total: int}|null */
+            /** @var array{base_price: int, extra_weight: int, delivery_surcharge: int, large_province_surcharge: int, island_surcharge: int, fragile_surcharge: int, electronic_service_charge: int, compensation: int, postal_tax: int, packaging: int, total: int}|array{fixed_shipping_price: int, total: int}|null The second shape is the Normal Post fallback. */
             'price_breakdown' => $dto->priceBreakdown,
         ];
 

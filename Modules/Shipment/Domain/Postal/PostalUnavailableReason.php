@@ -28,9 +28,13 @@ enum PostalUnavailableReason: string
     case TariffMissing = 'tariff_missing';
     case PricingParameterMissing = 'pricing_parameter_missing';
 
+    /** Normal Post fallback requested, but every item in the cart has a valid weight. */
+    case FallbackNotApplicable = 'fallback_not_applicable';
+
     public function message(): string
     {
         return match ($this) {
+            self::FallbackNotApplicable => 'Normal Post is only offered when an item in your cart has no shipping weight. Please refresh your shipping options and choose another method.',
             self::ServiceDisabled => 'This postal service is not offered.',
             self::UnknownService => 'Unknown postal service.',
             self::ContentNotEligible => 'This postal service does not accept the kind of items in your cart.',

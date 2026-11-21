@@ -31,6 +31,12 @@ class ShipmentMethodController extends Controller
      * `available: false`, `price: null` and an `unavailable_code`. Without an
      * `address_id` only methods that need no address are returned.
      *
+     * When any cart item has a missing / zero / negative shipping weight, the 1405
+     * methods are all `available: false` (`weight_missing`) and Normal Post
+     * (`post_standard`, `pricing_mode: fixed_missing_weight_fallback`) is offered at
+     * the configured flat price instead — the final shipping charge. Local delivery
+     * and pickup are unaffected.
+     *
      * @response array{data: ShipmentMethodResource[]}
      */
     public function index(Request $request): JsonResponse

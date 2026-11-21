@@ -10,6 +10,10 @@ namespace Modules\Shipment\Domain\DTOs;
  * `price` is nullable: a postal method that cannot be priced (unavailable route,
  * missing weight, missing tariff) reports `price = null` — never 0 and never a static
  * fallback. Non-postal methods always carry their configured integer price.
+ *
+ * The one fixed-price postal option is the Normal Post fallback (`post_standard`,
+ * pricingMode = fixed_missing_weight_fallback), offered only to a cart with a
+ * missing item weight; it has no tariff year, weight or rate zone.
  */
 class ShipmentMethodDTO
 {
@@ -36,5 +40,7 @@ class ShipmentMethodDTO
         public readonly ?array $priceBreakdown = null,
         /** @var list<string> SKUs without a shipping weight (WeightMissing only) */
         public readonly array $missingWeightSkus = [],
+        /** ShippingPricingMode value: post_1405_tariff | fixed_missing_weight_fallback | static */
+        public readonly ?string $pricingMode = null,
     ) {}
 }

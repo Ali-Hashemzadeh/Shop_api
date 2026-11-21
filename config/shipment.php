@@ -27,17 +27,26 @@ return [
     | Post1405Catalog + the toggles in config/shipping.php → post_1405.services,
     | and are priced only by the 1405 engine — there is no static postal price.
     |
-    | `post_standard` / `post_express` are RETIRED: kept only so historical orders
-    | and shipments carrying these codes stay readable (title/type). A `retired`
-    | method can never be selected at checkout, whatever `enabled` says, and old
-    | orders are never repriced.
+    | `post_standard` / `post_express` are RETIRED from normal selection: kept so
+    | historical orders and shipments carrying these codes stay readable
+    | (title/type). A `retired` method is never listed or selectable through the
+    | normal path, whatever `enabled` says, and old orders are never repriced.
+    |
+    | ONE exception: `post_standard` is CONDITIONALLY selectable as the fixed-price
+    | Normal Post (پست عادی) fallback, only for a cart in which some item has no
+    | valid shipping weight. That rule and its price live in config/shipping.php →
+    | missing_weight_fallback (MissingWeightFallbackPolicy), not here — `price`
+    | stays null so nothing can sell it at a static price by accident.
+    | `post_express` has no such exception.
     |
     | Prices are integer TOMANS (Money Unit Rule) — the (int) cast is required
     | because env() hands back strings.
     */
     'methods' => [
         'post_standard' => [
-            'title' => 'Standard Post',
+            // Customer-facing title of the missing-weight fallback. Historical orders
+            // keep the title frozen in their own shipment snapshot.
+            'title' => 'پست عادی',
             'type' => 'postal',
             'price' => null,
             'requires_address' => true,

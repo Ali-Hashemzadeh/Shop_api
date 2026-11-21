@@ -27,6 +27,11 @@ interface ShipmentManagerInterface
      * a postal method that cannot be priced is returned with available=false,
      * price=null and a machine-readable unavailable code — never a fallback price.
      *
+     * Exception — Normal Post: when any parcel item has a missing/zero/negative weight
+     * and the fallback is enabled, `post_standard` is listed (for an address) at the
+     * configured flat price with pricing_mode=fixed_missing_weight_fallback, and every
+     * 1405 method is reported unavailable with unavailable_code=weight_missing.
+     *
      * @return ShipmentMethodDTO[]
      */
     public function getAvailableMethods(int $userId, ?int $addressId, ?ShipmentParcelDTO $parcel = null): array;
@@ -83,6 +88,14 @@ interface ShipmentManagerInterface
      * method, an unsupported route, a missing tariff, or any item without a positive
      * shipping weight throws a ValidationException (422) — there is no static-price
      * fallback. Local delivery and pickup return their static configured price.
+     *
+     * The one fixed-price postal option is the Normal Post fallback (`post_standard`):
+     * accepted only when the parcel has an item with a missing weight (otherwise 422
+     * fallback_not_applicable), charged at the configured flat price as the final
+     * amount (no tariff, surcharge, postal tax or packaging). While the fallback is
+     * enabled, a 1405 method for such a parcel is a 422 on shipment_method_code
+     * telling the customer to refresh their options; with it disabled, the per-SKU
+     * weight 422 applies as before.
      *
      * Order/Cart supply only primitives (SKU, quantity, unit weight) and never compute
      * a shipping price themselves. A client-submitted price is never consulted.

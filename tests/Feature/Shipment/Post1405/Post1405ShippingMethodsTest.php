@@ -64,6 +64,7 @@ class Post1405ShippingMethodsTest extends ShipmentTestCase
             'unavailable_reason' => null,
             'unavailable_code' => null,
             'currency' => 'TOMAN',
+            'pricing_mode' => 'post_1405_tariff',
             'tariff_year' => 1405,
             'scope' => 'intercity',
             'package_kind' => 'parcel',
@@ -170,8 +171,11 @@ class Post1405ShippingMethodsTest extends ShipmentTestCase
     }
 
     #[Test]
-    public function a_missing_product_weight_makes_postal_unavailable_and_names_the_sku(): void
+    public function a_missing_product_weight_makes_postal_unavailable_and_names_the_sku_when_the_fallback_is_disabled(): void
     {
+        // With the Normal Post fallback off, the original fail-closed behaviour holds
+        // (the enabled fallback is covered by MissingWeightNormalPostFallbackTest).
+        config(['shipping.missing_weight_fallback.enabled' => false]);
         $user = $this->actingAsCustomer();
         $this->createWeightedVariant('HAS-W', 300);
         $this->createWeightedVariant('NO-W', null);

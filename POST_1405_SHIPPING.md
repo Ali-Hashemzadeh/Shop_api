@@ -118,7 +118,7 @@ The spec example (Qom → Ahvaz, 910 g, D+3 parcel) prices at exactly **176,500*
 | Postal methods | `post_standard`, `post_express` | 21 official 1405 codes; legacy codes retired (readable only) |
 | Tariffs | 18 illustrative generic brackets in `post_tariffs`, half-open | 66 published rates in `postal_tariffs_1405`, closed gram brackets, explicit `extra_above_grams` |
 | Envelope vs parcel | not distinguished | separate services; goods never priced as documents/envelopes |
-| Missing weight | counted as 0 → static fallback | 422 `items.{sku}.weight_grams`; method unavailable in list |
+| Missing weight | counted as 0 → static fallback | 1405 methods `weight_missing`; **Normal Post (`post_standard`) offered at the flat `SHIPMENT_POST_STANDARD_PRICE`** (§6.6). With the fallback disabled: 422 `items.{sku}.weight_grams` |
 | Missing tariff / origin / destination | silent static-price fallback | method unavailable / 422 — no fallback |
 | Unknown destination | classified `non_neighbor` | rejected before pricing |
 | Surcharge base | subtotal **including** island fee | postal service charge only |
@@ -202,7 +202,8 @@ The spec example (Qom → Ahvaz, 910 g, D+3 parcel) prices at exactly **176,500*
 ### 6.1 `GET /api/v1/shipment/methods?address_id={id}` (changed, same URL, same auth)
 
 **Removed codes**
-- `post_standard` and `post_express` are never returned any more, and checking out with them is a **422**.
+- `post_express` is never returned any more, and checking out with it is a **422**. `post_standard` is returned **only**
+  as the Normal Post missing-weight fallback (§6.6); otherwise checking out with it is a **422**.
 - Remove any hard-coded references to them. Old orders may still show them, so keep their labels for order history (§6.4).
 
 **New postal codes** — with the default config these 8 can appear. Render whatever the API returns; don't hard-code the list.
@@ -271,3 +272,60 @@ No change. The payable amount is still the order's `total_amount`, which already
 ### 6.5 Persian labels
 
 Use `title` from the API — it's already Persian for the postal methods (e.g. «پیشتاز D+3 — بسته», «امانت پستی ثبتی»). The local-delivery and pickup titles are unchanged.
+
+### 6.6 Normal Post (پست عادی) — missing-weight fallback
+
+When **any** cart item has a missing, zero or negative shipping weight, the 1405 engine cannot price the parcel. Instead
+of blocking checkout, the cart is offered exactly one postal option:
+
+- `post_standard`, title «پست عادی», listed first, at the flat `SHIPMENT_POST_STANDARD_PRICE` (integer **tomans** —
+  `130000` = 130,000 tomans). That price is the **final** shipping charge: no tariff, surcharge, 10 % postal tax or
+  packaging is added. It is a shop-defined price, not Iran Post's normal-post tariff.
+- Every 1405 method stays in the list as `available: false`, `price: null`, `unavailable_code: "weight_missing"` (with
+  `missing_weight_skus`). Local delivery and pickup are unaffected.
+- Same address rules as any postal method: an owned address with a province and city, outside the local-delivery area
+  (inside it `post_standard` is `available: false`, `inside_local_delivery_area`).
+
+```json
+{
+  "code": "post_standard",
+  "title": "پست عادی",
+  "type": "postal",
+  "price": 130000,
+  "requires_address": true,
+  "requires_delivery_slot": false,
+  "supports_tracking": true,
+  "estimated_min_days": 3,
+  "estimated_max_days": 7,
+  "available": true,
+  "unavailable_reason": null,
+  "unavailable_code": null,
+  "currency": "TOMAN",
+  "pricing_mode": "fixed_missing_weight_fallback",
+  "tariff_year": null,
+  "scope": null,
+  "package_kind": null,
+  "weight_grams": null,
+  "rate_zone": null,
+  "price_breakdown": { "fixed_shipping_price": 130000, "total": 130000 }
+}
+```
+
+Every method now carries `pricing_mode`: `post_1405_tariff`, `fixed_missing_weight_fallback` or `static` (local
+delivery / pickup).
+
+**Checkout** (`POST /api/v1/orders`) re-reads weights from Catalog and applies the same rule:
+
+| Cart | Method sent | Result |
+|---|---|---|
+| some weight missing | `post_standard` | 201, `shipping_cost` = flat price; snapshot `pricing_mode`, fixed `price_breakdown` |
+| all weights valid | `post_standard` | 422 `shipment_method_code` (Normal Post not applicable) |
+| some weight missing | any 1405 method | 422 `shipment_method_code` — re-fetch `/shipment/methods` |
+| any | `local_delivery` / `in_person_pickup` | unchanged |
+
+On a `shipment_method_code` 422, re-fetch the methods and let the customer choose again (a weight may have changed since
+the list was loaded).
+
+**Config:** `SHIPPING_MISSING_WEIGHT_FALLBACK_ENABLED` (default `true`) and `SHIPMENT_POST_STANDARD_PRICE` (default
+`130000`) → `config('shipping.missing_weight_fallback')`. A blank, zero, negative or malformed price (e.g. `13,000`)
+turns the fallback off; with it off, a missing weight is again a per-item `items.{sku}.weight_grams` 422.
