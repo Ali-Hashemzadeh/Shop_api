@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Frontend Handoff — Iran Post 1405 Shipping</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #222537;
+      --border: #2e3147;
+      --text: #e2e4f0;
+      --muted: #8b8fa8;
+      --accent: #7c6af7;
+      --ok: #22c55e;
+      --info: #3b82f6;
+      --warnc: #f59e0b;
+      --bad: #ef4444;
+      --cyan: #22d3ee;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Tahoma, sans-serif; background: var(--bg); color: var(--text); display: flex; min-height: 100vh; }
+
+    nav { width: 275px; min-width: 275px; background: var(--surface); border-right: 1px solid var(--border); height: 100vh; overflow-y: auto; position: sticky; top: 0; padding: 24px 0; }
+    nav .logo { padding: 0 20px 24px; font-size: 15px; font-weight: 700; color: var(--accent); border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+    nav .logo span { color: var(--muted); font-weight: 400; font-size: 12px; display: block; margin-top: 3px; }
+    nav a { display: block; padding: 6px 20px; font-size: 13px; color: var(--muted); text-decoration: none; border-left: 2px solid transparent; transition: all .15s; }
+    nav a:hover { color: var(--text); background: var(--surface2); border-left-color: var(--accent); }
+    nav .section-label { padding: 16px 20px 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: #4a4d65; }
+
+    main { flex: 1; padding: 48px 56px; max-width: 1060px; min-width: 0; }
+    h1 { font-size: 32px; font-weight: 700; margin-bottom: 8px; }
+    .subtitle { font-size: 15px; color: var(--muted); margin-bottom: 28px; }
+    h2 { font-size: 22px; font-weight: 700; margin: 56px 0 20px; padding-top: 56px; border-top: 1px solid var(--border); }
+    h2:first-of-type { border-top: none; padding-top: 0; margin-top: 32px; }
+    h3 { font-size: 15px; font-weight: 600; margin: 30px 0 10px; color: var(--text); }
+    p { font-size: 14px; line-height: 1.7; color: var(--muted); margin-bottom: 12px; }
+    p strong, li strong, td strong { color: var(--text); }
+    ul, ol { font-size: 14px; color: var(--muted); padding-left: 20px; line-height: 1.9; margin-bottom: 12px; }
+    a { color: var(--accent); }
+
+    code { font-family: 'SF Mono', Menlo, Consolas, monospace; font-size: 12.5px; background: var(--surface2); padding: 2px 6px; border-radius: 4px; color: var(--cyan); }
+    pre { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px 18px; overflow-x: auto; margin-bottom: 16px; }
+    pre code { background: none; padding: 0; color: var(--text); font-size: 12.5px; line-height: 1.65; white-space: pre; }
+    .del { color: #f87171; }
+    .add { color: #4ade80; }
+    .cmt { color: #5b5f7a; }
+
+    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 13px; display: block; overflow-x: auto; }
+    th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    th { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; font-weight: 700; white-space: nowrap; }
+    td { color: var(--muted); }
+    tbody tr:hover { background: var(--surface); }
+    .fa { direction: rtl; unicode-bidi: isolate; color: var(--text); }
+
+    .callout { border-left: 3px solid var(--accent); background: var(--surface); border-radius: 0 8px 8px 0; padding: 14px 18px; margin-bottom: 18px; font-size: 13.5px; line-height: 1.7; color: var(--muted); }
+    .callout.warn { border-left-color: var(--warnc); }
+    .callout.bad { border-left-color: var(--bad); }
+    .callout.ok { border-left-color: var(--ok); }
+    .callout strong { color: var(--text); }
+
+    .pill { display: inline-block; font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 20px; text-transform: uppercase; letter-spacing: .05em; vertical-align: middle; }
+    .pill.get { background: rgba(59,130,246,.15); color: #60a5fa; }
+    .pill.post { background: rgba(34,197,94,.15); color: #4ade80; }
+    .pill.new { background: rgba(124,106,247,.18); color: #a78bfa; }
+    .pill.brk { background: rgba(239,68,68,.15); color: #f87171; }
+    .pill.safe { background: rgba(34,197,94,.15); color: #4ade80; }
+    .pill.legacy { background: rgba(139,143,168,.16); color: #a5a9c0; }
+
+    .chk { list-style: none; padding-left: 0; }
+    .chk li { padding-left: 26px; position: relative; margin-bottom: 7px; }
+    .chk li::before { content: "\2610"; position: absolute; left: 4px; color: var(--accent); font-size: 14px; }
+
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 20px; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; }
+    .card .k { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 700; margin-bottom: 6px; }
+    .card .v { font-size: 14px; color: var(--text); line-height: 1.6; }
+
+    .receipt { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px 22px; max-width: 460px; margin-bottom: 20px; direction: rtl; font-size: 13.5px; }
+    .receipt .row { display: flex; justify-content: space-between; gap: 16px; padding: 5px 0; color: var(--muted); }
+    .receipt .row span:last-child { font-family: 'SF Mono', Menlo, Consolas, monospace; color: var(--text); direction: ltr; }
+    .receipt .row.total { border-top: 1px solid var(--border); margin-top: 6px; padding-top: 10px; font-weight: 700; color: var(--text); }
+    .receipt .title { font-weight: 700; color: var(--text); margin-bottom: 8px; }
+
+    @media (max-width: 860px) {
+      body { display: block; }
+      nav { display: none; }
+      main { padding: 28px 16px; }
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="logo">Shop API · Frontend<span>Iran Post 1405 shipping</span></div>
+  <div class="section-label">Start here</div>
+  <a href="#summary">What changed</a>
+  <a href="#checklist">Frontend checklist</a>
+  <div class="section-label">Storefront</div>
+  <a href="#methods">Shipping methods list</a>
+  <a href="#fields">New response fields</a>
+  <a href="#sample">Sample response</a>
+  <a href="#unavailable">Unavailable methods</a>
+  <a href="#refetch">When to re-fetch</a>
+  <a href="#breakdown">Showing the breakdown</a>
+  <a href="#checkout">Checkout (POST /orders)</a>
+  <a href="#payment">Payment</a>
+  <a href="#history">Order &amp; shipment pages</a>
+  <div class="section-label">Admin panel</div>
+  <a href="#admin">Admin panel changes</a>
+  <div class="section-label">Reference</div>
+  <a href="#types">TypeScript types</a>
+  <a href="#before-after">Before vs after</a>
+  <a href="#release">Release coordination</a>
+</nav>
+
+<main>
+  <h1>Iran Post 1405 shipping: frontend changes</h1>
+  <p class="subtitle">
+    The backend commit <code>6363419</code> (<em>feat(shipment): Iran Post 1405 postal pricing engine</em>) changes
+    what the storefront and admin panel have to do. Read this before the backend goes live.
+    <span class="pill brk">Breaking</span> for postal method codes.
+  </p>
+
+  <!-- ───────────────────────────── SUMMARY ───────────────────────────── -->
+  <h2 id="summary">What changed</h2>
+
+  <div class="callout bad">
+    <strong>The postal codes <code>post_standard</code> and <code>post_express</code> no longer work.</strong>
+    They are never returned by <code>GET /api/v1/shipment/methods</code>, and sending them to checkout gives a
+    <strong>422</strong>. Frontend code that hard-codes them will break checkout as soon as the backend is deployed.
+  </div>
+
+  <div class="grid">
+    <div class="card"><div class="k">Postal methods</div><div class="v">The two generic codes are replaced by the official Iran Post 1405 services (for example <code>post_registered_parcel</code> and <code>post_intercity_d3_parcel</code>).</div></div>
+    <div class="card"><div class="k">Every postal method has its own price</div><div class="v">Each price is calculated for the customer's <strong>current cart and address</strong>, so different methods have different prices.</div></div>
+    <div class="card"><div class="k"><code>price</code> can be <code>null</code></div><div class="v">A postal method that can't be priced comes back with <code>available:false</code>, <code>price:null</code> and an <code>unavailable_code</code>.</div></div>
+    <div class="card"><div class="k">Itemised breakdown</div><div class="v">New <code>price_breakdown</code> object: base, surcharges, 10&nbsp;% postal tax and a 50,000-toman packaging fee.</div></div>
+    <div class="card"><div class="k">New checkout 422s</div><div class="v"><code>items.{SKU}.weight_grams</code> when a product has no weight. <code>shipment_method_code</code> or <code>address_id</code> when the method is unavailable.</div></div>
+    <div class="card"><div class="k">Unchanged</div><div class="v">Local delivery, in-person pickup, the payment flow, request bodies and every existing response key.</div></div>
+  </div>
+
+  <p>All money is still <strong>integer tomans</strong>. Every method now has <code>currency: "TOMAN"</code>.</p>
+
+  <!-- ───────────────────────────── CHECKLIST ───────────────────────────── -->
+  <h2 id="checklist">Frontend checklist</h2>
+
+  <h3>Storefront (customer website)</h3>
+  <ul class="chk">
+    <li>Remove every hard-coded <code>post_standard</code> / <code>post_express</code> from the checkout. Render the method list the API returns.</li>
+    <li>Null-check <code>price</code> before formatting it. <code>null</code> means "not available", <strong>not</strong> "free".</li>
+    <li>Only let the customer select methods with <code>available === true</code>. You can show unavailable ones greyed out.</li>
+    <li>Show each postal method's own price. Don't copy one price to all postal options.</li>
+    <li>Re-fetch <code>/shipment/methods</code> after <strong>any cart change</strong> and <strong>any address change</strong>.</li>
+    <li>Handle <code>unavailable_code</code>, especially <code>weight_missing</code>, <code>inside_local_delivery_area</code> and <code>destination_incomplete</code>.</li>
+    <li>Handle the new checkout 422 keys: <code>items.{SKU}.weight_grams</code>, <code>shipment_method_code</code>, <code>address_id</code>.</li>
+    <li>Don't add postal tax or packaging on top of <code>shipping_cost</code>. They are already included.</li>
+    <li>Show estimated delivery from the method <code>title</code>, such as «پیشتاز D+3». <code>estimated_min_days</code> / <code>estimated_max_days</code> are <code>null</code> for the new postal methods.</li>
+    <li>Optional: show <code>price_breakdown</code> on the checkout, order detail and shipment tracking pages.</li>
+    <li>Keep Persian labels for the old codes so order history still renders («پست عادی» / «پست سفارشی»).</li>
+    <li>Make sure a guest's cart has been merged into the user's cart before you load shipping methods (see <a href="#methods">below</a>).</li>
+  </ul>
+
+  <h3>Admin panel</h3>
+  <ul class="chk">
+    <li>Make <code>weight_grams</code> clearly visible on the variant form, and treat it as effectively required. A variant without a weight blocks postal checkout for every cart that contains it.</li>
+    <li>Remove any UI that edits or shows the <code>post_standard</code> / <code>post_express</code> price.</li>
+    <li>Optional: show <code>price_breakdown</code> in the admin shipment detail.</li>
+  </ul>
+
+  <!-- ───────────────────────────── METHODS ───────────────────────────── -->
+  <h2 id="methods"><span class="pill get">GET</span> <code>/api/v1/shipment/methods?address_id={id}</code></h2>
+
+  <p>The URL, auth (<code>auth:sanctum</code>) and query parameters are the same. The response is different:</p>
+
+  <table>
+    <thead><tr><th>Before</th><th>Now</th></tr></thead>
+    <tbody>
+      <tr><td><code>post_standard</code>, <code>post_express</code> with a fixed price from config</td><td>The Iran Post 1405 services, each priced live from the 1405 tariff</td></tr>
+      <tr><td>Postal price was the same for every cart</td><td>Postal price depends on the <strong>cart weight</strong> and the <strong>destination</strong></td></tr>
+      <tr><td><code>price</code> was always an integer</td><td><code>price</code> is <code>int | null</code></td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout warn">
+    <strong>The price is calculated from the logged-in user's server-side cart.</strong> The endpoint reads the
+    authenticated user's cart. It does not read the <code>X-Session-Id</code> guest cart. If a guest just logged in
+    on the checkout page, merge the guest cart first. Otherwise the methods are priced for an empty or stale cart and
+    come back with <code>cart_empty</code>.
+  </div>
+
+  <h3>Postal codes you can receive with the default configuration</h3>
+  <table>
+    <thead><tr><th>Code</th><th>Title (from the API)</th><th>Scope</th><th>When it appears</th></tr></thead>
+    <tbody>
+      <tr><td><code>post_registered_parcel</code></td><td class="fa">امانت پستی ثبتی</td><td>non_priority</td><td>Nationwide, parcels <strong>above 2&nbsp;kg</strong></td></tr>
+      <tr><td><code>post_intercity_d3_parcel</code></td><td class="fa">پیشتاز D+3 — بسته</td><td>intercity</td><td>Every intercity route</td></tr>
+      <tr><td><code>post_intercity_d2_parcel</code></td><td class="fa">اکسپرس D+2 — بسته</td><td>intercity</td><td>Only covered routes (allow-list, empty by default)</td></tr>
+      <tr><td><code>post_intercity_d1_parcel</code></td><td class="fa">ویژه D+1 — بسته</td><td>intercity</td><td>Only covered routes (allow-list, empty by default)</td></tr>
+      <tr><td><code>post_intercity_sameday_parcel</code></td><td class="fa">بین‌شهری همان‌روز — بسته</td><td>intercity</td><td>Only covered routes, ≤ 10&nbsp;kg and a known carton size</td></tr>
+      <tr><td><code>post_urban_3h_parcel</code></td><td class="fa">شهری ۳ ساعته — بسته</td><td>urban</td><td>Only covered cities</td></tr>
+      <tr><td><code>post_urban_sameday_parcel</code></td><td class="fa">شهری همان‌روز — بسته</td><td>urban</td><td>Only covered cities</td></tr>
+      <tr><td><code>post_urban_nextday_parcel</code></td><td class="fa">شهری روز بعد — بسته</td><td>urban</td><td>Only covered cities</td></tr>
+    </tbody>
+  </table>
+  <p>
+    There are 21 services in total. Envelope, document, M-bag and periodical services are off by default, and operators
+    can switch services on or off with env toggles. <strong>Don't hard-code this list.</strong> Render whatever the API
+    returns and use <code>title</code> as the label. It is already Persian.
+  </p>
+
+  <h3>Unchanged methods</h3>
+  <p>
+    <code>local_delivery</code> and <code>in_person_pickup</code> work exactly as before. They have a static integer
+    <code>price</code> and <code>price_breakdown: null</code>. The local-delivery slot flow is untouched. Without an
+    <code>address_id</code>, the list still returns only methods that need no address (pickup).
+  </p>
+
+  <!-- ───────────────────────────── FIELDS ───────────────────────────── -->
+  <h2 id="fields">New response fields</h2>
+  <p>Every existing key is kept. The new keys are always present (<code>null</code> where they don't apply), so the response shape stays the same.</p>
+
+  <table>
+    <thead><tr><th>Field</th><th>Type</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td><code>price</code> <span class="pill brk">changed</span></td><td><code>int | null</code></td><td><code>null</code> for an unavailable postal method. Never <code>0</code> for postal. Always an int for local delivery and pickup.</td></tr>
+      <tr><td><code>unavailable_code</code> <span class="pill new">new</span></td><td><code>string | null</code></td><td>Machine-readable reason. Use it for UI logic. <code>unavailable_reason</code> is English text. See <a href="#unavailable">the table</a>.</td></tr>
+      <tr><td><code>currency</code> <span class="pill new">new</span></td><td><code>"TOMAN"</code></td><td>On every method.</td></tr>
+      <tr><td><code>tariff_year</code> <span class="pill new">new</span></td><td><code>int | null</code></td><td><code>1405</code> for postal.</td></tr>
+      <tr><td><code>scope</code> <span class="pill new">new</span></td><td><code>string | null</code></td><td><code>non_priority</code> / <code>urban</code> / <code>intercity</code> (<code>specialized</code> exists but is never quotable).</td></tr>
+      <tr><td><code>package_kind</code> <span class="pill new">new</span></td><td><code>string | null</code></td><td><code>parcel</code>, <code>envelope</code>, <code>packet</code>, <code>bag</code>, <code>bundle</code>.</td></tr>
+      <tr><td><code>weight_grams</code> <span class="pill new">new</span></td><td><code>int | null</code></td><td>The total cart weight that was priced.</td></tr>
+      <tr><td><code>rate_zone</code> <span class="pill new">new</span></td><td><code>string | null</code></td><td><code>same_province</code> / <code>neighbor</code> / <code>non_neighbor</code> / <code>metropolis</code> / <code>province_center</code> / <code>other_city</code>.</td></tr>
+      <tr><td><code>price_breakdown</code> <span class="pill new">new</span></td><td><code>object | null</code></td><td>Itemised tomans. <code>price_breakdown.total === price</code>. <code>null</code> when the method is unavailable and for local delivery / pickup.</td></tr>
+      <tr><td><code>missing_weight_skus</code> <span class="pill new">new</span></td><td><code>string[]</code></td><td><strong>Only present</strong> when <code>unavailable_code === "weight_missing"</code>.</td></tr>
+      <tr><td><code>estimated_min_days</code>, <code>estimated_max_days</code></td><td><code>int | null</code></td><td>Existing keys, but <code>null</code> for the new postal methods.</td></tr>
+    </tbody>
+  </table>
+
+  <!-- ───────────────────────────── SAMPLE ───────────────────────────── -->
+  <h2 id="sample">Sample response</h2>
+  <p>Destination: Mashhad. Cart: 2 × 650&nbsp;g + 1 × 1,200&nbsp;g = <strong>2,500&nbsp;g</strong>. Trimmed to two available methods and one unavailable one.</p>
+
+<pre><code>{
+  "data": [
+    {
+      "code": "post_registered_parcel",
+      "title": "امانت پستی ثبتی",
+      "type": "postal",
+      <span class="add">"price": 117738,</span>
+      "requires_address": true,
+      "requires_delivery_slot": false,
+      "supports_tracking": true,
+      "estimated_min_days": null,
+      "estimated_max_days": null,
+      "available": true,
+      "unavailable_reason": null,
+      <span class="add">"unavailable_code": null,</span>
+      <span class="add">"currency": "TOMAN",</span>
+      <span class="add">"tariff_year": 1405,</span>
+      <span class="add">"scope": "non_priority",</span>
+      <span class="add">"package_kind": "parcel",</span>
+      <span class="add">"weight_grams": 2500,</span>
+      <span class="add">"rate_zone": "non_neighbor",</span>
+      <span class="add">"price_breakdown": {
+        "base_price": 44900,
+        "extra_weight": 0,
+        "delivery_surcharge": 6735,
+        "large_province_surcharge": 2245,
+        "island_surcharge": 0,
+        "fragile_surcharge": 0,
+        "electronic_service_charge": 7700,
+        "compensation": 0,
+        "postal_tax": 6158,
+        "packaging": 50000,
+        "total": 117738
+      }</span>
+    },
+    {
+      "code": "post_intercity_d3_parcel",
+      "title": "پیشتاز D+3 — بسته",
+      "price": 228200,
+      "available": true,
+      "price_breakdown": { "base_price": 100000, "extra_weight": 35000, "delivery_surcharge": 20250,
+        "large_province_surcharge": 6750, "island_surcharge": 0, "fragile_surcharge": 0,
+        "electronic_service_charge": 0, "compensation": 0, "postal_tax": 16200,
+        "packaging": 50000, "total": 228200 }
+      <span class="cmt">// … other keys as above</span>
+    },
+    {
+      "code": "post_intercity_sameday_parcel",
+      "title": "بین‌شهری همان‌روز — بسته",
+      <span class="del">"price": null,</span>
+      <span class="del">"available": false,</span>
+      "unavailable_reason": "This postal service is not available for your address.",
+      "unavailable_code": "route_not_supported",
+      "price_breakdown": null
+      <span class="cmt">// … other keys as above</span>
+    }
+  ]
+}</code></pre>
+
+  <!-- ───────────────────────────── UNAVAILABLE ───────────────────────────── -->
+  <h2 id="unavailable">Unavailable methods: <code>unavailable_code</code></h2>
+  <p>
+    <code>unavailable_reason</code> is English and meant for logs or a fallback. Show Persian text based on
+    <code>unavailable_code</code>. The Persian copy below is a suggestion; the product team can change it.
+  </p>
+
+  <table>
+    <thead><tr><th>Code</th><th>Meaning</th><th>Suggested UX</th></tr></thead>
+    <tbody>
+      <tr><td><code>weight_missing</code></td><td>A product in the cart has no shipping weight.</td><td>Postal is blocked. Suggest pickup / local delivery or contacting support. <code>missing_weight_skus</code> lists the SKUs, so you can highlight the cart lines.<br><span class="fa">«امکان محاسبه هزینه پست برای برخی کالاهای سبد وجود ندارد.»</span></td></tr>
+      <tr><td><code>cart_empty</code></td><td>The cart has no items.</td><td>Send the customer back to the cart. If this happens right after login, merge the guest cart first.</td></tr>
+      <tr><td><code>destination_incomplete</code></td><td>The address has no province or city.</td><td>Ask the customer to edit the address.<br><span class="fa">«لطفاً استان و شهر آدرس را تکمیل کنید.»</span></td></tr>
+      <tr><td><code>inside_local_delivery_area</code></td><td>The address is inside the shop's own delivery area, so postal is withdrawn.</td><td>Point the customer to local delivery or pickup.<br><span class="fa">«آدرس شما در محدوده ارسال با پیک فروشگاه است.»</span></td></tr>
+      <tr><td><code>route_not_supported</code>, <code>zone_unclassified</code>, <code>tariff_missing</code>, <code>weight_not_supported</code>, <code>carton_size_unknown</code>, <code>carton_too_large</code>, <code>content_not_eligible</code></td><td>This service isn't offered for this cart or address.</td><td>Hide the method, or grey it out with a generic message.<br><span class="fa">«این روش ارسال برای آدرس یا سبد شما در دسترس نیست.»</span></td></tr>
+      <tr><td><code>origin_not_configured</code>, <code>pricing_parameter_missing</code>, <code>service_disabled</code>, <code>derived_tariff_unresolved</code>, <code>unknown_service</code></td><td>Server-side configuration problem.</td><td>Hide the method. Don't show these to the customer.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <strong>If no postal method is available,</strong> checkout must still work with local delivery or pickup when
+    they are available. Show an empty state only when <em>no</em> method at all has <code>available === true</code>.
+  </div>
+
+  <!-- ───────────────────────────── REFETCH ───────────────────────────── -->
+  <h2 id="refetch">When to re-fetch the method list</h2>
+  <p>Postal prices now depend on the cart and the address. A cached list will show the wrong price, and checkout charges the server's price.</p>
+  <ul>
+    <li>After an item is added or removed, or a quantity changes.</li>
+    <li>After the selected address changes, or the address is edited.</li>
+    <li>After login, once the guest cart has been merged.</li>
+    <li>After a checkout 422 on <code>shipment_method_code</code> (see <a href="#checkout">checkout</a>).</li>
+  </ul>
+  <p>If the customer had already chosen a method and it disappears or becomes <code>available:false</code> after a re-fetch, clear the selection and ask them to choose again.</p>
+
+  <!-- ───────────────────────────── BREAKDOWN ───────────────────────────── -->
+  <h2 id="breakdown">Showing the price breakdown <span class="pill safe">optional</span></h2>
+  <p>
+    Every key is an integer in tomans. The <strong>sum of all components equals <code>total</code></strong>, and
+    <code>total === price</code>. A common pattern is to hide zero rows and always show tax and packaging.
+  </p>
+
+  <table>
+    <thead><tr><th>Key</th><th>Suggested Persian label</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td><code>base_price</code></td><td class="fa">هزینه پایه پست</td><td>From the 1405 tariff for the weight bracket and zone.</td></tr>
+      <tr><td><code>extra_weight</code></td><td class="fa">اضافه وزن</td><td>Per started kilogram above the bracket threshold.</td></tr>
+      <tr><td><code>delivery_surcharge</code></td><td class="fa">فوق‌العاده مقصد</td><td>20&nbsp;% for Tehran/Alborz <em>or</em> 15&nbsp;% for an approved metropolitan city, never both.</td></tr>
+      <tr><td><code>large_province_surcharge</code></td><td class="fa">فوق‌العاده استان پهناور</td><td>5&nbsp;%.</td></tr>
+      <tr><td><code>island_surcharge</code></td><td class="fa">فوق‌العاده جزایر</td><td>25,500 per started kg (listed destinations only).</td></tr>
+      <tr><td><code>fragile_surcharge</code></td><td class="fa">شکستنی</td><td>25&nbsp;%, store-wide switch.</td></tr>
+      <tr><td><code>electronic_service_charge</code></td><td class="fa">خدمات الکترونیک (شناسه و پیامک)</td><td>7,700 for registered non-priority services.</td></tr>
+      <tr><td><code>compensation</code></td><td class="fa">غرامت</td><td>Currently always 0.</td></tr>
+      <tr><td><code>postal_tax</code></td><td class="fa">مالیات پستی ۱۰٪</td><td>Already included in the total.</td></tr>
+      <tr><td><code>packaging</code></td><td class="fa">بسته‌بندی</td><td>50,000, once per postal order.</td></tr>
+      <tr><td><code>total</code></td><td class="fa">جمع هزینه ارسال</td><td>Equals <code>price</code>, and the order's <code>shipping_cost</code>.</td></tr>
+    </tbody>
+  </table>
+
+  <p>Example rendering of the D+3 method from the sample above:</p>
+  <div class="receipt">
+    <div class="title">پیشتاز D+3 — بسته</div>
+    <div class="row"><span>هزینه پایه پست</span><span>100,000</span></div>
+    <div class="row"><span>اضافه وزن</span><span>35,000</span></div>
+    <div class="row"><span>فوق‌العاده مقصد</span><span>20,250</span></div>
+    <div class="row"><span>فوق‌العاده استان پهناور</span><span>6,750</span></div>
+    <div class="row"><span>مالیات پستی ۱۰٪</span><span>16,200</span></div>
+    <div class="row"><span>بسته‌بندی</span><span>50,000</span></div>
+    <div class="row total"><span>جمع هزینه ارسال (تومان)</span><span>228,200</span></div>
+  </div>
+
+  <!-- ───────────────────────────── CHECKOUT ───────────────────────────── -->
+  <h2 id="checkout"><span class="pill post">POST</span> <code>/api/v1/orders</code> (checkout)</h2>
+
+  <p>
+    The request body is <strong>unchanged</strong>: <code>shipment_method_code</code>, <code>address_id</code>,
+    <code>delivery_slot_id?</code>, <code>notes?</code>. Send one of the new codes from the method list.
+  </p>
+
+<pre><code>{
+  <span class="del">"shipment_method_code": "post_standard",</span>      <span class="cmt">// ✗ 422 now</span>
+  <span class="add">"shipment_method_code": "post_intercity_d3_parcel",</span>
+  "address_id": 42
+}</code></pre>
+
+  <ul>
+    <li><strong>Never send a price.</strong> The server recalculates shipping with the same engine as the method list and ignores any price you send.</li>
+    <li>The response <code>shipping_cost</code> equals the <code>price</code> shown in the list for the same cart and address.</li>
+    <li><code>shipping_cost</code> <strong>already includes</strong> the 10&nbsp;% postal tax and the 50,000 packaging fee. <code>tax_amount</code> stays <code>0</code>. Don't add them again in the order summary.</li>
+    <li><code>total_amount</code> = items − discounts + <code>shipping_cost</code>, the same as before.</li>
+  </ul>
+
+  <h3>New 422 errors to handle</h3>
+  <table>
+    <thead><tr><th>Error key</th><th>Cause</th><th>What to do</th></tr></thead>
+    <tbody>
+      <tr><td><code>items.{SKU}.weight_grams</code></td><td>A product in the cart has no shipping weight (postal only). One key per SKU.</td><td>Parse the SKU out of the key and highlight that cart line. Suggest pickup / local delivery.</td></tr>
+      <tr><td><code>shipment_method_code</code></td><td>The method is no longer available: disabled, route not supported, no tariff, a retired legacy code, or the address is inside the local area.</td><td><strong>Re-fetch <code>/shipment/methods</code></strong> and ask the customer to choose again.</td></tr>
+      <tr><td><code>address_id</code></td><td>The address has no province or city, or it's invalid.</td><td>Send the customer to edit the address.</td></tr>
+    </tbody>
+  </table>
+
+<pre><code><span class="cmt">// Example 422 body</span>
+{
+  "message": "Shipping weight is not set for item bdv-K92XMQ, so postage cannot be calculated.",
+  "errors": {
+    "items.bdv-K92XMQ.weight_grams": [
+      "Shipping weight is not set for item bdv-K92XMQ, so postage cannot be calculated."
+    ]
+  }
+}</code></pre>
+
+  <!-- ───────────────────────────── PAYMENT ───────────────────────────── -->
+  <h2 id="payment">Payment <span class="pill safe">no change</span></h2>
+  <p>
+    <code>POST /api/v1/payments/initialize</code> and the Zarinpal callback are unchanged. The payable amount is still
+    the order's <code>total_amount</code>, which already includes the full postage.
+  </p>
+
+  <!-- ───────────────────────────── HISTORY ───────────────────────────── -->
+  <h2 id="history">Order &amp; shipment pages</h2>
+
+  <h3>New orders</h3>
+  <p>
+    <code>shipment_snapshot</code> on new postal orders adds <code>price_breakdown</code>, <code>tariff_year</code>,
+    <code>rate_zone</code>, <code>weight_grams</code>, <code>currency</code> and <code>delivery_surcharge_rule</code>
+    (<code>"tehran_alborz"</code> / <code>"metropolitan"</code> / <code>null</code>). You can show the same breakdown
+    on the order detail page.
+  </p>
+
+  <h3>Shipment resources</h3>
+  <p>
+    <code>GET /api/v1/shipments/{code}</code>, <code>GET /api/v1/orders/{order}/shipment</code>, the <code>shipment</code>
+    inside the order detail, and the admin shipment endpoints all add <code>price_breakdown</code>. It is
+    <code>null</code> for old orders and for local delivery / pickup.
+  </p>
+
+  <h3>Old orders <span class="pill legacy">legacy</span></h3>
+  <ul>
+    <li>Old orders still carry <code>method_code: "post_standard" | "post_express"</code> and their original <code>shipping_cost</code>, with no breakdown. They are never repriced.</li>
+    <li>Keep a label mapping for them: <code>post_standard</code> → <span class="fa">«پست عادی»</span>, <code>post_express</code> → <span class="fa">«پست سفارشی»</span>.</li>
+    <li>Treat a missing or <code>null</code> <code>price_breakdown</code> as normal: show only <code>shipping_cost</code>.</li>
+    <li>A pending old order can still be paid at its original price.</li>
+  </ul>
+
+  <!-- ───────────────────────────── ADMIN ───────────────────────────── -->
+  <h2 id="admin">Admin panel changes</h2>
+
+  <div class="callout warn">
+    <strong>Product weight is now critical.</strong> A variant with an empty or zero <code>weight_grams</code> makes
+    every postal method unavailable for any cart that contains it, and blocks postal checkout. The weight is never
+    treated as 0.
+  </div>
+
+  <ul>
+    <li><strong>Variant form</strong> (create/update variant, nested product create/update): <code>weight_grams</code> is a whole number of <strong>grams</strong>, never kilograms. The API still accepts <code>null</code>, but the admin UI should mark it as required, or at least warn loudly when it's empty.</li>
+    <li>Consider a "missing weight" filter or badge in the product list so operators can find the gaps.</li>
+    <li><strong>Remove</strong> any setting or display of the old <code>post_standard</code> / <code>post_express</code> prices. Postal prices are no longer configured per method.</li>
+    <li><strong>Admin shipment detail</strong> (<code>/api/v1/admin/shipments/{code}</code>): you can render the new <code>price_breakdown</code>.</li>
+    <li>Turning postal services on or off and route coverage (D+1, D+2, same-day, urban) are server env settings. There is no admin API for them, so there's nothing to build.</li>
+  </ul>
+
+  <!-- ───────────────────────────── TYPES ───────────────────────────── -->
+  <h2 id="types">TypeScript types</h2>
+
+<pre><code>export type ShipmentMethodType = 'postal' | 'local_delivery' | 'in_person_pickup';
+
+export type PostalUnavailableCode =
+  | 'service_disabled' | 'unknown_service' | 'content_not_eligible' | 'derived_tariff_unresolved'
+  | 'cart_empty' | 'weight_missing' | 'weight_not_supported' | 'origin_not_configured'
+  | 'destination_incomplete' | 'inside_local_delivery_area' | 'route_not_supported'
+  | 'zone_unclassified' | 'carton_size_unknown' | 'carton_too_large' | 'tariff_missing'
+  | 'pricing_parameter_missing';
+
+export interface ShippingPriceBreakdown {
+  base_price: number;
+  extra_weight: number;
+  delivery_surcharge: number;
+  large_province_surcharge: number;
+  island_surcharge: number;
+  fragile_surcharge: number;
+  electronic_service_charge: number;
+  compensation: number;
+  postal_tax: number;
+  packaging: number;
+  total: number;           <span class="cmt">// === ShipmentMethod.price</span>
+}
+
+export interface ShipmentMethod {
+  code: string;            <span class="cmt">// render what the API returns — don't hard-code</span>
+  title: string;           <span class="cmt">// Persian for postal methods</span>
+  type: ShipmentMethodType;
+  <span class="add">price: number | null;</span>    <span class="cmt">// ⚠ null = unavailable postal, NOT free</span>
+  requires_address: boolean;
+  requires_delivery_slot: boolean;
+  supports_tracking: boolean;
+  estimated_min_days: number | null;   <span class="cmt">// null for 1405 postal</span>
+  estimated_max_days: number | null;
+  available: boolean;
+  unavailable_reason: string | null;   <span class="cmt">// English</span>
+  <span class="add">unavailable_code: PostalUnavailableCode | null;</span>
+  <span class="add">currency: 'TOMAN';</span>
+  <span class="add">tariff_year: number | null;</span>
+  <span class="add">scope: 'non_priority' | 'specialized' | 'urban' | 'intercity' | null;</span>
+  <span class="add">package_kind: 'envelope' | 'packet' | 'parcel' | 'bag' | 'bundle' | null;</span>
+  <span class="add">weight_grams: number | null;</span>
+  <span class="add">rate_zone: 'same_province' | 'neighbor' | 'non_neighbor'
+    | 'metropolis' | 'province_center' | 'other_city' | null;</span>
+  <span class="add">price_breakdown: ShippingPriceBreakdown | null;</span>
+  <span class="add">missing_weight_skus?: string[];</span>  <span class="cmt">// only when unavailable_code === 'weight_missing'</span>
+  pickup_location?: unknown;          <span class="cmt">// unchanged, pickup only</span>
+}
+
+<span class="cmt">// Formatting helper — never format a null price as 0</span>
+export const formatShippingPrice = (m: ShipmentMethod): string =&gt;
+  m.price === null ? 'ناموجود' : `${m.price.toLocaleString('fa-IR')} تومان`;
+
+<span class="cmt">// Extract SKUs from a checkout 422</span>
+export const missingWeightSkus = (errors: Record&lt;string, string[]&gt;): string[] =&gt;
+  Object.keys(errors)
+    .map((k) =&gt; /^items\.(.+)\.weight_grams$/.exec(k)?.[1])
+    .filter((s): s is string =&gt; !!s);</code></pre>
+
+  <!-- ───────────────────────────── BEFORE / AFTER ───────────────────────────── -->
+  <h2 id="before-after">Before vs after (frontend view)</h2>
+  <table>
+    <thead><tr><th>Topic</th><th>Before</th><th>Now</th></tr></thead>
+    <tbody>
+      <tr><td>Postal codes</td><td><code>post_standard</code>, <code>post_express</code></td><td>Iran Post 1405 codes. The old ones give 422 at checkout.</td></tr>
+      <tr><td>Postal price</td><td>Static, the same for every cart</td><td>Per method, per cart weight, per destination</td></tr>
+      <tr><td><code>price</code> type</td><td><code>int</code></td><td><code>int | null</code></td></tr>
+      <tr><td>Product with no weight</td><td>Silently priced with a fallback</td><td>Postal is unavailable (<code>weight_missing</code>) and checkout gives 422 <code>items.{sku}.weight_grams</code></td></tr>
+      <tr><td>Postal tax</td><td>None</td><td>10&nbsp;%, inside <code>shipping_cost</code></td></tr>
+      <tr><td>Packaging</td><td>None</td><td>50,000 tomans once per postal order, inside <code>shipping_cost</code></td></tr>
+      <tr><td>Delivery estimate</td><td><code>estimated_min_days</code>/<code>max_days</code></td><td><code>null</code> for postal. Use <code>title</code> (D+1 / D+2 / D+3 …).</td></tr>
+      <tr><td>Breakdown</td><td>None</td><td><code>price_breakdown</code> on methods, order snapshot and shipments</td></tr>
+      <tr><td>Fast services (D+1, D+2, same-day, urban)</td><td>n/a</td><td>Only on covered routes; often unavailable</td></tr>
+      <tr><td>Local delivery / pickup</td><td colspan="2">Unchanged</td></tr>
+      <tr><td>Payment</td><td colspan="2">Unchanged: pays <code>total_amount</code></td></tr>
+    </tbody>
+  </table>
+
+  <!-- ───────────────────────────── RELEASE ───────────────────────────── -->
+  <h2 id="release">Release coordination</h2>
+  <div class="callout bad">
+    <strong>Ship the frontend at the same time as the backend.</strong> As soon as the backend is live,
+    <code>post_standard</code>/<code>post_express</code> return 422. An old frontend that hard-codes them, or formats
+    <code>price</code> without a null check, will break checkout.
+  </div>
+  <ol>
+    <li>Before release, the shop team must fill in <code>weight_grams</code> for every variant. Otherwise postal will be unavailable for those products.</li>
+    <li>Deploy the backend and the frontend together.</li>
+    <li>Smoke test: with an Ahvaz address and a 910&nbsp;g cart, <code>post_intercity_d3_parcel</code> should show <strong>176,500</strong> tomans. Place an order and check that <code>shipping_cost</code> equals the listed price.</li>
+    <li>Check that an old order with <code>post_standard</code> still renders correctly in order history.</li>
+  </ol>
+  <p>
+    Full backend write-up (formula, deployment plan, open questions for Iran Post): <code>POST_1405_SHIPPING.md</code>.
+    Changelog entry: <code>CHANGELOG.md</code> → "Feature — Iran Post 1405 shipping engine (Shipment)".
+  </p>
+</main>
+</body>
+</html>
