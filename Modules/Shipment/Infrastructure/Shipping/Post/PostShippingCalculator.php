@@ -24,12 +24,15 @@ use Modules\Shipment\Infrastructure\Persistence\Repositories\ShippingParameterRe
  *
  * FAIL-CLOSED: every condition that cannot be resolved from approved data throws
  * PostalServiceUnavailableException. There is no static-price fallback, no guessed
- * zone, no assumed route coverage.
+ * zone, and route coverage is assumed only when the shop explicitly opts into
+ * open-route mode (shipping.post_1405.allow_unverified_routes).
  *
  *   1. Eligibility   enabled toggle → content kind → derived? → weight limits
  *   2. Geography     origin + destination province AND city must be known
- *   3. Rate zone     urban: configured city zone lists (+ same city + coverage)
- *                    others: Identity's province adjacency (+ route allow-list)
+ *   3. Rate zone     urban: same city + configured city zone lists (+ coverage*)
+ *                    intercity: different city + Identity's province adjacency
+ *                    (+ route allow-list*) + carton rule
+ *                    * not required in open-route mode
  *   4. Base postage  closed bracket lookup; open-ended brackets add each STARTED kg
  *                    above extra_above_grams
  *   5. Surcharges    each % of the POSTAL SERVICE CHARGE (base + extra weight):
@@ -179,8 +182,9 @@ class PostShippingCalculator implements ShippingCostCalculatorInterface
         $sameCity = $request->destinationCityId === $request->originCityId;
 
         if ($service->scope === PostalScope::Urban) {
-            // Urban services deliver within the origin city only.
-            if (! $sameCity || ! $this->routeCovered($service, $request)) {
+            // Urban services deliver within the origin city only — open-route mode
+            // never relaxes this; it only drops the coverage allow-list.
+            if (! $sameCity || ! $this->routePermitted($service, $request)) {
                 throw new PostalServiceUnavailableException(Reason::RouteNotSupported);
             }
 
@@ -198,10 +202,11 @@ class PostShippingCalculator implements ShippingCostCalculatorInterface
             throw new PostalServiceUnavailableException(Reason::ZoneUnclassified);
         }
 
-        if ($service->eligibilityPolicy === PostalServiceDefinition::POLICY_ROUTE_ALLOWLIST && ! $this->routeCovered($service, $request)) {
+        if ($service->eligibilityPolicy === PostalServiceDefinition::POLICY_ROUTE_ALLOWLIST && ! $this->routePermitted($service, $request)) {
             throw new PostalServiceUnavailableException(Reason::RouteNotSupported, rateZone: $zone);
         }
 
+        // Carton rule (intercity same-day): enforced in every mode, including open-route.
         if ($service->maxCartonSize !== null) {
             if ($request->cartonSize === null) {
                 throw new PostalServiceUnavailableException(Reason::CartonSizeUnknown, rateZone: $zone);
@@ -213,6 +218,22 @@ class PostShippingCalculator implements ShippingCostCalculatorInterface
         }
 
         return $zone;
+    }
+
+    /**
+     * Whether the shop offers this service on this route. In open-route mode
+     * (shipping.post_1405.allow_unverified_routes) the explicit allow-list is not
+     * required — a shop-side offer policy, not carrier confirmation. Everything else
+     * (same-city/different-city, zone, carton, weight, tariff) is checked by the
+     * callers regardless.
+     */
+    private function routePermitted(PostalServiceDefinition $service, ShippingCostRequestDTO $request): bool
+    {
+        if ((bool) config('shipping.post_1405.allow_unverified_routes', false)) {
+            return true;
+        }
+
+        return $this->routeCovered($service, $request);
     }
 
     /** Whether the destination is on the service family's explicit coverage list. */

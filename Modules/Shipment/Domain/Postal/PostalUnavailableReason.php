@@ -20,6 +20,7 @@ enum PostalUnavailableReason: string
     case WeightNotSupported = 'weight_not_supported';
     case OriginNotConfigured = 'origin_not_configured';
     case DestinationIncomplete = 'destination_incomplete';
+    /** Only the Normal Post fallback still uses this: 1405 methods are evaluated independently of local delivery. */
     case InsideLocalDeliveryArea = 'inside_local_delivery_area';
     case RouteNotSupported = 'route_not_supported';
     case ZoneUnclassified = 'zone_unclassified';
@@ -47,7 +48,7 @@ enum PostalUnavailableReason: string
             self::InsideLocalDeliveryArea => 'Your address is inside the local delivery area — please choose local delivery or in-store pickup.',
             self::RouteNotSupported => 'This postal service is not available for your address.',
             self::ZoneUnclassified => 'This postal service is not available for your city.',
-            self::CartonSizeUnknown => 'This postal service needs a confirmed carton size and is not available yet.',
+            self::CartonSizeUnknown => 'ابعاد بسته برای این سرویس مشخص نیست.',
             self::CartonTooLarge => 'Your parcel is larger than this postal service accepts.',
             self::TariffMissing => 'No postal tariff is available for this parcel.',
             self::PricingParameterMissing => 'Postal shipping is temporarily unavailable.',

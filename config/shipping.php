@@ -169,9 +169,30 @@ return [
         ],
 
         /*
+        | Open-route mode (shop-side OFFER policy, NOT carrier confirmation).
+        |
+        | false (default): a service with a coverage family is offered only to the
+        |   destinations on its allow-list below (empty = nowhere).
+        | true: those allow-lists are not required — every enabled service may be
+        |   offered on any route, so D+1 / D+2 / intercity same-day / urban services
+        |   are quoted without listing destination ids.
+        |
+        | ONLY the allow-list is bypassed. Content kind, weight limits, the urban
+        | (same city only) vs intercity (different city only) split, the urban rate
+        | zone, the carton-size rule, tariff brackets and the missing-weight Normal
+        | Post fallback are all still enforced.
+        |
+        | WARNING: with true the shop may sell a service Iran Post does not actually
+        | operate on that route. Iran Post may refuse, reroute or downgrade such a
+        | parcel; the shop absorbs that risk.
+        */
+        'allow_unverified_routes' => $flag('SHIPPING_POST_ALLOW_UNVERIFIED_ROUTES', false),
+
+        /*
         | Operational route coverage. A published tariff is NOT proof a service runs
         | on a route, so services with a coverage family are offered only to the
-        | destinations listed here (empty = nowhere). Origin is always the configured
+        | destinations listed here (empty = nowhere) — unless allow_unverified_routes
+        | is true. Origin is always the configured
         | origin. Fill these from Iran Post's confirmed coverage — never guess.
         |
         |   urban_*      : city ids where the urban service runs (destination must be
@@ -200,6 +221,11 @@ return [
         | Urban RATE zones (PDF Table 3). Separate from the 15 % metropolitan
         | surcharge list below. A city in no list — or in more than one — cannot be
         | classified, so urban services are unavailable there.
+        |
+        | The store's chosen setting is Qom (599) as a province centre:
+        | SHIPPING_POST_URBAN_PROVINCE_CENTER_CITY_IDS=599. That is a configuration
+        | decision, never inferred from the metropolitan surcharge list. Urban
+        | services only ever run origin city → same city, so only 599 matters here.
         */
         'urban_zones' => [
             'metropolis' => $idList('SHIPPING_POST_URBAN_METROPOLIS_CITY_IDS'),

@@ -36,6 +36,13 @@
              developer's .env. Tests that need one set it with Config::set(). -->
         <env name="SHIPMENT_LOCAL_DELIVERY_PROVINCE_IDS" value=""/>
         <env name="SHIPMENT_LOCAL_DELIVERY_CITY_IDS" value=""/>
+        <!-- Postal route policy is pinned to the strict defaults for the same reason;
+             open-route / urban-zone tests opt in with config(). -->
+        <env name="SHIPPING_POST_ALLOW_UNVERIFIED_ROUTES" value="false"/>
+        <env name="SHIPPING_POST_URBAN_METROPOLIS_CITY_IDS" value=""/>
+        <env name="SHIPPING_POST_URBAN_PROVINCE_CENTER_CITY_IDS" value=""/>
+        <env name="SHIPPING_POST_URBAN_OTHER_CITY_IDS" value=""/>
+        <env name="SHIPPING_POST_CARTON_SIZE" value=""/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>

@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+### Feature — Open-route mode for Iran Post 1405 + independent postal/local-delivery evaluation (Shipment)
+
+**Every enabled, otherwise-eligible parcel service can be offered without hand-maintained destination allow-lists.**
+
+- **Config:** `shipping.post_1405.allow_unverified_routes` ← `SHIPPING_POST_ALLOW_UNVERIFIED_ROUTES` (default `false`;
+  production sets `true`). With `true`, `PostShippingCalculator::routePermitted()` skips the coverage allow-lists for
+  D+1 / D+2 / intercity same-day / urban. **This is a shop offer policy, not carrier confirmation:** Iran Post may not
+  actually run the selected service on that route.
+- **Still enforced in every mode:** urban = destination city equals the origin city (599) and sits in exactly one urban
+  rate zone; intercity = a different city (another Qom-province city prices `same_province`); weight limits; intercity
+  same-day carton ≤ 6 and ≤ 10 kg (unknown carton → `carton_size_unknown`, message now
+  «ابعاد بسته برای این سرویس مشخص نیست.»); tariff brackets (registered parcel ≤ 2 kg stays `tariff_missing`); the
+  missing-weight Normal Post fallback.
+- **Local delivery no longer withdraws 1405 methods.** The area controls local delivery only. Qom-city addresses can now
+  pick urban post beside local delivery, and other cities in Qom province get intercity post even under a
+  province-level area. `post_standard` (fallback) keeps its `inside_local_delivery_area` exclusion. List and checkout
+  share the rule: `validateSelection()` blocks only the fallback inside the area, and `quoteSelection()` re-runs the 1405
+  engine.
+- **Store setting documented:** `SHIPPING_POST_URBAN_PROVINCE_CENTER_CITY_IDS=599` (Qom = province-centre urban zone).
+- **Unchanged:** tariffs, seeders, migrations, geography ids, surcharge/tax/packaging formula, historical and paid orders.
+  `phpunit.xml` now pins the route-policy env keys so a developer `.env` cannot leak into the suite.
+
 ### Feature — Normal Post (پست عادی) fixed-price fallback for carts with a missing weight (Shipment)
 
 **A cart in which any item has a missing, zero or negative shipping weight is no longer blocked at checkout.** It is

@@ -250,10 +250,14 @@ class EloquentShipmentManager implements ShipmentManagerInterface
             ];
         }
 
-        // Post is not sold inside the service area — the store delivers there itself.
-        // Enforced here and not only in getAvailableMethods(), so a client that skips
-        // the method list cannot buy a postal shipment it was never offered.
-        if ($type === ShipmentMethodType::Postal->value && $this->isInsideServiceArea($address)) {
+        // The Normal Post fallback is still not sold inside the local-delivery area
+        // (its existing eligibility rule). Iran Post 1405 methods are NOT blocked
+        // here: they are evaluated independently of local delivery by the 1405
+        // engine (urban = same city only, intercity = different city only), which
+        // quoteSelection() runs on every checkout — the same path as the method list.
+        if ($type === ShipmentMethodType::Postal->value
+            && $this->fallback->isFallbackMethod($methodCode)
+            && $this->isInsideServiceArea($address)) {
             throw ValidationException::withMessages([
                 'shipment_method_code' => ['Postal delivery is not available for this address — please choose local delivery or in-store pickup.'],
             ]);
@@ -475,10 +479,11 @@ class EloquentShipmentManager implements ShipmentManagerInterface
             throw new PostalServiceUnavailableException(PostalUnavailableReason::UnknownService);
         }
 
-        // Inside the service area the store delivers itself — post is withdrawn.
-        if ($this->isInsideServiceArea($address)) {
-            throw new PostalServiceUnavailableException(PostalUnavailableReason::InsideLocalDeliveryArea);
-        }
+        // No local-delivery-area exclusion here: local delivery and the 1405 methods
+        // are evaluated independently. Same-city Qom can buy urban post beside local
+        // delivery; another city in Qom province is an intercity (same_province)
+        // destination even when a province-level local-delivery area covers it. The
+        // urban/intercity split itself is the calculator's job.
 
         if ($parcel->isEmpty()) {
             throw new PostalServiceUnavailableException(PostalUnavailableReason::CartEmpty);

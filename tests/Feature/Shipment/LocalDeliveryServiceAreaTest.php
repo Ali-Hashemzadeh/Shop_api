@@ -10,13 +10,20 @@ use Illuminate\Support\Facades\Config;
 /**
  * The configured local-delivery service area (SHIPMENT_LOCAL_DELIVERY_*_IDS).
  *
- * Inside it the store delivers itself, so every postal method is withdrawn —
- * reported unavailable in the method list and rejected at checkout. Outside it, and
- * whenever no area is configured at all, nothing changes. Uses the production ids:
- * the shop is in Qom (province 19, city 599).
+ * Local delivery and the Iran Post 1405 methods are evaluated INDEPENDENTLY: the
+ * area decides only whether local delivery is offered. Inside Qom city the urban
+ * postal services may be offered beside local delivery (intercity never — that is
+ * the 1405 engine's same-city rule); another city in Qom province is an intercity
+ * same_province destination even under a province-level area. Only the Normal Post
+ * missing-weight fallback keeps its "not inside the area" rule (see
+ * MissingWeightNormalPostFallbackTest). Production ids: Qom = province 19, city 599.
  */
 class LocalDeliveryServiceAreaTest extends ShipmentTestCase
 {
+    private const URBAN = ['post_urban_3h_parcel', 'post_urban_sameday_parcel', 'post_urban_nextday_parcel'];
+
+    private const INTERCITY = ['post_intercity_sameday_parcel', 'post_intercity_d1_parcel', 'post_intercity_d2_parcel', 'post_intercity_d3_parcel'];
+
     /** @return array{0:int,1:int,2:int} user id, in-area (Qom) address id, outside (Ahvaz) address id */
     private function setUpArea(): array
     {
@@ -36,6 +43,13 @@ class LocalDeliveryServiceAreaTest extends ShipmentTestCase
         ];
     }
 
+    /** Production route policy: open routes, Qom rated as an urban province centre. */
+    private function productionRoutePolicy(): void
+    {
+        Config::set('shipping.post_1405.allow_unverified_routes', true);
+        Config::set('shipping.post_1405.urban_zones.province_center', [self::QOM]);
+    }
+
     private function methods(?int $addressId = null): Collection
     {
         $uri = '/api/v1/shipment/methods'.($addressId !== null ? "?address_id={$addressId}" : '');
@@ -51,18 +65,54 @@ class LocalDeliveryServiceAreaTest extends ShipmentTestCase
     // ── Method listing ─────────────────────────────────────────────────────────
 
     /** @test */
-    public function postal_methods_are_withdrawn_for_an_address_inside_the_service_area(): void
+    public function urban_post_is_offered_beside_local_delivery_inside_qom_city_and_intercity_is_not(): void
     {
         [, $inside] = $this->setUpArea();
+        $this->productionRoutePolicy();
 
-        $postal = $this->postal($this->methods($inside));
+        $methods = $this->methods($inside);
 
-        $this->assertNotEmpty($postal);
-        foreach ($postal as $method) {
-            $this->assertFalse($method['available']);
-            $this->assertNull($method['price']);
-            $this->assertSame('inside_local_delivery_area', $method['unavailable_code']);
-            $this->assertNotNull($method['unavailable_reason']);
+        foreach (self::URBAN as $code) {
+            $this->assertTrue($methods[$code]['available'], $code);
+            $this->assertIsInt($methods[$code]['price']);
+            $this->assertSame('province_center', $methods[$code]['rate_zone']);
+        }
+
+        foreach (self::INTERCITY as $code) {
+            $this->assertFalse($methods[$code]['available'], $code);
+            $this->assertNull($methods[$code]['price']);
+            $this->assertSame('route_not_supported', $methods[$code]['unavailable_code']);
+        }
+
+        // The area itself no longer withdraws any 1405 method.
+        $this->assertSame([], $this->postal($methods)->where('unavailable_code', 'inside_local_delivery_area')->all());
+        $this->assertTrue($methods['local_delivery']['available']);
+        $this->assertTrue($methods['in_person_pickup']['available']);
+    }
+
+    /** @test */
+    public function strict_route_policy_still_keeps_urban_post_off_in_qom_city(): void
+    {
+        [, $inside] = $this->setUpArea();
+        Config::set('shipping.post_1405.urban_zones.province_center', [self::QOM]);
+
+        $methods = $this->methods($inside);
+
+        foreach (self::URBAN as $code) {
+            $this->assertFalse($methods[$code]['available'], $code);
+            $this->assertSame('route_not_supported', $methods[$code]['unavailable_code']);
+        }
+        $this->assertTrue($methods['local_delivery']['available']);
+    }
+
+    /** @test */
+    public function urban_post_needs_a_configured_rate_zone_even_in_open_route_mode(): void
+    {
+        [, $inside] = $this->setUpArea();
+        Config::set('shipping.post_1405.allow_unverified_routes', true);
+
+        foreach (self::URBAN as $code) {
+            $this->assertSame('zone_unclassified', $this->methods($inside)[$code]['unavailable_code'], $code);
         }
     }
 
@@ -89,19 +139,36 @@ class LocalDeliveryServiceAreaTest extends ShipmentTestCase
     }
 
     /** @test */
-    public function a_province_only_area_also_withdraws_postal(): void
+    public function another_city_in_qom_province_gets_intercity_post_even_under_a_province_level_area(): void
     {
         $this->seedPost1405();
+        $this->productionRoutePolicy();
+        // The production area: province 19 + city 599.
         Config::set('shipment.local_delivery.province_ids', [self::QOM_PROVINCE]);
-        Config::set('shipment.local_delivery.city_ids', []);
+        Config::set('shipment.local_delivery.city_ids', [self::QOM]);
 
         $user = $this->actingAsCustomer();
         $this->createVariantWithStock('AREA-PROV', 10000, 5);
         $this->addToCart($user->id, 'AREA-PROV');
-        // A city that is not listed, but sits inside the configured province.
         $addressId = $this->postalAddress($user->id, self::QOM_OTHER_CITY);
 
-        $this->assertSame('inside_local_delivery_area', $this->methods($addressId)['post_registered_parcel']['unavailable_code']);
+        $methods = $this->methods($addressId);
+
+        // Intercity, priced in the same_province zone; local delivery still offered.
+        foreach (['post_intercity_d1_parcel', 'post_intercity_d2_parcel', 'post_intercity_d3_parcel'] as $code) {
+            $this->assertTrue($methods[$code]['available'], $code);
+            $this->assertSame('same_province', $methods[$code]['rate_zone'], $code);
+        }
+        // Urban never extends to the rest of the province.
+        foreach (self::URBAN as $code) {
+            $this->assertFalse($methods[$code]['available'], $code);
+            $this->assertSame('route_not_supported', $methods[$code]['unavailable_code']);
+        }
+        $this->assertTrue($methods['local_delivery']['available']);
+
+        $this->postJson('/api/v1/orders', ['shipment_method_code' => 'post_intercity_d2_parcel', 'address_id' => $addressId])
+            ->assertCreated()
+            ->assertJsonPath('shipping_cost', $methods['post_intercity_d2_parcel']['price']);
     }
 
     /**
@@ -141,18 +208,25 @@ class LocalDeliveryServiceAreaTest extends ShipmentTestCase
     // ── Checkout enforcement ───────────────────────────────────────────────────
 
     /** @test */
-    public function checkout_rejects_a_postal_method_for_an_address_inside_the_service_area(): void
+    public function checkout_rejects_an_intercity_method_for_qom_city_and_accepts_an_urban_one(): void
     {
         [, $inside] = $this->setUpArea();
+        $this->productionRoutePolicy();
+        $listed = $this->methods($inside);
 
-        foreach (['post_intercity_d3_parcel', 'post_registered_parcel'] as $code) {
+        // A hand-edited intercity code cannot bypass the same-city rule.
+        foreach (self::INTERCITY as $code) {
             $this->postJson('/api/v1/orders', [
                 'shipment_method_code' => $code,
                 'address_id' => $inside,
             ])->assertStatus(422)->assertJsonValidationErrors('shipment_method_code');
         }
-
         $this->assertDatabaseCount('orders', 0);
+
+        $this->postJson('/api/v1/orders', [
+            'shipment_method_code' => 'post_urban_nextday_parcel',
+            'address_id' => $inside,
+        ])->assertCreated()->assertJsonPath('shipping_cost', $listed['post_urban_nextday_parcel']['price']);
     }
 
     /** @test */

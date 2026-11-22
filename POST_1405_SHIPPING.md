@@ -39,11 +39,23 @@ Turning a toggle on only lets the method be considered. It's offered only when *
 4. The origin (19/599) and the destination province **and** city are known.
 5. The route is covered:
    - non-priority services and D+3 are open everywhere;
-   - D+1, D+2 and intercity same-day need an allow-list;
-   - urban services need the destination to be the origin city, a city coverage list, and an explicit urban zone;
-   - intercity same-day also needs a known carton size ≤ 6 and a weight ≤ 10 kg.
-6. The address is not inside the local-delivery area.
+   - D+1, D+2 and intercity same-day need an allow-list, **unless open-route mode is on** (see below);
+   - urban services need the destination to be the origin city, an explicit urban zone, and a city coverage list (the coverage list is not required in open-route mode);
+   - intercity services need a destination city different from the origin (another city in Qom province is priced `same_province`);
+   - intercity same-day also needs a known carton size ≤ 6 and a weight ≤ 10 kg, in **every** mode.
+6. *(Removed 2026-11-22.)* The local-delivery area no longer withdraws 1405 methods. It still withdraws the Normal Post fallback.
 7. Every `shipping_parameters` row the quote needs exists.
+
+### Open-route mode (`SHIPPING_POST_ALLOW_UNVERIFIED_ROUTES`)
+
+> **Warning.** Open-route mode is a **shop-side offer policy, not carrier confirmation.** With it on, the shop can sell D+1, D+2, intercity same-day and urban services on routes Iran Post may not actually operate. Iran Post may refuse, reroute or downgrade such a parcel, and the shop carries that risk.
+
+- `false` (default): the coverage allow-lists are required (empty = nowhere).
+- `true` (production): the allow-lists are not required. Nothing else changes:
+  - urban stays origin-city-only and needs exactly one urban rate zone (store setting: `SHIPPING_POST_URBAN_PROVINCE_CENTER_CITY_IDS=599`);
+  - intercity stays different-city-only;
+  - weight limits, the carton rule, tariff brackets (registered parcel still starts above 2 kg) and the missing-weight Normal Post fallback all still apply.
+- Checkout runs the same rules again and recalculates the price on the server.
 
 ### Formula (per method)
 
@@ -182,8 +194,7 @@ The spec example (Qom → Ahvaz, 910 g, D+3 parcel) prices at exactly **176,500*
    - What carton number does the shop actually ship in (`SHIPPING_POST_CARTON_SIZE`)?
    - Are there other acceptance conditions?
 5. **Urban services in Qom.** Is 3-hour, same-day or next-day available in Qom city, and is Qom a `metropolis`, a `province_center`, or something else for Table 3?
-   - Today this is moot: Qom city is inside the local-delivery area, so all postal methods are withdrawn there.
-   - Should postal (urban) be offered inside the local area as well? That needs a business-rule change.
+   - Decided 2026-11-22: Qom (599) is rated as a `province_center`, and urban parcel services are offered beside local delivery. Coverage is still unconfirmed by Iran Post (open-route mode).
 6. **Is D+3 (Pishtaz) truly nationwide from Qom?** It's currently treated as open on every intercity route.
 7. **Can intercity services serve another address inside Qom city?** They're currently refused there (same city = urban).
 8. **15 % metropolitan list.** It's the shop's *proposed* list: Mashhad, Isfahan, Shiraz, Tabriz, Qom, Ahvaz, Kermanshah. Please confirm with Iran Post — should Karaj or others be added?
