@@ -181,6 +181,14 @@ class EloquentShipmentManager implements ShipmentManagerInterface
 
     public function validateSelection(int $userId, string $methodCode, ?int $addressId, ?int $deliverySlotId): ShipmentSelectionDTO
     {
+        \Illuminate\Support\Facades\Log::warning('SHIPMENT_SELECTION_DEBUG_20261123', [
+            'method_code' => $methodCode,
+            'address_id' => $addressId,
+            'fallback_method' => $this->fallback->isFallbackMethod($methodCode),
+            'fallback_enabled' => $this->fallback->isEnabled(),
+            'registry_describes_method' => $this->registry->describe($methodCode) !== null,
+            'source_file' => __FILE__,
+        ]);
         // The retired post_standard code is let through ONLY as the enabled Normal
         // Post fallback. This method has no cart, so it cannot tell whether the
         // fallback applies — quoteSelection() makes that authoritative check against
