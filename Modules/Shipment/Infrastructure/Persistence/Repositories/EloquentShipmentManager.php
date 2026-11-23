@@ -198,6 +198,7 @@ class EloquentShipmentManager implements ShipmentManagerInterface
                 ? $this->registry->describe($methodCode)
                 : null);
 
+
         if ($method === null) {
             throw ValidationException::withMessages([
                 'shipment_method_code' => ['The selected shipment method is invalid.'],

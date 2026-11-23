@@ -32,6 +32,13 @@ class OrderController extends Controller
 
     public function store(StoreOrderRequest $request): JsonResponse
     {
+
+        \Illuminate\Support\Facades\Log::warning('ORDER_CONTROLLER_DEBUG_20261123', [
+            'method' => $request->method(),
+            'path' => $request->path(),
+            'shipment_method_code' => $request->input('shipment_method_code'),
+            'address_id' => $request->input('address_id'),
+        ]);
         // Validate + resolve the shipment selection (address ownership/eligibility,
         // slot bookability). Throws ValidationException (422) on failure.
         $selection = $this->shipment->validateSelection(
