@@ -120,7 +120,7 @@ class ShipmentMethodRegistry
             'title' => (string) ($method['title'] ?? $code),
             'type' => (string) ($method['type'] ?? ''),
             // Postal: only an explicitly computed price, never a config fallback.
-            'price' => $isPostal1405 ? $price : ($price ?? (isset($method['price']) ? (int) $method['price'] : null)),
+            'price' => ! $available ? null : ($isPostal1405 ? $price : ($price ?? (isset($method['price']) ? (int) $method['price'] : null))),
             'requiresAddress' => (bool) ($method['requires_address'] ?? false),
             'requiresDeliverySlot' => (bool) ($method['requires_delivery_slot'] ?? false),
             'supportsTracking' => (bool) ($method['supports_tracking'] ?? false),

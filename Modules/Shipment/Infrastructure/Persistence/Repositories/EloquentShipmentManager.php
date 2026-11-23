@@ -250,18 +250,10 @@ class EloquentShipmentManager implements ShipmentManagerInterface
             ];
         }
 
-        // The Normal Post fallback is still not sold inside the local-delivery area
-        // (its existing eligibility rule). Iran Post 1405 methods are NOT blocked
-        // here: they are evaluated independently of local delivery by the 1405
-        // engine (urban = same city only, intercity = different city only), which
-        // quoteSelection() runs on every checkout — the same path as the method list.
-        if ($type === ShipmentMethodType::Postal->value
-            && $this->fallback->isFallbackMethod($methodCode)
-            && $this->isInsideServiceArea($address)) {
-            throw ValidationException::withMessages([
-                'shipment_method_code' => ['Postal delivery is not available for this address — please choose local delivery or in-store pickup.'],
-            ]);
-        }
+        // A missing-weight Normal Post fallback is allowed in the local-delivery
+        // area as well. Local delivery and pickup remain separate choices; blocking
+        // the fallback here made it visible but unselectable for Qom addresses.
+        // quoteSelection() remains authoritative about the cart weight and address.
 
         if ($type === ShipmentMethodType::Pickup->value) {
             $pickupLocation = $this->registry->pickupLocation($methodCode);
@@ -426,8 +418,8 @@ class EloquentShipmentManager implements ShipmentManagerInterface
 
     /**
      * The single Normal Post fallback pricing path shared by the method list and
-     * checkout. Applies the same address rules as the 1405 methods (no post inside
-     * the local-delivery area, a destination province + city is required) and then
+     * checkout. Requires a complete destination (but permits Qom addresses alongside
+     * local delivery), and then
      * returns the configured flat price — no tariff, no surcharge, no postal tax, no
      * packaging, and never the weight of only the items that do have one.
      *
@@ -441,10 +433,6 @@ class EloquentShipmentManager implements ShipmentManagerInterface
 
         if (! $this->fallback->isEnabled() || $price === null) {
             throw new PostalServiceUnavailableException(PostalUnavailableReason::ServiceDisabled);
-        }
-
-        if ($this->isInsideServiceArea($address)) {
-            throw new PostalServiceUnavailableException(PostalUnavailableReason::InsideLocalDeliveryArea);
         }
 
         if (empty($address['province_id']) || empty($address['city_id'])) {

@@ -10,6 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Validation\Rule;
 use Modules\Cart\Domain\Contracts\CartManagerInterface;
+use Modules\Catalog\Domain\Contracts\CatalogManagerInterface;
 use Modules\Shipment\Domain\Contracts\ShipmentManagerInterface;
 use Modules\Shipment\Domain\DTOs\ShipmentParcelDTO;
 use Modules\Shipment\Infrastructure\Http\Resources\DeliverySlotResource;
@@ -20,6 +21,7 @@ class ShipmentMethodController extends Controller
     public function __construct(
         private readonly ShipmentManagerInterface $shipment,
         private readonly CartManagerInterface $cart,
+        private readonly CatalogManagerInterface $catalog,
     ) {}
 
     /**
@@ -50,12 +52,27 @@ class ShipmentMethodController extends Controller
         $userId = $request->user()->id;
         $cart = $this->cart->findOrCreateCart($userId, null);
 
-        // Shipment receives primitives only — never Cart's DTOs.
-        $parcel = ShipmentParcelDTO::fromLines(array_map(static fn ($item): array => [
-            'sku' => $item->sku,
-            'quantity' => $item->quantity,
-            'weight_grams' => $item->weightGrams,
-        ], $cart->items));
+        // Use the same authoritative Catalog weight source as CreateOrderAction.
+        // Cart display DTO weights can be stale or diverge from a freshly re-read
+        // variant; if these paths disagree, Normal Post appears selectable in the
+        // methods endpoint but quoteSelection() rejects it at checkout.
+        $skus = array_values(array_unique(array_map(
+            static fn ($item): string => $item->sku,
+            $cart->items,
+        )));
+        $variantsBySku = $this->catalog->getVariantsBySkus($skus);
+
+        // Shipment receives primitives only — never Cart or Catalog DTOs.
+        // A missing variant has no trustworthy weight, so it must not be given a
+        // fabricated positive weight. Checkout independently rejects missing SKUs.
+        $parcel = ShipmentParcelDTO::fromLines(array_map(
+            static fn ($item): array => [
+                'sku' => $item->sku,
+                'quantity' => $item->quantity,
+                'weight_grams' => $variantsBySku[$item->sku]->weightGrams ?? null,
+            ],
+            $cart->items,
+        ));
 
         $methods = $this->shipment->getAvailableMethods($userId, $addressId, $parcel);
 
